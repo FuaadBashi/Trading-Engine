@@ -1,0 +1,33 @@
+# Slice 0. TODO(fuaad): configure, build, ctest. Add the two guard steps below once
+# the relevant code exists.
+#
+# Guard 1 (slice 3): fail the build if the system clock is called outside SystemClock.
+#   grep -rn "system_clock::now\|steady_clock::now" include src apps strategies \
+#     | grep -v "core/time" && exit 1 || true
+#
+# Guard 2 (slice 2): fail if "double" or "float" appears in any price or PnL header.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DTE_SANITIZE=address,undefined
+
+      - name: Build
+        run: cmake --build build --parallel 2
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

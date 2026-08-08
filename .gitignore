@@ -1,0 +1,13 @@
+build*/
+tmp/
+.cache/
+compile_commands.json
+.DS_Store
+*.o
+*.so
+*.dylib
+__pycache__/
+.venv/
+data/raw/*
+data/captures/*
+!data/**/.gitkeep
