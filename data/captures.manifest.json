@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "generated": "2026-08-09",
+  "captures": [
+    {
+      "id": "bitstamp-btcusd-2026-08-09-hour",
+      "venue": "bitstamp",
+      "instrument": "btcusd",
+      "channel": "live_orders_btcusd",
+      "events_file": "btcusd-live-orders.jsonl",
+      "snapshot_file": "btcusd-live-orders.snapshot",
+      "snapshot_microtimestamp": 1786221550845658,
+      "first_event_microtimestamp": 1786221551454000,
+      "last_event_microtimestamp": 1786225150747000,
+      "events": 252374,
+      "duration_s": 3599.3,
+      "rate_events_s": 70.1,
+      "counts": {
+        "order_created": 125867,
+        "order_deleted": 125944,
+        "order_changed": 563
+      },
+      "segments": [
+        {
+          "n": 1,
+          "lines": [
+            1,
+            162870
+          ],
+          "snapshot_backed": true,
+          "warm_up_lines": [
+            1,
+            1592
+          ],
+          "note": "Book valid after warm-up. 11 deletes orphaned by the 0.608 s snapshot hole."
+        },
+        {
+          "n": 2,
+          "lines": [
+            162871,
+            252375
+          ],
+          "snapshot_backed": false,
+          "note": "No snapshot. Event stream usable; not replayable as a book."
+        }
+      ],
+      "gaps": [
+        {
+          "line": 162871,
+          "kind": "chain_break",
+          "expected_pre_event_id": "0006588f-a611-d0e8-0000-000101000020",
+          "actual_pre_event_id": "0006588f-a611-e858-0000-000102000020",
+          "lost_mod_4": 1,
+          "note": "See ADR 0006 Amendment 1. Magnitude is 1, 5, 9, ..."
+        }
+      ],
+      "defects": [
+        {
+          "kind": "snapshot_ordering",
+          "note": "Snapshot taken 0.608 s BEFORE first recorded event; reader was not draining during the HTTP fetch. Fixed in dump_raw_ws_bitstamp.py. See ADR 0006 Amendment 2."
+        }
+      ]
+    }
+  ],
+  "files": {
+    "btcusd-live-orders.jsonl": {
+      "bytes": 126085157,
+      "lines": 252375,
+      "sha256": "c650e8e0ba3bdd8e62c6a61bc7bfb422a31be51d5609c5710b1270bf886059bc"
+    },
+    "btcusd-live-orders.snapshot": {
+      "bytes": 394735,
+      "lines": 1,
+      "sha256": "80973bd3eb42e47b222df706c8994b51062cae9ee2687ca9a5ff28fd00a057ac"
+    },
+    "btcusd-live-orders-short-sample.jsonl": {
+      "bytes": 1067709,
+      "lines": 2138,
+      "sha256": "0d87416390f033fbac779a0c6b3f9cbaabad9565acc8ffc41ff1754ac53861c0"
+    },
+    "btcusd-live-orders-short-sample.snapshot": {
+      "bytes": 393790,
+      "lines": 1,
+      "sha256": "fd75fc2bed8b0de2af768a1de3433a5c8945efbdfd8b9079ccb76ee2c31d023a"
+    },
+    "btc-usd-level2-batch.jsonl": {
+      "bytes": 1343677,
+      "lines": 515,
+      "sha256": "7d69f74339d16dbefa8595371bdc65c6f041af29b2a735dc0b56f47fe0c16abd"
+    },
+    "btc-usd-auth-failure.jsonl": {
+      "bytes": 3983,
+      "lines": 30,
+      "sha256": "035689c161863b965fe60d6237d4ed68e40bbbcc3fe298957dc8e23db96d8cd5"
+    }
+  }
+}
