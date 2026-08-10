@@ -1,4 +1,5 @@
-// Slice 1. Write the test BEFORE the implementation.
+// Slice 1. Strong-value-type tests. These prove both storage and the safety properties that make
+// Price, Qty, and OrderId unsuitable for accidental interchange.
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -24,20 +25,6 @@ TEST(OrderIdStorage, OrderIdPreservesLargeValue) {
     const te::OrderId id{2'037'293'133'250'560ULL};
 
     EXPECT_EQ(id.value, 2'037'293'133'250'560ULL);
-}
-
-TEST(TypeProperties, CoreTypesAreTriviallyCopyable) {
-    // These values can move through fixed-capacity queues without custom copy behavior.
-    // Trivial copyability does not define portable serialization: record writing must
-    // still control field order, padding, endianness and format version explicitly.
-    static_assert(std::is_trivially_copyable_v<te::Price>);
-    static_assert(std::is_trivially_copyable_v<te::Qty>);
-    static_assert(std::is_trivially_copyable_v<te::OrderId>);
-    static_assert(std::is_trivially_copyable_v<te::Side>);
-
-    // Side is pinned to one byte so the record layout does not shift if enumerators
-    // are added later.
-    static_assert(std::is_same_v<std::underlying_type_t<te::Side>, std::uint8_t>);
 }
 
 TEST(TypeProperties, DistinctTypesDoNotInterconvert) {
@@ -101,4 +88,18 @@ TEST(PriceArithmetic, TickSumsAreExact) {
     // Guard against the two assertions agreeing by accident: they must describe the
     // same quantity. 78'202'428 ticks scaled back to USD is 782024.28.
     EXPECT_NE(static_cast<double>(notional) / 100.0, as_double);
+}
+
+TEST(PriceComparison, LowerTickValueComparesLess) {
+    const te::Price lower{100};
+    const te::Price higher{200};
+
+    EXPECT_LT(lower, higher);
+}
+
+TEST(PriceComparison, HigherTickValueDoesNotCompareLess) {
+    const te::Price lower{100};
+    const te::Price higher{200};
+
+    EXPECT_FALSE(higher < lower);
 }

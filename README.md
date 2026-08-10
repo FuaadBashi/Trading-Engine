@@ -3,20 +3,24 @@
 One C++/Python system in which the same strategy binary runs against recorded historical data
 (backtest) and a live feed (paper trading), with only the data source and the clock swapped.
 
-**The deliverable is not a strategy.** It is a measured, quantitative comparison of predicted
-versus actual fills: a data-backed answer to "why doesn't backtest Sharpe match live".
+**The deliverable combines a validated engine and an interactive local dashboard.** The technical
+evidence is a gap-aware L3 replay system plus an out-of-sample evaluation of fill-within-horizon
+forecasts on real observed resting orders. The dashboard then exposes the same C++ engine for
+historical replay, live observation and local paper-order experiments. See [the revised project
+plan](docs/project-plan-v2.md) for the validation limits and schedule.
 
 ## Status
 
 | Slice | Weeks | State |
 |---|---|---|
 | 0 Foundations | 0 | complete |
-| 1 Recorder | 1 to 2 | in progress — raw L3 capture working, C++ not started |
+| 1 Data contract + recorder | 1 to 3 | in progress — capture, value types and normalized event storage complete; exact parser next |
 | 2 Book builder | 3 to 5 | not started |
-| 3 Replay engine v1 | 6 to 7 | not started |
-| 4 Queue + latency model | 8 to 10 | not started |
-| 5 Live path | 11 to 12 | not started |
-| 6 Validation | 13 to 14 | not started |
+| 3 Replay engine v1 | 6 to 8 | not started |
+| 4 Queue + execution model | 9 to 11 | not started |
+| 5 Corpus validation | 12 to 14 | not started |
+| 6 Operational live-data path | 15 to 16 | not started |
+| 7 Interactive dashboard | after engine validation | not started |
 
 ## The one idea this repo is shaped around
 
@@ -26,7 +30,7 @@ Only three things vary between backtest and live:
 |---|---|---|
 | `Feed` | `ReplayFeed` | `LiveFeed` |
 | `Clock` | `EventClock` | `SystemClock` |
-| `ExecutionVenue` | `SimulatedVenue` | `CoinbaseVenue` |
+| `ExecutionVenue` | `SimulatedVenue` | `PaperVenue` (external sandbox adapter is stretch) |
 
 If any file outside those six implementations calls the system clock or knows what a WebSocket
 is, the design has leaked. CI enforces the clock half of that.
@@ -39,7 +43,7 @@ src/            implementations
 apps/           thin main() files: recorder, replay, live
 strategies/     Strategy implementations
 bindings/       pybind11 module for research
-python/         research + GUI
+python/         research + local web dashboard
 tests/          unit + golden
 docs/decisions/ one ADR per real decision
 scripts/        throwaway tooling (raw websocket dump lives here)
@@ -60,8 +64,9 @@ Coinbase Exchange's `full`/`level3` channels are institutional-gated and unreach
 account, which invalidated the original plan's venue premise. See
 [ADR 0010](docs/decisions/0010-venue-selection.md).
 
-Coinbase `level2_batch` is kept as an unauthenticated secondary feed, used to independently verify
-top-of-book from the reconstructed L3 book.
+Exact book-reconstruction checks must use Bitstamp snapshot/L2 data from the same venue. Coinbase
+`level2_batch` is kept as an unauthenticated secondary adapter and cross-venue sanity signal; it
+cannot exactly verify a Bitstamp book.
 
 | | Script | Auth | Depth |
 |---|---|---|---|
@@ -72,11 +77,13 @@ top-of-book from the reconstructed L3 book.
 
 Never do these in parallel. Full detail in [docs/slice-1-plan.md](docs/slice-1-plan.md).
 
-1. ~~Raw JSON to snapshot-backed segments.~~ — capture and manifest validation work.
-2. C++ value types and events, tests first.
-3. Binary record writer + read-back round-trip test.
+1. ~~Raw order JSON to snapshot-backed segments.~~ — capture and manifest validation work.
+2. ~~C++ value types and normalized events, tests first.~~ — header contracts and behavior tests pass.
+3. `InstrumentSpec` and exact decimal parsing, with no `double` conversion.
 4. C++ decoder reading **that file**. No networking.
-5. Only now, swap the file reader for Boost.Beast.
+5. Explicit versioned binary writer + semantic/binary golden tests.
+6. Add the joined Bitstamp order/trade capture contract required for fill labels.
+7. Only now, swap the file reader for Boost.Beast.
 
 Each Bitstamp run creates `data/raw/bitstamp-btcusd-<UTC timestamp>/` containing an
 atomic `manifest.json` plus one `.snapshot` and payload-only `.jsonl` file per continuous

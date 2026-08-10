@@ -1,200 +1,242 @@
-# Slice 1 — Recorder: remaining steps
+# Slice 1 - Data contract and recorder
 
-Written 2026-08-08, after the raw capture path was proven against Bitstamp.
+**Updated:** 2026-08-09
+**Project source of truth:** [project-plan-v2.md](project-plan-v2.md)
 
-Everything below is offline work against a file on disk. No networking enters the C++ until
-step 6. That ordering is the point of the slice, not a stylistic preference: it means every
-bug you hit has exactly one possible cause.
-
----
+Slice 1 turns captured venue payloads into exact, normalized, versioned C++ events without
+putting networking into the decoding loop. The order is deliberate: types, parsing, decoding and
+storage become deterministic before Boost.Beast is introduced.
 
 ## Status
 
 | Step | State |
 |---|---|
-| 1 Raw capture script | done — `dump_raw_ws_bitstamp.py` |
-| 2 Short probe and venue decision | done — see [ADR 0010](decisions/0010-venue-selection.md) |
-| 3 Hour-long capture | **done — 252,374 events, 60.0 min, validated** |
-| 4 C++ value types | **next** |
-| 5 Binary record layer | not started |
-| 6 Offline decoder | not started |
-| 7 Golden round-trip test | not started |
-| 8 Boost.Beast live recorder | not started |
+| Venue probe and ADR 0010 | complete |
+| Segmented Python order capture + validator | complete |
+| Clean positive and real-gap negative corpora | complete |
+| C++ value types | complete - behavior tests and header contracts pass |
+| Normalized events | complete - storage test and header contracts pass |
+| InstrumentSpec + exact decimal parser | **current - design and tests next** |
+| Offline Bitstamp decoder | not started |
+| Binary format + byte buffer | not started |
+| Golden semantic/binary round trip | not started |
+| Joined order+trade sample contract | not started |
+| Boost.Beast live recorder | not started |
 
-All four Slice 1 ADRs (0004, 0005, 0006, 0010) are `accepted`. Steps 4 onward are unblocked.
+## Corpora
 
----
+### Positive development corpus
 
-## The corpus you are building against
-
-`data/raw/btcusd-live-orders.jsonl` — 252,374 events, 121 MB, 3,599.3 s, 70.1 events/s.
-Gitignored; provenance is in `data/captures.manifest.json`, which is committed.
-
-```
-sha256  c650e8e0ba3bdd8e62c6a61bc7bfb422a31be51d5609c5710b1270bf886059bc
+```text
+data/raw/bitstamp-btcusd-20260809T100421Z/
 ```
 
-Two known imperfections. Both are recorded in the manifest and neither is a reason to recapture —
-they are the only real fault data you have, and Slice 2's fail-closed path needs them.
+- 1,433 order events over 29.2 seconds;
+- one valid snapshot-backed segment;
+- no detected chain break;
+- sufficient for a 1,000-event decoder/record fixture.
 
-| | Where | Effect |
-|---|---|---|
-| Warm-up hole | lines 1–1,592 | Snapshot predates first event by 0.608 s; 11 deletes reference unknown orders. Book not valid until after this region. |
-| Chain break | line 162,871 | One event lost (mod 4). Splits the file into two segments; segment 2 has no snapshot, so it is stream-usable but not book-replayable. |
+Validate with:
 
-Verify at any time with:
-
-```
-python scripts/validate_capture.py data/raw/btcusd-live-orders.jsonl
+```bash
+python scripts/validate_capture.py data/raw/bitstamp-btcusd-20260809T100421Z
 ```
 
-Back it up outside iCloud. It is not reproducible.
+### Negative/fault corpus
 
----
-
-## Step 4 — `include/te/core/types.hpp` and `include/te/feed/events.hpp`
-
-Declarations first, then the test, then the body.
-
-**`types.hpp`** — `Price` (int64 ticks), `Qty` (int64, scale 1e-8), `OrderId` (uint64), `Side`,
-`Instrument`. Strong types, not aliases: a `Price` that implicitly converts to `Qty` will
-eventually be passed in the wrong argument position and compile cleanly.
-
-**`events.hpp`** — the normalised internal event, which is *not* the venue's wire format. Bitstamp
-emits `order_created` / `order_changed` / `order_deleted`; Coinbase emits `received` / `open` /
-`done` / `match` / `change`. The `Feed` layer's job is to collapse both into one internal vocabulary.
-Designing this against one venue is how the abstraction leaks — sketch how a Coinbase event maps
-into it before you settle the shape.
-
-Every event struct must be trivially copyable and fixed size. Assert it:
-`static_assert(std::is_trivially_copyable_v<Event>)`.
-
-**Unblocked:** [ADR 0004](decisions/0004-price-representation.md) and
-[ADR 0005](decisions/0005-order-id-representation.md) are both accepted, and they already fix
-your answers. Implement what they say rather than re-deciding:
-
-- `Price` — signed int64, scale from `InstrumentSpec`, not a global constant. Bitstamp BTC/USD
-  is 0.01 USD per tick.
-- `Qty` — signed int64, 1e-8 BTC per unit.
-- `OrderId` — strong type wrapping one `uint64_t`.
-- Money/notional multiplication goes through a checked 128-bit intermediate.
-- Decoding fails, rather than rounds, if a price is not a multiple of the declared tick size.
-
-**Definition of done:** `test_types.cpp` passes, including
-`"65168.69" -> Price{6'516'869}` exactly as ADR 0004 specifies, a case that would fail under a
-`double` representation, a notional product that overflows 64 bits but not 128, and a
-non-multiple-of-tick price that is rejected.
-
----
-
-## Step 5 — `byte_buffer.hpp` and `record.hpp`
-
-**`byte_buffer.hpp`** — read/write primitives over a byte span. Bounds-checked in debug.
-Endianness stated explicitly, not inherited from whatever the host happens to be.
-
-**`record.hpp`** — the fixed-size, versioned on-disk record. A version field in the header is
-cheap now and impossible to retrofit once you have a corpus you cannot regenerate.
-`static_assert(sizeof(Record) == N)` — this is the assertion that stops a silently-inserted
-padding byte from invalidating every file you have recorded.
-
-**Decide before writing:** does the REST snapshot go in the same binary file as the event stream
-or a separate one? The capture script currently keeps them separate, and the reasoning is in the
-script's docstring — but that decision was made for the JSONL layer and does not automatically
-carry to the binary layer.
-
-**Definition of done:** `test_byte_buffer.cpp` and `test_record_roundtrip.cpp` pass, including a
-deliberate check that a truncated buffer is rejected rather than read past.
-
----
-
-## Step 6 — offline decoder
-
-Add simdjson (per [ADR 0001](decisions/0001-dependency-management.md)). Read the captured JSONL
-line by line. No sockets.
-
-Three things this step must get right, all of them found in the capture and all of them silent
-if wrong:
-
-- **Read `price_str`, `amount_str`, `id_str` only.** The bare `price`, `amount` and `id` are JSON
-  numbers, i.e. doubles. See ADR 0004. Make the wrong field hard to reach, not merely discouraged.
-- **Handle the long line.** The Coinbase L2 snapshot arrives as a single multi-megabyte frame; a
-  fixed-size line buffer will truncate it. Bitstamp's snapshot is in a separate file, but the
-  secondary Coinbase feed still has this shape.
-- **Chain-check `event_id` / `pre_event_id`** per [ADR 0006](decisions/0006-sequence-gap-handling.md),
-  and distinguish a real gap from a `bts:request_reconnect` and from the startup snapshot boundary.
-
-**Definition of done:** `test_decoder.cpp` decodes a committed fixture — a handful of real lines
-copied out of the capture into `tests/fixtures/` — and asserts exact integer values. Also assert
-that the first line of a capture, `bts:subscription_succeeded`, is handled rather than crashing
-the decoder, since it is not an order event at all.
-
-Pull the fixture from the real corpus so the cases are not invented:
-
-```
-sed -n '1p;2p;3p' data/raw/btcusd-live-orders.jsonl  > tests/fixtures/bitstamp_head.jsonl
-sed -n '162869,162872p' data/raw/btcusd-live-orders.jsonl > tests/fixtures/bitstamp_chain_break.jsonl
+```text
+data/rawOld/btcusd-live-orders.jsonl
+data/rawOld/btcusd-live-orders.snapshot
 ```
 
-The second file is the real gap at line 162,871. A decoder that passes on clean data and silently
-crosses that boundary has not implemented ADR 0006, and this fixture is what proves it.
+- 252,374 order events over 3,599.3 seconds;
+- real chain break at line 162,871;
+- legacy startup alignment defect;
+- useful for gap and failure tests, but not one continuous replayable book.
 
-Cross-check the C++ output against `scripts/validate_capture.py` on the full file: same event
-counts, same single break at the same line. Two independent implementations agreeing is evidence;
-one implementation agreeing with itself is not.
+Its provenance and hashes are in `data/captures.manifest.json`.
 
----
+## Step 1 - normalized events (complete)
 
-## Step 7 — golden round-trip test
+The engine vocabulary must not expose Bitstamp strings. The first design maps:
 
-1000 real lines → decode → write binary → read back → re-encode → compare byte-for-byte.
+```text
+order_created -> add
+order_changed -> modify
+order_deleted -> remove
+```
 
-This is the test that makes the binary format trustworthy, and it is the reason `record.hpp` is
-versioned. Store the fixture in `tests/golden/`.
+The deliberate missing-type failure was observed, the definitions were implemented, and the
+focused build is green. The event contract is:
 
-**Definition of done:** round trip is byte-identical, and you have watched the test fail — flip a
-field width or drop a `static_assert` and confirm it catches the change. A golden test you have
-never seen fail is not evidence of anything. This is the "observed failing when appropriate" gate
-from the roadmap's definition of done.
+- `venue_timestamp_us` is Bitstamp venue time in microseconds, parsed from `microtimestamp`;
+- `order_id`, `price`, `side` and `kind` describe the affected resting order;
+- `quantity` is the resulting venue-reported resting quantity, never a delta:
+  - `add`: quantity inserted into the book;
+  - `modify`: new remaining quantity replacing the previous quantity;
+  - `remove`: quantity reported at deletion, retained for audit only; removal is by `OrderId`;
+- local receive time is separate ingestion metadata and must not be invented for payload-only
+  historical captures;
+- instrument scale and identity enter through the decoder's `InstrumentSpec` context in Step 2;
+  embedding an instrument identifier in every event is revisited before multi-instrument replay.
 
----
+Permanent structural requirements such as trivial copyability belong next to the completed type
+as a header `static_assert` with a useful message. This is an in-memory queue/ownership contract,
+not permission to serialize the object using `memcpy`.
 
-## Step 8 — Boost.Beast live recorder
+Definition of done achieved:
 
-Only now. By this point the decoder and the storage layer have known, tested behaviour, so any
-new bug is unambiguously in the networking.
+- the deliberate missing-type build failure was observed;
+- event storage behavior passes;
+- event types are fixed-size and trivially copyable;
+- field meanings and timestamp units are documented;
+- permanent representation/copyability contracts live beside their types rather than in tests.
 
-**Definition of done:** the C++ recorder produces a binary file that the step 7 golden test
-accepts, from a live socket, running unattended without leaking memory under ASan.
+## Step 2 - InstrumentSpec and exact decimal parsing
 
----
+Create a small isolated parsing unit before simdjson integration.
 
-## Slice exit criteria
+Required behavior:
 
-From the roadmap's definition-of-done gates:
+- the instrument supplies price and quantity decimal scales;
+- `"65168.69"` becomes exactly `Price{6'516'869}` for a two-decimal price scale;
+- quantities use the observed eight-decimal BTC scale;
+- no conversion passes through `double`;
+- malformed input, excessive precision and overflow return explicit errors;
+- at least one synthetic instrument uses a different scale to prove the value is not global.
 
-- Clean configure and build on the supported toolchains
-- Unit and golden tests pass, and have been observed failing when appropriate
-- Tests run under ASan and UBSan
-- CI green from a clean checkout
-- ~~ADRs 0004, 0005, 0006, 0010 have Decision sections that are not TODO~~ — done, all accepted
-- You can re-derive the record layout and the gap-detection rule without opening the editor
-- Learning-notes PDF written from the mistakes actually hit, not from generic course notes
+Do not hide parsing inside constructors for `Price` or `Qty`. Those types represent already
+validated engine values; venue parsing belongs at the boundary.
 
-On that last one, the mistakes this slice actually produced — worth writing from, because they
-are specific and yours rather than generic:
+Definition of done:
 
-1. Assuming a venue's documented capability without probing it (Coinbase `full`).
-2. A client-side frame limit read as a venue rejection (`1009`, `max_size`).
-3. `KeyboardInterrupt` escaping `asyncio.run()` and discarding a buffered file (`Task was
-   destroyed but it is pending`).
-4. Subscribing to a socket without draining it, and losing the window anyway.
-5. A venue sending every number twice, once in a lossy representation.
+- table-driven positive and negative tests;
+- checked overflow behavior;
+- no floating-point type in the price/quantity boundary API;
+- InstrumentSpec scale is tested rather than assumed.
 
----
+### Step 2 learning plan
 
-## Open questions carried into Slice 2
+Work in small red-green stages rather than writing the complete parser at once:
 
-- Does the internal event vocabulary survive contact with a second venue, or does adding the
-  Coinbase adapter force a redesign? Cheaper to find out now than in week 11.
-- Is one instrument enough, or does tick size need to be per-instrument from the start?
-  [ADR 0004](decisions/0004-price-representation.md) assumes per-instrument; nothing tests it yet.
+1. **Specify the boundary in English.** List the `InstrumentSpec` metadata and the parser errors a
+   caller must distinguish.
+2. **Design the smallest error result.** Implement only the `Result<T, Error>` behavior needed to
+   return either an exact value or a reason; do not build a general-purpose library first.
+3. **Write scale tests.** Prove BTC/USD uses two price decimals and eight quantity decimals, then
+   add a synthetic instrument with different scales.
+4. **Write happy-path parser tests.** Cover `"65168.69" -> 6'516'869`, whole numbers and missing
+   trailing fractional zeroes.
+5. **Implement the simple digit loop.** No `stod`, `strtod`, `double` or rounding.
+6. **Add failure tests one category at a time.** Empty/malformed input, sign rules, multiple decimal
+   points, excess precision and overflow.
+7. **Wrap raw scaled integers as `Price` and `Qty`.** Keep generic decimal parsing separate from
+   domain-specific validation such as rejecting negative quantity.
+8. **Run normal and sanitizer builds.** Explain every overflow check before beginning simdjson.
+
+## Step 3 - offline Bitstamp decoder
+
+Add simdjson through ADR 0001 and decode committed real fixtures line by line. No sockets.
+
+Required behavior:
+
+- control events are recognized explicitly;
+- `price_str`, `amount_str` and `id_str` are used;
+- side and event-kind mappings are tested;
+- missing/unknown/malformed fields produce reasoned errors;
+- pure payload conversion is separated from segment chain state where practical;
+- a real clean fixture yields the expected count and exact integer values;
+- the real gap fixture fails at the expected transition.
+
+JSON numbers are not inherently doubles: simdjson can parse integer tokens exactly. We still use
+the documented string representation for the boundary policy and consistency checks. Never claim
+that every JSON parser must decode all numbers as IEEE double.
+
+## Step 4 - joined orders and trades contract
+
+The eventual fill-validation claim needs trade/cancel classification. `live_orders` alone should
+not be assumed sufficient without proving the semantics of `amount_traded`, order subtype and
+deletion events.
+
+Before research work:
+
+- subscribe to Bitstamp `live_orders_btcusd` and `live_trades_btcusd`;
+- record local receive timestamps and venue timestamps;
+- preserve each channel payload separately or tag channel identity unambiguously;
+- define how reconnect/gap boundaries apply to both streams;
+- test joining a trade's order IDs to observed order lifecycle records;
+- obtain and validate a short sample before collecting many hours.
+
+This capture upgrade may be done after the current type/parser/decoder lesson. It must be complete
+before fill-label construction, not before basic C++ work.
+
+## Step 5 - binary format and byte buffer
+
+Write the format specification before the structure.
+
+Recommended shape:
+
+- one versioned binary event file per continuous segment;
+- explicit byte order and explicit field encoding;
+- snapshot encoded separately or referenced from the segment header;
+- run manifest records gap/reconnect/end reasons and hashes;
+- order and trade record kinds are typed;
+- no raw `memcpy(OrderEvent)` serialization.
+
+`std::is_trivially_copyable_v<OrderEvent>` is useful for in-memory transport. It does not guarantee
+portable padding, offsets, endianness or version compatibility.
+
+Definition of done:
+
+- bounds-checked byte reads/writes;
+- truncated input rejected;
+- stable header/version/type/length semantics;
+- expected serialized size tested independently of `sizeof(OrderEvent)`;
+- ADR 0006 amended if the selected binary boundary model differs from its current wording.
+
+## Step 6 - golden evidence
+
+Use:
+
+```text
+real JSON fixture -> normalized events -> binary -> normalized events
+```
+
+Assert:
+
+- event counts match;
+- decoded events compare semantically equal;
+- binary output matches a committed expected byte fixture;
+- corrupted version/type/length/checksum cases fail;
+- the test has been deliberately observed failing.
+
+Do not require byte-identical regenerated JSON. A normalized event does not retain source member
+ordering, whitespace or irrelevant venue fields.
+
+## Step 7 - Boost.Beast live recorder
+
+Only after the offline decoder and binary writer have known behavior:
+
+- TLS WebSocket connection and subscription;
+- bounded frame handling;
+- reconnect into a fresh snapshot-backed segment;
+- no hot-path exception escape;
+- output accepted by the same offline reader and validator;
+- unattended sanitizer run with explicit message/drop counts.
+
+## Slice 1 exit gate
+
+- all Slice 1 tests pass under ASan/UBSan;
+- Linux CI passes from a clean checkout;
+- clean corpus and gap fixture produce expected independent Python/C++ results;
+- binary bytes are versioned and stable;
+- relevant ADRs contain no unresolved implementation contradiction;
+- current status and commands are accurate in README;
+- Slice 1 learning-notes PDF and quiz completed;
+- tagged commit created only after the above.
+
+## Immediate next action
+
+In English, propose the fields of `InstrumentSpec` and the values of `ParseError`. Do not write the
+parser body yet. After reviewing those names and responsibilities, create the first failing scale
+and successful-conversion tests.

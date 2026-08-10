@@ -1,4 +1,5 @@
-# Uncomment once googletest is enabled in cmake/dependencies.cmake.
+# Unit-test target convention: compile one test source, link project code plus GoogleTest, then
+# let CMake discover every TEST(Suite, Name) case for CTest.
 
 include(GoogleTest)
 
@@ -13,3 +14,6 @@ function(te_add_test name source)
 endfunction()
 
 te_add_test(test_types unit/test_types.cpp)   # start here: one trivial assertion, green in CI
+te_add_test(test_events unit/test_events.cpp)
+te_add_test(test_instrument unit/test_instrument.cpp)
+te_add_test(test_result unit/test_result.cpp)
