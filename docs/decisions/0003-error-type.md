@@ -6,7 +6,7 @@
 
 ## Context
 
-Follows from ADR 0002. If the hot path does not throw, submit() and try_pop() need a way to say no.
+Follows from ADR 0002. If the hot path does not throw, submit() and tryPop() need a way to say no.
 
 ## Options considered
 
@@ -19,7 +19,7 @@ Follows from ADR 0002. If the hot path does not throw, submit() and try_pop() ne
 Use the smallest error contract that preserves the information a caller needs:
 
 - Use `bool` plus an out-parameter for a single obvious binary outcome. For example,
-  `try_pop(T& out) noexcept` returns `false` when the queue is empty.
+  `tryPop(T& out) noexcept` returns `false` when the queue is empty.
 - Use `std::optional<T>` when a value may simply be absent and the reason is not needed.
 - Use `Result<T, Error>` when several failures are possible and callers need a reason
   for logging, recovery or diagnosis. Decoding and record I/O fall into this category.

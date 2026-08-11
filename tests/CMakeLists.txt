@@ -17,3 +17,4 @@ te_add_test(test_types unit/test_types.cpp)   # start here: one trivial assertio
 te_add_test(test_events unit/test_events.cpp)
 te_add_test(test_instrument unit/test_instrument.cpp)
 te_add_test(test_result unit/test_result.cpp)
+te_add_test(test_decimal unit/test_decimal.cpp)

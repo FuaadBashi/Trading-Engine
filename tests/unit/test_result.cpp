@@ -15,13 +15,13 @@ enum class TestError {
 TEST(Result, SuccessContainsValueAndNoError) {
     const auto result = te::Result<int, TestError>::success(42);
 
-    EXPECT_TRUE(result.has_value());
+    EXPECT_TRUE(result.hasValue());
 
-    const int* value = result.value_if();
+    const int* value = result.valueIf();
     ASSERT_NE(value, nullptr);
     EXPECT_EQ(*value, 42);
 
-    EXPECT_EQ(result.error_if(), nullptr);
+    EXPECT_EQ(result.errorIf(), nullptr);
 }
 
 // A failure exposes only its error. Both branches are tested because variant state is exclusive.
@@ -29,10 +29,10 @@ TEST(Result, FailureContainsErrorAndNoValue) {
     const auto result =
         te::Result<int, TestError>::failure(TestError::example_failure);
 
-    EXPECT_FALSE(result.has_value());
-    EXPECT_EQ(result.value_if(), nullptr);
+    EXPECT_FALSE(result.hasValue());
+    EXPECT_EQ(result.valueIf(), nullptr);
 
-    const TestError* error = result.error_if();
+    const TestError* error = result.errorIf();
     ASSERT_NE(error, nullptr);
     EXPECT_EQ(*error, TestError::example_failure);
 }

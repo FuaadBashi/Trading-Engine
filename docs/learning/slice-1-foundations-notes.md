@@ -283,9 +283,9 @@ future success value.
 
 | Function | Result |
 | --- | --- |
-| `has_value()` | `true` when the variant currently holds `T`. |
-| `value_if()` | Pointer to `const T`, or `nullptr` if failure. |
-| `error_if()` | Pointer to `const E`, or `nullptr` if success. |
+| `hasValue()` | `true` when the variant currently holds `T`. |
+| `valueIf()` | Pointer to `const T`, or `nullptr` if failure. |
+| `errorIf()` | Pointer to `const E`, or `nullptr` if success. |
 
 `std::get_if` matches this API because it returns a pointer or `nullptr`; `std::get` would assume
 the alternative exists and throw on the wrong alternative.
@@ -325,7 +325,7 @@ test source -> test executable -> links te_core + GoogleTest main -> GoogleTest 
 
 The currently registered test targets are `test_types`, `test_events`, `test_instrument`, and
 `test_result`. `test_decimal.cpp` exists but is deliberately **not registered yet**; it is an empty
-placeholder and does not prove that `decimal.hpp` compiles.
+placeholder and does not prove that `text_to_int.hpp` compiles.
 
 Useful commands from the project root:
 
@@ -340,7 +340,7 @@ The final command runs every discovered test. The `-R` form filters by the Googl
 
 ## 9. Decimal parser: current state and exact next boundary
 
-Source: `include/te/core/decimal.hpp`  
+Source: `include/te/core/text_to_int.hpp`  
 Test placeholder: `tests/unit/test_decimal.cpp`
 
 `ParseError` is a good initial error vocabulary:
@@ -382,7 +382,7 @@ No parser implementation should use `double`, `std::stod`, or rounding.
 | --- | --- |
 | `core/time.hpp` | Clock abstraction; centralizes real system-clock access. |
 | `util/byte_buffer.hpp`, `telemetry/record.hpp`, `telemetry/sink.hpp` | Versioned fixed-size capture format and append-only output. |
-| `feed/coinbase_decoder.hpp` | Historical filename; planned role is decoder boundary. Current primary L3 venue is Bitstamp, so later naming/adapter work must reflect ADR 0010. |
+| `feed/bitstamp_decoder.hpp` | Renamed from `coinbase_decoder.hpp` to reflect ADR 0010 (Bitstamp is the primary L3 venue). Planned role is the decoder boundary: JSON to `OrderEvent`. |
 | `book/*` | L3 order book and FIFO price levels, Slice 2. |
 | `engine/*`, `feed/feed.hpp`, `feed/replay_feed.hpp`, `venue/simulated_venue.hpp`, `venue/venue.hpp` | Offline replay and simulated execution, Slice 3. |
 | `venue/queue_model.hpp`, `venue/latency_model.hpp` | Queue/fill model, Slice 4. |
@@ -392,7 +392,7 @@ No parser implementation should use `double`, `std::stod`, or rounding.
 ## 11. Tomorrow’s resume checklist
 
 1. Re-read Sections 4, 6, and 7 beside their headers and tests.
-2. In `decimal.hpp`, replace the placeholder with the parser declaration returning
+2. In `text_to_int.hpp`, replace the placeholder with the parser declaration returning
    `Result<int64_t, ParseError>` and accepting text plus scale.
 3. Register `test_decimal` only after it contains a meaningful red test.
 4. Write one success test from real Bitstamp text and one failure test before writing a digit loop.
@@ -405,7 +405,7 @@ No parser implementation should use `double`, `std::stod`, or rounding.
 1. Why are `Price` and `Qty` structs instead of `using` aliases for `int64_t`?
 2. What does two-decimal scale do to the text `"1.2"`?
 3. Why is a `static_assert` beside `OrderEvent` stronger than an equivalent assertion in a test?
-4. In `Result<int64_t, ParseError>`, what does `value_if()` return after `failure(...)`?
+4. In `Result<int64_t, ParseError>`, what does `valueIf()` return after `failure(...)`?
 5. Why does `Result<T, E>` live fully in a header?
 6. Why must `ASSERT_NE(pointer, nullptr)` occur before dereferencing a test pointer?
 

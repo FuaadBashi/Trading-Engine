@@ -20,14 +20,13 @@ public:
     static Result failure(E error) { return Result(std::move(error)); }
 
     /// Returns true when this object currently contains a successful T value.
-    bool has_value() const { return std::holds_alternative<T>(storage_); }
+    bool hasValue() const { return std::holds_alternative<T>(storage_); }
 
     /// Returns a pointer to the successful value, or nullptr when this object contains an error.
-    const T* value_if() const { return std::get_if<T>(&storage_); }
+    const T* valueIf() const { return std::get_if<T>(&storage_); }
 
     /// Returns a pointer to the error, or nullptr when this object contains a successful value.
-    const E* error_if() const { return std::get_if<E>(&storage_); }
-
+    const E* errorIf() const { return std::get_if<E>(&storage_); }
 private:
     // Exactly one alternative is live at a time; no heap allocation is needed by Result itself.
     std::variant<T, E> storage_;

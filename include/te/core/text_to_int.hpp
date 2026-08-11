@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 #include <te/core/result.hpp>
 
 namespace te {
@@ -31,6 +32,13 @@ enum class ParseError {
     /// The exact scaled integer cannot be represented by std::int64_t.
     overflow,
 };
-std::int64_t DecimalParsing() {}
+
+/// Converts decimal text into exact integer units at scale fractional digits.
+///
+/// scale is the number of fractional digits the caller wants preserved; the returned int64 is the
+/// value of text shifted by that many decimal places, e.g. "1.20" at scale 8 yields 120'000'000.
+Result<std::int64_t, ParseError> parseDecimal(std::string_view text, std::uint8_t scale);
+ 
+te::Result<std::uint64_t, te::ParseError>  parseInteger(std::string_view id_str);
 
 }  // namespace te

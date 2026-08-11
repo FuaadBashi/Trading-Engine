@@ -38,10 +38,11 @@ add_library(te_core)
 target_include_directories(te_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_sources(te_core PRIVATE
     # Slice 1
+    src/core/text_to_int.cpp
     # src/core/types.cpp
     # src/telemetry/record.cpp
     # src/telemetry/sink.cpp
-    # src/feed/coinbase_decoder.cpp
+    # src/feed/bitstamp_decoder.cpp
     #
     # Slice 2
     # src/book/order_book.cpp
@@ -53,8 +54,6 @@ target_sources(te_core PRIVATE
     # src/venue/simulated_venue.cpp
 )
 
-# Placeholder so the target links before any .cpp exists. Delete on your first real source.
-target_sources(te_core PRIVATE src/core/placeholder.cpp)
 
 target_link_libraries(te_core PUBLIC Threads::Threads)
 te_set_warnings(te_core)
