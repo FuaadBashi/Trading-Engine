@@ -10,10 +10,10 @@ include(FetchContent)
 find_package(Threads REQUIRED)
 
 # --- Slice 1: JSON decode -----------------------------------------------------
-# FetchContent_Declare(simdjson
-#     URL https://github.com/simdjson/simdjson/archive/refs/tags/v3.9.1.tar.gz
-#     SYSTEM)
-# FetchContent_MakeAvailable(simdjson)
+FetchContent_Declare(simdjson
+    URL https://github.com/simdjson/simdjson/archive/refs/tags/v3.9.1.tar.gz
+    SYSTEM)
+FetchContent_MakeAvailable(simdjson)
 
 # --- Slice 0: tests -----------------------------------------------------------
 FetchContent_Declare(googletest

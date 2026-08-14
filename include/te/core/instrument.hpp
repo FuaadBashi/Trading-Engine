@@ -37,4 +37,6 @@ struct InstrumentSpec {
     std::uint8_t quantity_decimals{};
 };
 
+
+
 }  // namespace te

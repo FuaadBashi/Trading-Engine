@@ -39,10 +39,11 @@ target_include_directories(te_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_sources(te_core PRIVATE
     # Slice 1
     src/core/text_to_int.cpp
+    src/core/time.cpp
     # src/core/types.cpp
     # src/telemetry/record.cpp
     # src/telemetry/sink.cpp
-    # src/feed/bitstamp_decoder.cpp
+    src/feed/bitstamp_decoder.cpp
     #
     # Slice 2
     # src/book/order_book.cpp
@@ -55,7 +56,7 @@ target_sources(te_core PRIVATE
 )
 
 
-target_link_libraries(te_core PUBLIC Threads::Threads)
+target_link_libraries(te_core PUBLIC Threads::Threads simdjson)
 te_set_warnings(te_core)
 te_enable_sanitizers(te_core)
 

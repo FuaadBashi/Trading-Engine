@@ -156,7 +156,81 @@ TEST(Decimal,RejectsOneAboveInt64Max){
 TEST(Decimal,RejectsOverflowingWholePart){
     std::string_view text{"92233720368547759.00"};
     std::uint8_t scale = 2;
-    const auto result = te::parseDecimal(text, scale); 
+    const auto result = te::parseDecimal(text, scale);
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::ParseError::overflow);
+}
+
+// ---- parseInteger: happy-path tests
+
+TEST(ParseInteger, ParsesBitstampOrderId) {
+    std::string_view id_str{"2037493297635328"};
+    const auto result = te::parseInteger(id_str);
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(*result.valueIf(), 2037493297635328ULL);
+}
+
+TEST(ParseInteger, ParsesBitstampMicrotimestamp) {
+    std::string_view microtimestamp{"1786269861947000"};
+    const auto result = te::parseInteger(microtimestamp);
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(*result.valueIf(), 1786269861947000ULL);
+}
+
+TEST(ParseInteger, ParsesZero) {
+    std::string_view id_str{"0"};
+    const auto result = te::parseInteger(id_str);
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(*result.valueIf(), 0);
+}
+
+// ---- parseInteger: error-path tests
+
+TEST(ParseInteger, RejectsEmptyInput) {
+    std::string_view id_str{""};
+    const auto result = te::parseInteger(id_str);
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::ParseError::empty_input);
+}
+
+TEST(ParseInteger, RejectsNegative) {
+    std::string_view id_str{"-2037493297635328"};
+    const auto result = te::parseInteger(id_str);
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::ParseError::negative_not_allowed);
+}
+
+TEST(ParseInteger, RejectsNonDigitCharacter) {
+    std::string_view id_str{"203a749"};
+    const auto result = te::parseInteger(id_str);
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::ParseError::invalid_character);
+}
+
+// ---- parseInteger: boundary tests
+
+TEST(ParseInteger, AcceptsExactlyUint64Max) {
+    std::string_view id_str{"18446744073709551615"};
+    const auto result = te::parseInteger(id_str);
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(*result.valueIf(), 18446744073709551615ULL);
+}
+
+TEST(ParseInteger, RejectsOneAboveUint64Max) {
+    std::string_view id_str{"18446744073709551616"};
+    const auto result = te::parseInteger(id_str);
+
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
     EXPECT_EQ(*result.errorIf(), te::ParseError::overflow);

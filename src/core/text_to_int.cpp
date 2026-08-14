@@ -1,4 +1,4 @@
-#include <te/core/text_to_int.hpp>
+#include "te/core/text_to_int.hpp"
 
 namespace te {
 
@@ -76,9 +76,8 @@ te::Result<std::int64_t, te::ParseError> parseDecimal(std::string_view text, std
                                                              parsed_text_after_decimal);
 };
 
-// data.id_str: "2037493297635328"
 
-te::Result<std::uint64_t, te::ParseError> parseInteger(std::string_view id_str){
+te::Result<std::uint64_t, ParseError> parseInteger(std::string_view id_str){
 
     uint64_t parsed_int {0};
     uint64_t maxWholeAllowed = UINT64_MAX / 10;
