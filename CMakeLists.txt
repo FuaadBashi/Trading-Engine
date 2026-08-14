@@ -40,6 +40,7 @@ target_sources(te_core PRIVATE
     # Slice 1
     src/core/text_to_int.cpp
     src/core/time.cpp
+    src/util/byte_buffer.cpp
     # src/core/types.cpp
     # src/telemetry/record.cpp
     # src/telemetry/sink.cpp

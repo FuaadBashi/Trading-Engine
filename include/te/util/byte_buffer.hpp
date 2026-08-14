@@ -9,7 +9,16 @@
 
 namespace te {
 
+    bool writeU8(std::span<std::byte> buffer, std::size_t offset, std::uint8_t value);
+    bool readU8(std::span<const std::byte> buffer, std::size_t offset, std::uint8_t& out);
+
+    bool writeU64(std::span<std::byte> buffer, std::size_t offset, std::uint64_t value);
+    bool readU64(std::span<const std::byte> buffer, std::size_t offset, std::uint64_t& out);
+
+
 }  // namespace te
+
+
 
 
 //*
