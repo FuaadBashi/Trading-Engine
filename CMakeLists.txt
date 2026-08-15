@@ -42,7 +42,7 @@ target_sources(te_core PRIVATE
     src/core/time.cpp
     src/util/byte_buffer.cpp
     # src/core/types.cpp
-    # src/telemetry/record.cpp
+    src/telemetry/record.cpp
     # src/telemetry/sink.cpp
     src/feed/bitstamp_decoder.cpp
     #

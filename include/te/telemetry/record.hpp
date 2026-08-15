@@ -28,7 +28,9 @@ struct Record {
     /// When this machine received/processed the event, per Clock::now() -- distinct from
     /// OrderEvent::venue_timestamp_us, which is the venue's own clock, not this one.
     Nanos receipt_timestamp_us;
+
 };
+constexpr std::uint8_t kCurrentRecordVersion = 1;
 
 static_assert(sizeof(Record) == 56,
               "Record must stay 56 bytes; if a field changed, bump version and update the on-disk format.");
