@@ -74,7 +74,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
     }
 
 // SIDE
-    u_int64_t side_code;
+    std::uint64_t side_code;
     err = doc["data"]["order_type"].get_uint64().get(side_code);
     if (err) {
         // no side field at all

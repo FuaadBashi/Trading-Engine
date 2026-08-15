@@ -1,33 +1,36 @@
-#include <cstdio>     
-#include <fstream>      
-#include <string>       
-#include <string_view>
+// Slice 1. Reads a venue JSON capture, decodes it, writes a binary capture.
+// A thin shell: argument handling, path safety and reporting only. The capture loop itself
+// lives in te_core (telemetry/recorder.hpp) so it can be tested without a filesystem.
+
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <string>
 
 #include <te/core/instrument.hpp>
 #include <te/core/time.hpp>
-#include <te/feed/bitstamp_decoder.hpp>
-#include <te/telemetry/record.hpp>
+#include <te/telemetry/recorder.hpp>
 #include <te/telemetry/sink.hpp>
 
 int main(int argc, char** argv) {
-
     if (argc != 3) {
         std::fprintf(stderr, "usage: %s <input.jsonl> <output.bin>\n", argv[0]);
         return 1;
     }
-    const std::string inputPath  = argv[1];
+    const std::string inputPath = argv[1];
     const std::string outputPath = argv[2];
 
-    te::InstrumentSpec spec{
-        .venue_id = te::VenueId::bitstamp,
-        .instrument_id = te::InstrumentId::btc_usd,
-        .price_decimals = 2,
-        .quantity_decimals = 8,
-    };
-    
+    // Sink appends rather than truncating, so writing to an existing capture would silently
+    // concatenate two runs into one file that looks like a single continuous session. Refuse
+    // instead: the caller can delete or rename deliberately, but must not do it by accident.
+    if (std::filesystem::exists(outputPath)) {
+        std::fprintf(stderr, "output already exists, refusing to append: %s\n",
+                     outputPath.c_str());
+        return 1;
+    }
+
     std::ifstream input(inputPath);
     if (!input.is_open()) {
-        // report the failure
         std::fprintf(stderr, "cannot open input: %s\n", inputPath.c_str());
         return 1;
     }
@@ -37,57 +40,34 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "cannot open output: %s\n", outputPath.c_str());
         return 1;
     }
-    te::Sink* sink = opened.valueIf();  
 
-    te::Clock clock = te::makeSystemClock();
+    const te::InstrumentSpec spec{
+        .venue_id = te::VenueId::bitstamp,
+        .instrument_id = te::InstrumentId::btc_usd,
+        .price_decimals = 2,
+        .quantity_decimals = 8,
+    };
 
-    std::size_t linesRead = 0;
-    std::size_t written   = 0;
-    std::size_t skipped   = 0;
-    std::size_t failed    = 0;
+    const te::Clock clock = te::makeSystemClock();
 
-    std::string line;
-    while (std::getline(input, line)) {
-        ++linesRead;
-        auto result = te::decodeBitstampEvent(line, spec);
-        if (result.hasValue()) {
-            te::Record record = te::buildRecord(*result.valueIf(), clock);
+    const auto result = te::runRecorder(input, *opened.valueIf(), spec, clock);
 
-            if (!sink->write(record)) {
-                std::fprintf(stderr, "write failed after %zu records (input line %zu)\n",
-                            written, linesRead);
-                return 1;
-            }
-            if (!sink->flush()) {
-                std::fprintf(stderr, "flush failed after %zu records (input line %zu)\n",
-                            written, linesRead);
-                return 1;
-            }
-            ++written;
-        } else {
-
-            switch (*result.errorIf()) {
-            case te::DecoderError::not_order_event:
-                ++skipped;
+    if (!result.hasValue()) {
+        switch (*result.errorIf()) {
+            case te::RecorderError::sink_write_failed:
+                std::fprintf(stderr, "write to capture failed; output is truncated: %s\n",
+                             outputPath.c_str());
                 break;
-            case te::DecoderError::malformed_json:
-            case te::DecoderError::missing_field:
-            case te::DecoderError::invalid_field:
-                ++failed;
+            case te::RecorderError::counter_mismatch:
+                std::fprintf(stderr, "internal error: input lines did not match outcomes\n");
                 break;
-
-             }
         }
+        return 1;
     }
 
-    if (linesRead != written + skipped + failed){
-        std::fprintf(stderr, "counter mismatch: %zu lines vs %zu accounted\n",
-                    linesRead, written + skipped + failed);
-        return 1;
-    } 
-
+    const te::RecorderStats& stats = *result.valueIf();
     std::printf("lines read: %zu\nwritten: %zu\nskipped: %zu\nfailed: %zu\n",
-            linesRead, written, skipped, failed);
+                stats.linesRead, stats.written, stats.skipped, stats.failed);
 
     return 0;
 }
