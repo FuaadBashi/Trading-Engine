@@ -1,4 +1,7 @@
 #include <te/feed/bitstamp_decoder.hpp>
+
+#include <algorithm>
+
 #include "te/core/text_to_int.hpp"
 #include "simdjson/padded_string.h"
 #include "simdjson/padded_string-inl.h"
@@ -134,5 +137,41 @@ err = doc["data"]["amount_str"].get_string().get(str_qty);
 
 
 
+
+}  // namespace te
+
+namespace te {
+
+Result<ChainLink, DecoderError> decodeBitstampChain(std::string_view text) {
+    simdjson::ondemand::parser parser;
+    simdjson::padded_string buffer = simdjson::padded_string(text);
+
+    simdjson::ondemand::document doc;
+    if (parser.iterate(buffer).get(doc)) {
+        return Result<ChainLink, DecoderError>::failure(DecoderError::malformed_json);
+    }
+
+    std::string_view eventId;
+    if (doc["event_id"].get_string().get(eventId)) {
+        return Result<ChainLink, DecoderError>::failure(DecoderError::missing_field);
+    }
+
+    std::string_view preEventId;
+    if (doc["pre_event_id"].get_string().get(preEventId)) {
+        return Result<ChainLink, DecoderError>::failure(DecoderError::missing_field);
+    }
+
+    // Fixed width is part of the contract; anything else is a protocol change, not a short id.
+    if (eventId.size() != kChainIdLength || preEventId.size() != kChainIdLength) {
+        return Result<ChainLink, DecoderError>::failure(DecoderError::invalid_field);
+    }
+
+    ChainLink link;
+    // Copy out: these views point into the parse buffer above, which dies with this function.
+    std::copy(eventId.begin(), eventId.end(), link.event_id.begin());
+    std::copy(preEventId.begin(), preEventId.end(), link.pre_event_id.begin());
+
+    return Result<ChainLink, DecoderError>::success(link);
+}
 
 }  // namespace te

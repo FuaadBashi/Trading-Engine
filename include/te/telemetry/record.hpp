@@ -15,8 +15,40 @@ namespace te {
  *
  * @note   Bump this whenever Record's layout changes, and keep a decoder for the old layout;
  *         capture files written before the change still carry the old one.
+ *
+ * @note   v2 added Record::kind. v1 captures remain readable without a separate decoder: the
+ *         byte kind occupies was zeroed padding in v1, and RecordKind::order_event is 0, so a
+ *         v1 record reads as an order event under v2 rules. That only holds because v1 zeroed
+ *         its padding; a v1 writer that left padding indeterminate would need a real converter.
  */
-constexpr std::uint8_t kCurrentRecordVersion = 1;
+constexpr std::uint8_t kCurrentRecordVersion = 2;
+
+/**
+ * @brief  What a Record describes.
+ *
+ * @note   A capture is not only order events. A gap marker has to travel inside the stream, in
+ *         its correct temporal position, so a reader cannot miss it. The alternative -- a
+ *         sidecar file listing gaps -- makes correctness opt-in, and the consumer that forgets
+ *         to read it produces a confidently wrong backtest. Kafka's control records and
+ *         database WAL checkpoint records take the same in-stream approach.
+ */
+enum class RecordKind : std::uint8_t {
+    /** @brief A normal market event. Record::orderEvent is meaningful. */
+    order_event = 0,
+
+    /**
+     * @brief  Venue message chain broke here: events were lost between the previous record and
+     *         the next one.
+     *
+     * @note   Record::orderEvent is zeroed and carries no meaning. Only receipt_timestamp_us
+     *         and the marker's position in the stream are significant.
+     *
+     * @note   Carries no magnitude. Bitstamp chains messages by event_id rather than numbering
+     *         them, so a broken chain proves data was lost but never says how much (ADR 0006).
+     *         A reader must treat any gap as unbounded and censor the affected window.
+     */
+    gap = 1,
+};
 
 /**
  * @brief  One captured market event, in the fixed-size binary layout written to a capture file.
@@ -47,11 +79,21 @@ struct Record {
     std::uint8_t version;
 
     /**
+     * @brief  Whether this record is a market event or a gap marker.
+     *
+     * @note   Sits in what was padding in v1, so adding it did not change sizeof(Record).
+     */
+    RecordKind kind;
+
+    /**
      * @brief  When this machine received the event, per Clock::now().
      *
      * @note   Distinct from OrderEvent::venue_timestamp_us, which is the venue's own clock.
      *         The difference between the two is network plus processing delay, which is what
      *         the Slice 4 latency work will measure.
+     *
+     * @note   For a gap record this is when the break was *detected*, which is the arrival time
+     *         of the event after the gap, not of the lost events themselves.
      */
     Nanos receipt_timestamp_us;
 };
@@ -74,5 +116,19 @@ static_assert(std::is_trivially_copyable_v<Record>,
  *         makeSystemClock() always does; a hand-built one used in a test may not.
  */
 Record buildRecord(const OrderEvent& orderEvent, const Clock& clock);
+
+/**
+ * @brief  Builds a gap marker, recording that venue messages were lost at this point.
+ *
+ * @param  clock Supplies the detection timestamp via its now() callable.
+ *
+ * @return A Record with kind == RecordKind::gap, a zeroed orderEvent, and the current version.
+ *
+ * @throws std::bad_function_call If @p clock has no `now` assigned.
+ *
+ * @note   Written into the stream immediately before the event that revealed the break, so its
+ *         position marks where continuity was lost.
+ */
+Record buildGapRecord(const Clock& clock);
 
 }  // namespace te

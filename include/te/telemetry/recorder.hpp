@@ -41,6 +41,18 @@ struct RecorderStats {
 
     /** @brief Lines that should have decoded into an order event but could not. */
     std::size_t failed{};
+
+    /**
+     * @brief  Breaks detected in the venue's event chain.
+     *
+     * @note   Each one also wrote a RecordKind::gap marker into the capture, so this count is a
+     *         summary of something the stream already describes, not the only record of it.
+     *
+     * @note   Not an error. A gap means the venue's messages were lost in transit, which is a
+     *         fact about the session rather than a fault in this program -- but a session
+     *         containing one cannot be replayed as continuous.
+     */
+    std::size_t gapsDetected{};
 };
 
 /**
@@ -84,6 +96,12 @@ enum class RecorderError {
  *
  * @note   Blank lines are skipped without being decoded and count toward neither written nor
  *         failed; they are counted as skipped, since an empty line is not a malformed event.
+ *
+ * @note   Checks the venue event chain across order events (ADR 0006) and writes a
+ *         RecordKind::gap marker immediately before any event whose pre_event_id does not match
+ *         the previous event's event_id. The marker's position is what tells a later replay
+ *         where continuity was lost. Protocol messages carry no chain ids and are ignored for
+ *         this purpose; the first order event has no predecessor and cannot break the chain.
  */
 Result<RecorderStats, RecorderError> runRecorder(std::istream& input, Sink& sink,
                                                  const InstrumentSpec& spec, const Clock& clock);

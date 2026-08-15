@@ -66,8 +66,18 @@ int main(int argc, char** argv) {
     }
 
     const te::RecorderStats& stats = *result.valueIf();
-    std::printf("lines read: %zu\nwritten: %zu\nskipped: %zu\nfailed: %zu\n",
-                stats.linesRead, stats.written, stats.skipped, stats.failed);
+    std::printf("lines read: %zu\nwritten: %zu\nskipped: %zu\nfailed: %zu\ngaps: %zu\n",
+                stats.linesRead, stats.written, stats.skipped, stats.failed, stats.gapsDetected);
+
+    // A gap is not a failure of this program, so it does not change the exit code -- but a
+    // session containing one cannot be replayed as continuous, and that must not be discovered
+    // later by surprise.
+    if (stats.gapsDetected > 0) {
+        std::fprintf(stderr,
+                     "warning: %zu gap(s) recorded; this session is not continuous and must be "
+                     "censored or excluded when replayed\n",
+                     stats.gapsDetected);
+    }
 
     return 0;
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <string_view>
 
 #include <te/core/instrument.hpp>
@@ -62,6 +64,48 @@ enum class DecoderError {
  *         string form of it. 0 maps to Side::buy and 1 to Side::sell.
  */
 Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text, InstrumentSpec spec);
+
+/** @brief Length of a Bitstamp event_id, which is UUID-shaped and always 36 characters. */
+constexpr std::size_t kChainIdLength = 36;
+
+/**
+ * @brief  A message's position in Bitstamp's event chain.
+ *
+ * @note   Bitstamp does not number messages. Each one names its predecessor, so continuity is
+ *         checked by matching this message's pre_event_id against the previous message's
+ *         event_id (ADR 0006). A mismatch proves loss but gives no count of what was lost.
+ *
+ * @note   Fixed-size arrays rather than strings: these are copied out of simdjson's parse
+ *         buffer, which dies with the call, so a string_view would dangle. Fixed size also
+ *         keeps the decoder allocation-free per message.
+ *
+ * @note   Transport metadata, deliberately not part of OrderEvent. The book never reads it, and
+ *         carrying 32 bytes of it through every event and every record would nearly double both.
+ */
+struct ChainLink {
+    /** @brief This message's own identifier. */
+    std::array<char, kChainIdLength> event_id{};
+
+    /** @brief The identifier of the message that should have preceded this one. */
+    std::array<char, kChainIdLength> pre_event_id{};
+};
+
+/**
+ * @brief  Extracts the event-chain identifiers from one raw Bitstamp line.
+ *
+ * @param  text One complete JSON message, as received.
+ *
+ * @return The chain link, or the reason it could not be read.
+ *
+ * @note   Only order lifecycle messages carry these fields; protocol messages such as
+ *         bts:subscription_succeeded have none and yield DecoderError::missing_field. Callers
+ *         should therefore only check continuity across order events.
+ *
+ * @note   Separate from decodeBitstampEvent so the event decoder's contract stays unchanged.
+ *         The cost is a second parse of the same line, which is acceptable while capture is
+ *         file-driven and correctness matters more than throughput.
+ */
+Result<ChainLink, DecoderError> decodeBitstampChain(std::string_view text);
 
 }  // namespace te
 

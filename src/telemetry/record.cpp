@@ -21,9 +21,23 @@ namespace te {
         std::memset(static_cast<void*>(&record), 0, sizeof(record));
         record.orderEvent = orderEvent;
         record.version = kCurrentRecordVersion;
+        record.kind = RecordKind::order_event;
         record.receipt_timestamp_us = clock.now();
 
         return record;
     };
+
+    Record buildGapRecord(const Clock& clock) {
+        Record record;
+        // Same reasoning as buildRecord: zero padding so captures are byte-reproducible across
+        // builds. Here it also zeroes orderEvent, which is what makes "carries no meaning"
+        // literally true rather than a comment.
+        std::memset(static_cast<void*>(&record), 0, sizeof(record));
+        record.version = kCurrentRecordVersion;
+        record.kind = RecordKind::gap;
+        record.receipt_timestamp_us = clock.now();
+
+        return record;
+    }
 
 }

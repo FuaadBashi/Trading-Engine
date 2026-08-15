@@ -58,6 +58,15 @@ std::vector<te::Record> readAllRecords(const std::string& path) {
 constexpr const char* kOrderLine =
     R"({"data":{"id":2037493297635328,"id_str":"2037493297635328","order_type":0,"order_subtype":5,"datetime":"1786269862","microtimestamp":"1786269861947000","amount":0.00171371,"amount_str":"0.00171371","amount_traded":"0","amount_at_create":"0.00171371","price":58356.1,"price_str":"58356.10","is_liquidation":false},"channel":"live_orders_btcusd","event":"order_deleted","event_id":"0006589a-5c98-2678-0000-000101000020","pre_event_id":"0006589a-5c97-f798-0000-000100000020","order_source":"orderbook"})";
 
+// The line that genuinely follows kOrderLine in the capture: its pre_event_id is kOrderLine's
+// event_id, so the two form an unbroken chain.
+constexpr const char* kNextOrderLine =
+    R"({"data":{"id":2037493293895680,"id_str":"2037493293895680","order_type":0,"order_subtype":5,"datetime":"1786269862","microtimestamp":"1786269862001000","amount":2.31332185,"amount_str":"2.31332185","amount_traded":"0","amount_at_create":"2.31332185","price":64839,"price_str":"64839.00","is_liquidation":false},"channel":"live_orders_btcusd","event":"order_deleted","event_id":"0006589a-5c98-f968-0000-000102000020","pre_event_id":"0006589a-5c98-2678-0000-000101000020","order_source":"orderbook"})";
+
+// A line whose pre_event_id points at a message that never arrived: the chain is broken.
+constexpr const char* kChainBreakLine =
+    R"({"data":{"id":2037493298597888,"id_str":"2037493298597888","order_type":1,"order_subtype":5,"datetime":"1786269862","microtimestamp":"1786269862010000","amount":2.31331873,"amount_str":"2.31331873","amount_traded":"0","amount_at_create":"2.31331873","price":64839.06,"price_str":"64839.06","is_liquidation":false},"channel":"live_orders_btcusd","event":"order_created","event_id":"0006589a-ffff-0000-0000-000199000020","pre_event_id":"0006589a-dead-beef-0000-000999000020","order_source":"orderbook"})";
+
 // The subscription confirmation every capture begins with. Valid, but not an order.
 constexpr const char* kSubscriptionLine =
     R"({"event":"bts:subscription_succeeded","channel":"live_orders_btcusd","data":{}})";
@@ -142,19 +151,102 @@ TEST(Recorder, PreservesInputOrder) {
     ASSERT_TRUE(opened.hasValue());
 
     std::istringstream input(std::string(kSubscriptionLine) + "\n" + kOrderLine + "\n" +
-                             kOrderLine + "\n");
+                             kNextOrderLine + "\n");
     const auto result = te::runRecorder(input, *opened.valueIf(), btcUsd(), fixedClock(7));
 
     ASSERT_TRUE(result.hasValue());
     EXPECT_EQ(result.valueIf()->linesRead, 3U);
     EXPECT_EQ(result.valueIf()->written, 2U);
     EXPECT_EQ(result.valueIf()->skipped, 1U);
+    EXPECT_EQ(result.valueIf()->gapsDetected, 0U);
 
     const auto records = readAllRecords(out.path());
     ASSERT_EQ(records.size(), 2U);
     EXPECT_EQ(records[0].orderEvent.order_id, te::OrderId{2037493297635328ULL});
     EXPECT_EQ(records[0].orderEvent.price, te::Price{5835610});
-    EXPECT_EQ(records[1].orderEvent.order_id, te::OrderId{2037493297635328ULL});
+    EXPECT_EQ(records[1].orderEvent.order_id, te::OrderId{2037493293895680ULL});
+    EXPECT_EQ(records[1].orderEvent.price, te::Price{6483900});
+}
+
+// ---- gap detection (ADR 0006)
+
+TEST(Recorder, DetectsBrokenChainAndWritesGapMarker) {
+    const TempFile out("te_recorder_gap.bin");
+    auto opened = te::Sink::open(out.path());
+    ASSERT_TRUE(opened.hasValue());
+
+    // Second line's pre_event_id does not name the first line, so events were lost between them.
+    std::istringstream input(std::string(kOrderLine) + "\n" + kChainBreakLine + "\n");
+    const auto result = te::runRecorder(input, *opened.valueIf(), btcUsd(), fixedClock(5));
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(result.valueIf()->gapsDetected, 1U);
+    EXPECT_EQ(result.valueIf()->linesRead, 2U);
+    EXPECT_EQ(result.valueIf()->written, 3U);  // two events plus the marker
+    EXPECT_EQ(result.valueIf()->failed, 0U);   // a gap is not a decode failure
+
+    const auto records = readAllRecords(out.path());
+    ASSERT_EQ(records.size(), 3U);
+
+    // The marker sits between the two events, marking where continuity was lost.
+    EXPECT_EQ(records[0].kind, te::RecordKind::order_event);
+    EXPECT_EQ(records[1].kind, te::RecordKind::gap);
+    EXPECT_EQ(records[2].kind, te::RecordKind::order_event);
+
+    // A gap marker carries no event data, only its position and detection time.
+    EXPECT_EQ(records[1].orderEvent.order_id, te::OrderId{0});
+    EXPECT_EQ(records[1].orderEvent.price, te::Price{0});
+    EXPECT_EQ(records[1].receipt_timestamp_us, te::Nanos{5});
+    EXPECT_EQ(records[1].version, te::kCurrentRecordVersion);
+}
+
+// An unbroken chain must never produce a marker, or every replay would be censored for nothing.
+TEST(Recorder, IntactChainProducesNoGapMarker) {
+    const TempFile out("te_recorder_nogap.bin");
+    auto opened = te::Sink::open(out.path());
+    ASSERT_TRUE(opened.hasValue());
+
+    std::istringstream input(std::string(kOrderLine) + "\n" + kNextOrderLine + "\n");
+    const auto result = te::runRecorder(input, *opened.valueIf(), btcUsd(), fixedClock(1));
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(result.valueIf()->gapsDetected, 0U);
+    EXPECT_EQ(result.valueIf()->written, 2U);
+
+    for (const te::Record& record : readAllRecords(out.path())) {
+        EXPECT_EQ(record.kind, te::RecordKind::order_event);
+    }
+}
+
+// The first order event has no predecessor; treating that as a break would open every capture
+// with a false gap.
+TEST(Recorder, FirstEventCannotBreakTheChain) {
+    const TempFile out("te_recorder_first.bin");
+    auto opened = te::Sink::open(out.path());
+    ASSERT_TRUE(opened.hasValue());
+
+    std::istringstream input(std::string(kChainBreakLine) + "\n");
+    const auto result = te::runRecorder(input, *opened.valueIf(), btcUsd(), fixedClock(1));
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(result.valueIf()->gapsDetected, 0U);
+    EXPECT_EQ(result.valueIf()->written, 1U);
+}
+
+// Protocol messages carry no chain ids and must not be treated as breaking continuity.
+TEST(Recorder, SubscriptionMessageDoesNotBreakTheChain) {
+    const TempFile out("te_recorder_proto.bin");
+    auto opened = te::Sink::open(out.path());
+    ASSERT_TRUE(opened.hasValue());
+
+    std::istringstream input(std::string(kOrderLine) + "\n" + kSubscriptionLine + "\n" +
+                             kNextOrderLine + "\n");
+    const auto result = te::runRecorder(input, *opened.valueIf(), btcUsd(), fixedClock(1));
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(result.valueIf()->gapsDetected, 0U);
+    EXPECT_EQ(result.valueIf()->skipped, 1U);
+    EXPECT_EQ(result.valueIf()->written, 2U);
 }
 
 // The invariant the loop asserts: every line lands in exactly one bucket.
