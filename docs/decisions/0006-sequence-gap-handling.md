@@ -130,18 +130,21 @@ snapshot HTTP fetch before entering its receive loop, so nothing drained the soc
 round trip.
 
 Measured consequence: the snapshot is timestamped **0.608 s before the first recorded event**,
-the reverse of the intended relation. Replaying snapshot + stream leaves **11 `order_deleted`
-events referencing orders never seen** — orders created inside the hole and deleted after it.
-All 11 fall in the first 1,592 lines; the book is self-consistent for the remaining 59 minutes.
+the reverse of the intended relation. A later full bootstrap replay refined the original count:
+there are **10 `order_deleted` events referencing resting IDs never seen** before the chain break.
+They occur through line 5,153, with the last one 35.5 seconds after the snapshot. An older analysis
+reported 11 because it rejected a price-zero market-order creation and then misclassified that
+order's matching deletion as unknown.
 
 The invariant is therefore stronger than "subscribe first". It is: **a task must already be
 writing frames to disk before the snapshot request is issued.** Subscribing is not sufficient,
 because a subscribed socket that nothing is reading still loses the window.
 
 Replay must be able to discard events that predate the snapshot; it cannot invent ones missing
-after it. Where the two cannot be ordered correctly, the correct reading is that the segment has
-a warm-up region whose length is the snapshot-to-first-event interval, and the book is not valid
-within it.
+after it. Where the two cannot be ordered correctly, the segment has a warm-up region and the book
+is not valid within it. The snapshot-to-first-event interval measures the receive hole, but it does
+**not** bound the warm-up duration: an order missed inside a sub-second hole can remain live and
+produce its orphaned delete many seconds later.
 
 ## Measured evidence (hour capture, 2026-08-09)
 
@@ -152,8 +155,50 @@ within it.
 | Rate | 70.1 events/s |
 | Chain breaks | 1 (line 162,871) |
 | Loss rate | 1 in 252,374 (0.0004%) |
-| Orphaned deletes (warm-up) | 11, all within first 1,592 lines |
+| Unknown resting-order deletes (warm-up) | 10, last at line 5,153 / 35.5 s |
 | Duplicate creates / orphaned changes | 0 / 0 |
 
 Validated by `scripts/validate_capture.py`, the Python reference implementation of the chain rule
 above. The C++ decoder is checked against it rather than against its own assumptions.
+
+## Amendment 3 — one raw/binary boundary model (2026-08-16)
+
+The raw/binary boundary part of the original decision is superseded here.
+
+### Raw and binary files use the same segment boundary
+
+The original decision required both manifest-owned raw boundaries and in-stream binary
+snapshot/reconnect/gap records. That creates two competing accounts of continuity. ADR 0011 now
+chooses one model:
+
+- a raw snapshot, raw payload file, binary snapshot and binary event file all belong to the same
+  manifest segment;
+- a planned reconnect closes the current segment with a planned end reason;
+- a chain gap closes the current segment with a gap diagnostic and invalid status;
+- the event that reveals the broken chain may remain in the payload-preserving raw evidence, but is
+  not applied to the old book or encoded into its valid binary event prefix;
+- replay never crosses a file boundary without loading the next segment's snapshot;
+- current v2 in-stream `RecordKind::gap` records remain readable as legacy evidence, but v3 durable
+  files do not use them as a second boundary system.
+
+This preserves the important original rule — replay cannot silently cross a discontinuity — while
+making the file boundary itself the enforced stop.
+
+### Startup behavior remains governed by Amendment 2
+
+The current capture schedules the websocket drain before submitting the blocking REST snapshot
+request and keeps draining while that request is in flight. It therefore does not contain the
+original failure mode investigated in Amendment 2, where the REST request blocked all websocket
+reads.
+
+The reference segment contains five deletions of IDs absent from the snapshot, all between payload
+lines 2 and 178. This is the same measured startup warm-up phenomenon documented in Amendment 2,
+not evidence that the current capture stopped draining during the REST request. Unknown
+modify/remove IDs remain explicit errors from `OrderBook::apply` (ADR 0012); the controller counts
+them, preserves them as evidence and excludes the affected warm-up region from claims that require
+a fully known queue.
+
+Waiting for `bts:subscription_succeeded` before issuing the REST request could be investigated as
+optional hardening while the drain continues. The present evidence does not establish that this
+extra gate is required or that it would remove the warm-up event, so it is not a correctness
+requirement of this ADR.

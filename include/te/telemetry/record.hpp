@@ -43,9 +43,10 @@ enum class RecordKind : std::uint8_t {
      * @note   Record::orderEvent is zeroed and carries no meaning. Only receipt_timestamp_us
      *         and the marker's position in the stream are significant.
      *
-     * @note   Carries no magnitude. Bitstamp chains messages by event_id rather than numbering
-     *         them, so a broken chain proves data was lost but never says how much (ADR 0006).
-     *         A reader must treat any gap as unbounded and censor the affected window.
+     * @note   Carries no exact magnitude. Bitstamp chains messages by event_id rather than
+     *         numbering them; a broken chain proves loss, and event_id's structure makes the
+     *         count recoverable only modulo 4 (ADR 0006 Amendment 1), not exactly. A reader must
+     *         still treat any gap as unbounded and censor the affected window.
      */
     gap = 1,
 };

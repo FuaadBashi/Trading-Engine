@@ -1,5 +1,12 @@
 # Slice 1 - Data contract and recorder
 
+**Historical.** This is a status snapshot from 2026-08-09, early in Slice 1 -- its status table
+below was never updated afterward and is stale (it still lists `InstrumentSpec`/decimal parsing as
+in-progress work; both, plus the decoder, byte_buffer, Record, Sink, the capture loop, and gap
+detection, are done). Kept for its record of the corpora and early decisions, not as a live plan.
+For current status see `docs/coding-plan-v3.md` §1; for the binary-format requirement below that
+current code does not fully meet, see the note in `coding-plan-v3.md`'s own header.
+
 **Updated:** 2026-08-09
 **Project source of truth:** [project-plan-v2.md](project-plan-v2.md)
 

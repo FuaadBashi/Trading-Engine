@@ -23,6 +23,8 @@ are research, the decision is yours.
 | 0008 | Queue-position assumption for cancels | 4 | before `queue_model.hpp` |
 | 0009 | Virtual dispatch vs CRTP for Strategy | 3 | before `strategy.hpp` |
 | 0010 | Primary venue for L3 capture | 1 | before the hour-long capture |
+| 0011 | Portable binary segments and snapshots | 1-2 | before durable binary corpus |
+| 0012 | Reference order-book API and failure contract | 2 | before `order_book.cpp` |
 
 Later additions with no stub yet: live-leg realism upgrade (week 11), equities adapter timing
 (week 12 to 14), strategy choice for the fill ladder (week 8).

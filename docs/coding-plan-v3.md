@@ -12,6 +12,12 @@ implementations are not. This revision exists because eight weeks of real buildi
 number of the original plan's assumptions, and because a plan that no longer matches the repo is
 worse than no plan.
 
+**Reconciled 2026-08-16:** ADR 0011 selects the portable format required by `project-plan-v2.md`
+§1E. The shipped 56-byte host-layout writer and in-stream `RecordKind::gap` remain readable legacy
+v2 data. Durable v3 uses explicit little-endian headers/records plus one manifest-owned segment
+boundary model, as clarified by ADR 0006 Amendment 3. The v3 encoder/decoder is decided but not yet
+implemented.
+
 ---
 
 ## 0. Rules of engagement
@@ -42,7 +48,7 @@ evidence.
 | Slice | Weeks | Status | Ships |
 |---|---|---|---|
 | 0 | 0 | **Done** | Build system, GoogleTest, CTest, sanitisers, CI-ready |
-| 1 | 1–2 | **~80%** | Recorder: venue JSON to binary capture on disk |
+| 1 | 1–2 | **Capture path done; socket deferred** | Recorder: venue JSON to binary capture on disk, gap-aware |
 | 2 | 3–5 | Not started | Book builder, verified against an independent depth source |
 | 3 | 6–7 | Not started | Replay engine v1, L1 fills, telemetry |
 | 4 | 8–10 | Not started | Queue model L3, latency model L4 |
@@ -50,7 +56,7 @@ evidence.
 | 6 | 13–14 | Not started | Validation: predicted vs actual fills |
 | 7 | 15+ | Not started | ML signal or equities adapter |
 
-**Current test count: 63, all passing, all under ASan/UBSan.**
+**Current test count: 80, all passing, all under ASan/UBSan, green under both GCC and Clang in CI.**
 
 ### What exists and works
 
@@ -61,20 +67,27 @@ evidence.
 | `InstrumentSpec` | `core/instrument.hpp` | Done, 2 tests |
 | `parseDecimal` / `parseInteger` | `core/text_to_int.{hpp,cpp}` | Done, 25 tests |
 | `Clock` | `core/time.{hpp,cpp}` | Done, 4 tests |
-| `OrderEvent` / `EventKind` | `feed/events.hpp` | Done, 1 test (thin — see gap below) |
-| `decodeBitstampEvent` | `feed/bitstamp_decoder.{hpp,cpp}` | Done, 1 test |
-| `writeU8/64` / `readU8/64` | `util/byte_buffer.{hpp,cpp}` | Done, 9 tests |
-| `Record` / `buildRecord` | `telemetry/record.{hpp,cpp}` | Done, 1 test |
-| `Sink` | `telemetry/sink.{hpp,cpp}` | Done, 8 tests |
+| `OrderEvent` / `EventKind` | `feed/events.hpp` | Done, 6 tests |
+| `decodeBitstampEvent` / `decodeBitstampChain` | `feed/bitstamp_decoder.{hpp,cpp}` | Done, 1 direct test + exercised via the recorder tests below |
+| `writeU8/64` / `readU8/64` | `util/byte_buffer.{hpp,cpp}` | Done, 9 tests; host-endian today, explicit little-endian v3 work remains (ADR 0011) |
+| Legacy `Record` / `RecordKind` / `buildRecord` / `buildGapRecord` (v2) | `telemetry/record.{hpp,cpp}` | Done and tested; portable v3 segment/snapshot encoding remains (ADR 0011) |
+| `Sink` | `telemetry/sink.{hpp,cpp}` | Done, 3 tests |
+| `runRecorder` (the capture loop) | `telemetry/recorder.{hpp,cpp}` | Done, 12 tests, incl. the golden round-trip test |
 
 ### What remains in Slice 1
 
-1. **The capture loop** — `apps/recorder_main.cpp` is still a stub. Nothing wires decoder → record → sink.
-2. **A real golden test** — the round-trip test covers a handful of records; the plan's "1000 recorded
-   JSON lines, byte identical" test does not exist yet.
-3. **Gap detection** — ADR 0006 decided the *algorithm* (event-id chain), nothing implements it.
-4. **The live socket** — no WebSocket client. Capture is currently done by a Python script.
-5. **Unattended operation** — no reconnect loop, no rotation, no VPS run.
+1. **A C++ consumer for the REST snapshot.** `scripts/dump_raw_ws_bitstamp.py` already fetches
+   Bitstamp's `group=2` order-book snapshot at the start of every segment and writes it to
+   `segment-NNNN.snapshot`, exactly the "snapshot + diff" pattern real venue integrations need
+   (this already implements ADR 0006's resync story — it was missed in an earlier pass of this
+   document, corrected in §4). What's still missing is entirely on the C++ side: nothing parses a
+   `.snapshot` file or seeds an `OrderBook` from it before applying `OrderEvent`s. This is now
+   Slice 2 work, not a Slice 1 gap.
+2. **The live socket** — no WebSocket client. Capture is currently done by the Python script above.
+3. **Unattended operation** — no reconnect loop, no rotation, no VPS run. Depends on the live socket.
+
+Everything else originally listed here — the capture loop, the golden byte-exact test, and gap
+detection — shipped this slice; see the component table above.
 
 ---
 
@@ -86,9 +99,9 @@ These are not preferences. Each was forced by evidence and is recorded in an ADR
 |---|---|---|---|
 | Coinbase `full` channel | **Bitstamp `live_orders_btcusd`** | Coinbase L3 now requires Exchange-tier auth, unavailable on a retail account. A 30-second probe caught it. Bitstamp serves per-order L3 publicly, unauthenticated. | 0010 |
 | Order IDs are UUID strings; hash or intern them, handle collisions | **Plain `uint64`, parsed from `id_str`** | Bitstamp issues 16-digit numeric ids. The hard problem the plan anticipated does not exist on this venue. Read the *string* form, never the JSON number: generic JSON pipelines coerce to double and lose exactness above 2^53. | 0005 |
-| Integer sequence numbers; detect gaps arithmetically | **`event_id` / `pre_event_id` chain** | Bitstamp does not number messages. Detection is a *link* check (does this event's `pre_event_id` match the last `event_id`), not `expected == actual + 1`. A broken chain tells you *that* you lost data, never *how much* — so any policy depending on gap size is unavailable. | 0006 |
+| Integer sequence numbers; detect gaps arithmetically | **`event_id` / `pre_event_id` chain** | Bitstamp does not number messages. Detection is a *link* check (does this event's `pre_event_id` match the last `event_id`), not `expected == actual + 1`. A broken chain tells you *that* you lost data; magnitude is only recoverable modulo 4 (ADR 0006 Amendment 1), not exactly — so the policy still treats any break as fully invalidating. | 0006 |
 | Three event structs: `AddOrder`, `CancelOrder`, `MatchEvent` | **One `OrderEvent` + `EventKind{add, modify, remove}`** | The three venue messages carry identical fields. One trivially-copyable struct keeps the queue and record layouts uniform, and keeps venue vocabulary at the decoder boundary. | — |
-| `RecordHeader`, `#pragma pack(push,1)`, 12 bytes | **`Record`, natural alignment, 56 bytes, `static_assert`ed** | Packing buys 7 bytes and costs misaligned access on every field. The size assertion is what actually protects the format; packing was solving a problem this project does not have. | — |
+| `RecordHeader`, `#pragma pack(push,1)`, 12 bytes | **Legacy `Record` is 56 host-layout bytes; durable v3 is explicit little-endian** | Packing and `static_assert` protect neither cross-ABI layout nor byte order. ADR 0011 keeps v2 readable but separates the in-memory object from the permanent 64-byte record schema. | 0011 |
 | `class Clock` with `virtual Nanos now() const = 0` | **`struct Clock` holding two `std::function<Nanos()>`** | There is no virtual dispatch anywhere else in this codebase. A struct of callables gives the same test seam with no vtable and matches the value-type style of `Result`, `Price`, `Qty`. | — |
 | Tick size "hardcoded, or per instrument config?" | **`InstrumentSpec`, supplied by the caller** | Scale is a property of the venue/instrument pair, not of `Price`. It is never read from a message — venues do not transmit their own scales. | 0004 |
 | Error type: "optional, Result, or codes?" | **All three, by case** | `bool` + out-param for a single binary outcome; `optional` when the reason does not matter; `Result<T,E>` when several failures are distinguishable and the caller needs the reason. | 0003 |
@@ -170,19 +183,28 @@ the subscription message is legitimately skipped), and assert the file is exactl
 `sizeof(Record) * count` bytes. Then read every record back and assert byte-identity against a
 re-decode of the same input.
 
-### Step 6: gap detection
+### Step 6: gap detection — legacy implementation done; durable segmentation decided
 
-ADR 0006 decided the algorithm and named the three complications. None are implemented:
+**Shipped in v2:** the link check (`chain.pre_event_id == previous.event_id`), an in-stream
+`RecordKind::gap`, and the three false-gap guards (first event, protocol messages, unreadable
+chain). **Durable v3 decision:** ADR 0006 Amendment 3 and ADR 0011 choose the manifest segment as
+the single continuity boundary. A gap closes the segment; the revealing event stays only in raw
+evidence and is not applied or written into the valid binary prefix. Existing v2 gap records remain
+readable as legacy data.
 
-- Hold the previous message's `event_id`; check the next message's `pre_event_id` matches.
-- A broken chain gives no magnitude — you know *that* you lost data, not *how much*.
-- `bts:request_reconnect` is a *planned* discontinuity and must not be recorded as a data-quality gap.
-- Snapshot seeding creates a chain break at the start of every capture that is not a fault.
+**One overstated claim, corrected:** "a broken chain gives no magnitude" is ADR 0006's stated
+*policy* (any gap fully invalidates the book regardless of size), but not quite the full *fact*.
+Amendment 1 to ADR 0006, from an investigation on an hour-long capture, found the `event_id`'s
+final UUID segment is a dense four-state counter, so the number of lost events is recoverable
+**modulo 4** — not exact, and not enough to distinguish a 1-event drop from a 4n+1-event burst, so
+the policy is correctly unchanged. But "no magnitude at all" is stronger than what was actually
+found; corrected here and everywhere else this document said it flatly.
 
-Design question: does a gap belong *in* the record stream (a distinguished record type) or in a
-sidecar log? The first makes replay gap-aware for free and forces `Record` to grow a type field;
-the second keeps `Record` at 56 bytes but lets a replay silently ignore the gap. Both are
-defensible; ADR 0006's own reasoning leans toward the capture being self-describing.
+**One follow-up from ADR 0006/0011 is not yet built:** build the ADR 0011 v3 explicit little-endian
+segment/snapshot encoder, decoder and golden bytes. The manifest owns snapshot/reconnect/gap
+boundaries; v3 does not add competing in-stream boundary records. The raw capture already schedules
+the websocket drain before the REST snapshot request and drains concurrently while that request is
+in flight, satisfying the startup rule measured in ADR 0006 Amendment 2.
 
 **learncpp:** 4.6 (fixed-width integers), 4.8 and 6.7 (why you are avoiding floating point), 13.6
 (scoped enums), 13.8 (aggregate initialisation), 16.10 (vector capacity), 28.6 and 28.7 (binary
@@ -197,41 +219,212 @@ the project).
 
 ## 4. Slice 2 — the book builder (weeks 3–5)
 
-**Ships:** `OrderBook` reconstructed from your capture, top-of-book independently verified.
+**Ships:** `OrderBook` reconstructed from your capture, top-of-book independently verified against
+a source you didn't build yourself.
+
+### Resolve first: the C++ side has no snapshot consumer yet
+
+**Correction to an earlier version of this section:** it claimed no snapshot mechanism existed
+anywhere in this project and that fixing it "likely belongs partly in Slice 1." That was wrong,
+found by checking only the `.jsonl` file and never the sibling files sitting next to it. Corrected
+here rather than left standing.
+
+`scripts/dump_raw_ws_bitstamp.py`'s own docstring: *"Capture public Bitstamp L3 events as
+snapshot-backed segments... each segment has its own `group=2` REST snapshot and payload-only JSONL
+stream... This implements ADR 0006."* Every capture directory already has three files, not one:
+
+```text
+segment-0000.jsonl       the live_orders diff stream (what earlier analysis only looked at)
+segment-0000.snapshot    one REST GET .../order_book/btcusd/?group=2, fetched at segment start
+manifest.json            ties the two together: snapshot microtimestamp, chain_valid, event_id range
+```
+
+The reference capture's snapshot, read directly rather than assumed: **4,174 bids, 4,563 asks**,
+each row `[price_str, amount_str, order_id_str]` — e.g. `["64840.11", "0.22992207",
+"2037492791283712"]`. Best bid `64840.11`, best ask `64840.12`: a one-cent top-of-book spread. That
+number is easy to conflate with the much wider figure in ADR 0007 below, and they are not the same
+thing — the ADR's figure is price *dispersion* across every resting order in the book (and across
+observed events over 29 seconds), not the inside market. The snapshot's own extremes matter
+directly for that ADR: bids as low as **$0.01**, asks as high as **$483,980,000.00**.
+
+So the "snapshot + diff" pattern real venue integrations need (Bitstamp's `live_orders` channel
+itself sends no initial state over the websocket, confirmed earlier against Tardis.dev's own
+Bitstamp integration notes) is already built here — one layer down, in Python, not yet consumed by
+any C++. What's actually missing for Slice 2:
+
+1. A parser for `.snapshot`'s `bids`/`asks` rows into initial resting orders.
+2. A seed step that loads all of them into `OrderBook` before any `OrderEvent` from the paired
+   `.jsonl` is applied.
+3. Confirmation of the ordering rule: only apply `.jsonl` events at or after the snapshot's own
+   `microtimestamp` (`1786269861574036` for the reference capture) — `dump_raw_ws_bitstamp.py`'s own
+   comments say diffs at or before that timestamp should be discarded, since the snapshot already
+   reflects them.
+
+**One measured startup-boundary effect to preserve before writing `validate()`:** the reference
+`.jsonl` contains five deletes for IDs absent from the snapshot, all between lines 2 and 178. The
+first is order `2037493297635328`, 373ms after the snapshot microtimestamp. This is the same warm-up
+phenomenon ADR 0006 Amendment 2 measured at scale: 10 unknown resting-order deletes through line
+5,153 (35.5 seconds after the snapshot) before the later chain break. It is not evidence that the
+current capture blocked websocket reads during the REST request. Waiting for
+`bts:subscription_succeeded` remains an optional experiment, not a demonstrated fix or a
+prerequisite for `validate()`.
+
+**Regardless of exactly how the seed step is wired, `OrderBook` must not silently absorb a
+`modify`/`remove` that references an `OrderId` it has never seen.** Count it — the same instinct as
+Slice 1's `skipped`/`failed` counters. The Python bootstrap oracle now measures five such deletes in
+the short reference segment. It also found two important Bitstamp rules that the C++ book must
+honour: a same-ID `order_changed` may move price, and an `order_deleted` may carry a replacement or
+execution price rather than its stored resting price. Locate deletion by ID and remove the stored
+level/quantity; never subtract the delete payload from the payload's reported price.
+
+### Interface
 
 ```cpp
 class OrderBook {
 public:
-    void apply(const OrderEvent&);          // one entry point; EventKind selects the path
-    Price best_bid() const;
-    Price best_ask() const;
-    Qty   qty_at(Side, Price) const;
-    // invariant: best_bid() < best_ask() at all times outside apply()
+    Result<ApplyOutcome, ApplyError> apply(const OrderEvent&);
+    std::optional<Price> bestBid() const;
+    std::optional<Price> bestAsk() const;
+    Qty   qtyAt(Side, Price) const;
 };
 ```
 
-Note the shape change from the original plan: one `apply` taking one `OrderEvent`, not three
-overloads, because the decoder already normalised the three venue messages into one type.
+ADR 0012 settles the behaviour: one `apply`, because the decoder already normalized Bitstamp's
+three message types into one `OrderEvent`; reasoned errors for duplicate, unknown or contradictory
+events; optional best prices because a side can be empty; zero from `qtyAt` when no level exists.
 
-**ADR 0007 (book level storage) is still `TODO`.** Decide it in this slice, not before:
-flat array indexed by tick offset, hash map, or sorted vector. The array is fastest and is the
-canonical design, but decide *and write down* what happens when the market moves outside the
-preallocated band.
+Deliberately gap-agnostic. `OrderBook` knows nothing about `RecordKind` or capture files — it
+only ever sees `OrderEvent`s, the same as its unit tests will feed it directly. Recognising a
+legacy `RecordKind::gap` or a v3 segment boundary and deciding when to discard and reseed the book
+is the replay/live driver's job. Keeping that logic out of `OrderBook` keeps book correctness
+independent from capture bookkeeping.
 
-Design questions that remain exactly as the original plan stated them:
+### ADR 0007 — price level storage
 
-- How do you find an order to cancel in O(1), and who owns the memory it points at?
-- FIFO within a price level: which end do new orders join, which end do matches consume? Get this
-  wrong and the entire queue model in slice 4 is meaningless.
-- Write the invariant list as a `validate()` compiled into debug builds and called after every
-  `apply`. This one habit will save a week.
-- `order_changed` is not a cancel plus an add. Read the venue docs on whether a size *decrease*
-  loses queue priority — this directly feeds slice 4.
+**Decided.** `std::map<Price, PriceLevel>` per side plus `std::unordered_map<OrderId, OrderLocator>`
+for direct lookup, as the correctness reference — no price band, no custom pool or intrusive list
+yet. See `docs/decisions/0007-book-level-storage.md` for the full decision and consequences. The
+analysis below is kept as the reasoning that led there, not as an open question.
 
-**Verification is harder on Bitstamp than the original plan assumed.** The plan says "assert your
-top five levels match the `level2` channel". Bitstamp's equivalent is its `order_book`/`diff_order_book`
-channel plus the `group=2` REST snapshot. Confirm what independent depth source you actually have
-*before* week 3, because a book builder with no independent check is not verifiable.
+The evidence for it changed over the course of this analysis — an earlier price figure here was
+wrong (computed from a handful of events, not the whole file), and a second, independent data point
+turned up that mattered more than the one it replaced.
+
+**The corrected number.** Scanned across all 1,433 order events in the reference capture, not a
+sample: prices range **$58,356.10 to $66,785.32** — $8,429.22, or 842,922 one-cent ticks, inside
+29 seconds. Some of that is genuinely deep resting orders rather than top-of-book movement, and it
+is *not* the bid-ask spread — the actual top-of-book spread at the snapshot moment (§ above) is one
+cent, `64840.11` / `64840.12`. Conflating "how far apart bid and ask are" with "how wide the prices
+in this capture are" would be a real error; worth being precise about the distinction going forward,
+even in casual description.
+
+**The number that actually settles the "how big a band" question is the snapshot's own extremes,
+not the capture's:** real resting bids down to **$0.01**, real resting asks up to
+**$483,980,000.00**. Any flat array sized to cover the *observed trading range* is still an array
+that cannot represent orders that are, right now, genuinely resting in the book far from the touch.
+Whether that's acceptable depends on what the book promises: if `qtyAt(Side, Price)` is meant to
+answer correctly for every resting order, a bounded array is making a silent promise it cannot keep
+for a real, present part of the book — not a hypothetical edge case, a measured one.
+
+The options, sharper than the three lines currently in the ADR file:
+
+- **Flat array indexed by tick offset from a base price** — the fastest option, and the canonical
+  one: WK Selph's design (your own reading list) is built on it. `index = price.ticks - base.ticks`
+  *is* the lookup, and adjacent levels sit in adjacent memory, so "give me the best 5 levels" is a
+  sequential scan instead of pointer-chasing. Only realistic if the deep-order problem above is
+  either accepted (out-of-band orders are rejected and counted, deliberately not represented) or
+  solved with **rebasing** — reallocate centred on the current price when it nears an edge, migrate
+  existing levels, swap in. Rebasing does not solve the fundamental range problem on its own, since
+  the array still cannot hold a `$0.01` bid and a near-touch level simultaneously at one-cent
+  resolution without an enormous allocation.
+- **Sparse: hash map for price → level, plus a separately maintained sorted index of occupied
+  prices for best-bid/best-ask and top-N.** No range problem at all — a `$0.01` bid and a
+  `$64,840.11` bid coexist trivially, because nothing is preallocated between them. The cost is the
+  cache-miss-per-level issue named below, and now two structures to keep in sync (the map and the
+  sorted index) instead of one.
+- **Sorted vector** — same locality as the array for the top of book, no range problem, but a new
+  price level costs an O(n) shift, and new levels appear most often during volatile stretches.
+- **`std::map` reference implementation (selected)** — O(log n), no range problem and one ordered
+  source of truth. Its per-node allocations and pointer chasing are accepted in the reference book
+  because simple ownership, stable locators and testability are the immediate requirements. Those
+  costs become evidence to measure when an optimized candidate exists.
+
+**Decision consequence.** Reject-and-count on a flat array is unacceptable for the complete
+reference book because it would look healthy while omitting real orders. If a later dense window is
+measured to help, out-of-window orders go to sparse overflow; the window rebases only when best
+prices approach an edge; inability to represent the full state invalidates the book.
+
+### The order-id lookup
+
+Not stated as a type in the original plan, and worth being specific about:
+`std::unordered_map<OrderId, OrderNode*>` is the obvious first reach for "cancel an order in O(1),"
+and it's fine to start there — get the book correct first. But know why a real system usually
+replaces it: `unordered_map`'s buckets are separately heap-allocated nodes, which reintroduces
+exactly the cache-miss problem the array was chosen to avoid for price levels. The industry answer
+is an **open-addressing (flat) hash map** — no per-bucket allocation, the whole table lives in one
+contiguous block. Building one yourself is a legitimate, well-scoped exercise once the book itself
+works; it is not something to block Slice 2 on before there is a book to profile in the first place.
+
+### Sizing `Pool<T>`
+
+The plan's skeleton returns `nullptr` on exhaustion rather than growing — right, and consistent with
+this project's no-exceptions convention. What it doesn't say is how you pick `N`. Don't guess a
+round number: replay your own capture, track the maximum count of simultaneously-resting orders at
+any point, and size the pool to that with real headroom. Write the measured number and the headroom
+you chose into the same commit that sets `N` — "derived from measurement" is a materially stronger
+interview answer than "seemed like enough," and it's the same "use your own captured data" habit
+already in §11's maths track.
+
+### FIFO and queue priority
+
+Still a design question to confirm against Bitstamp's own docs specifically, but here is the exact
+mechanism to check for, not just "read the docs": on most price-time-priority venues, a size
+**decrease** on a modify preserves the order's place in the queue, while a size **increase** is
+treated as newly-arrived quantity and goes to the back — otherwise a trader could jump the queue by
+disguising a fresh order as a "modify" of an old one. Confirm whether Bitstamp's `order_changed`
+draws this same distinction before deciding how `OrderBook::apply` handles it; this is not a detail,
+it is the entire input Slice 4's queue-position model will be built on, and getting it wrong there is
+invisible until the numbers it produces are wrong.
+
+### `validate()`
+
+The plan says to write one; here is a starting invariant list so "the book's invariants" isn't left
+abstract:
+
+- A stable resting-book checkpoint has `bestBid() < bestAsk()` whenever both sides are non-empty.
+  Do not assert this blindly after every raw `live_orders` event: the measured stream exposes a
+  marketable order's create before its matching change/delete, so an intermediate raw lifecycle
+  can cross the displayed book. The decoder/controller must distinguish those transient events
+  before the strategy receives a decision-ready `BookView`.
+- Every price level's cached total quantity equals the sum of its resting orders' quantities —
+  catches the class of bug where a cached aggregate drifts from what it's supposed to summarise.
+- Every order reachable from the id-lookup table is also reachable by walking its price level's
+  list, and vice versa — no orphans in either direction.
+- No `OrderId` is live in the lookup table more than once at a time.
+
+Compiled in debug builds only, called after every `apply`, exactly as the plan says.
+
+### Verification against ground truth
+
+The real industry term for what your golden test does — reconstruct independently, then
+continuously diff against a trusted source before believing your own output — is **shadow testing**
+(sometimes "parallel run"), standard practice anywhere a new system replaces or shadows one already
+trusted. Bitstamp's `order_book`/`diff_order_book` channel plus the `group=2` REST snapshot is your
+trusted side. Confirm you can actually pull one of these *before* week 3 — a book builder with no
+independent check is not verifiable, only plausible.
+
+### Traps
+
+- Heap-allocating a node per event — the thing `Pool<T>` exists to prevent.
+- Treating `order_changed` as a new order with no identity — the same ID can change quantity and,
+  as measured in the hour corpus, price. Moving levels is required for L2 correctness; its FIFO
+  priority consequence remains explicitly unknown until ADR 0008 is resolved.
+- Silently absorbing a `modify`/`remove` on an `OrderId` you've never seen — count it. It's the
+  visible symptom of the bootstrapping problem above, not a case to swallow.
+- Not handling crossed or out-of-order messages — `validate()`'s first invariant exists specifically
+  to catch this rather than let it pass silently.
+- Forgetting that a legacy `RecordKind::gap` or a v3 manifest segment boundary means the old book
+  cannot be trusted until it is reseeded — the driver's responsibility, not `OrderBook`'s.
 
 **learncpp:** 12.7–12.12 (pointers), 15.4 (destructors), 17.9 (pointer arithmetic), 19.1–19.5
 (new/delete, dynamic arrays), 20.2 (stack and heap), 21.2/21.3/21.7 (operator overloading),
@@ -429,10 +622,10 @@ much as having built them.
 
 - *"Why not a double for price?"* — you can answer with a measured example, not a slogan, and you can
   point at the exact commit where the parser rejects excess precision rather than rounding it.
-- *"How do you know your capture is correct?"* — byte-exact round-trip test, file size assertion,
-  static-asserted record size.
-- *"What happens when the format changes?"* — version field, and the explicit fast-path/legacy-path
-  split with `byte_buffer` reserved for the legacy decoder.
+- *"How do you know your capture is correct?"* — raw chain validation and snapshot-backed segments
+  today; durable v3 additionally requires declared sizes, counts and SHA-256 manifest bindings.
+- *"What happens when the format changes?"* — ADR 0011 keeps the host-layout v2 reader as legacy and
+  gives durable v3 explicit little-endian headers/records with separate versioned decoders.
 - *"How did you pick your venue?"* — ADR 0010, including that you probed it in 30 seconds and found
   the documented plan was wrong. Firms care much more about this than about the code.
 - *"What is your simulator's biggest weakness?"* — the queue-position cancel ambiguity, quantified as

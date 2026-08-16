@@ -93,6 +93,7 @@ resumes only after reconnecting and acquiring a fresh snapshot.
 ```
 python scripts/dump_raw_ws_bitstamp.py 3600
 python scripts/validate_capture.py data/raw/bitstamp-btcusd-<UTC timestamp>
+python scripts/audit_book_bootstrap.py data/raw/bitstamp-btcusd-<UTC timestamp>
 ```
 
 The older `data/raw/btcusd-live-orders.jsonl` remains a useful fault corpus: its completed

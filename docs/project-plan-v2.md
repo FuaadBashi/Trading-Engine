@@ -239,6 +239,10 @@ Requirements:
 Write a format specification before a C++ layout. Do not `memcpy(OrderEvent)` to disk. Trivial
 copyability does not fix padding or endianness.
 
+ADR 0011 accepts this requirement and defines the durable v3 little-endian segment/snapshot
+contract. The existing 56-byte host-layout v1/v2 files are legacy fixtures, not the permanent
+corpus format.
+
 The recommended container mirrors raw segmentation:
 
 - a versioned file header per binary segment;
@@ -276,6 +280,10 @@ not part of the normalized event.
 ## 8. Slice 2 - L3 book reconstruction
 
 Build correctness first, then optimize.
+
+ADR 0007 selects `std::map` price levels plus an `std::unordered_map` order-ID locator for the
+reference implementation. ADR 0012 defines optional empty-side best prices and reasoned `apply`
+errors. Optimized storage remains a measured later replacement.
 
 1. Implement a simple ownership-safe reference book.
 2. Define and test add/modify/remove semantics from observed Bitstamp events.

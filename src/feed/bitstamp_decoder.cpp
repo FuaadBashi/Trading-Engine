@@ -28,7 +28,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
     err = doc["event"].get_string().get(event);
     if (err) {
         // no "event" field at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
+        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
     }
 
     if (event == "order_created") {
@@ -52,8 +52,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
         // no "id_str" field at all
         return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
     } else {
-        Result<uint64_t, ParseError> result = parseInteger(id_str);
-        const uint64_t* decoded_id = result.valueIf();
+        const uint64_t* decoded_id = parseInteger(id_str).valueIf();
         if (decoded_id == nullptr){
             return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
         } else {
@@ -136,11 +135,6 @@ err = doc["data"]["amount_str"].get_string().get(str_qty);
 }
 
 
-
-
-}  // namespace te
-
-namespace te {
 
 Result<ChainLink, DecoderError> decodeBitstampChain(std::string_view text) {
     simdjson::ondemand::parser parser;
