@@ -51,6 +51,7 @@ target_sources(te_core PRIVATE
     src/book/order_book.cpp
     src/book/price_level.cpp
     src/feed/bitstamp_snapshot.cpp
+    src/feed/bitstamp_classifier.cpp
     src/util/intrusive_list.cpp
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
     #

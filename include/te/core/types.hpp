@@ -1,7 +1,9 @@
 #pragma once
 
 #include <compare>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <type_traits>
 
 // Slice 1. Price (int64 ticks), Qty, OrderId, Side.
@@ -103,5 +105,26 @@ static_assert(std::is_trivially_copyable_v<OrderId>,
               "OrderId must remain a trivial value type for predictable, allocation-free use "
               "inside normalized events and fixed-capacity queues; this does not define its "
               "binary serialization.");
+
+/**
+ * @brief  Hashes an OrderId, for use as an unordered_map/unordered_set key.
+ *
+ * @note   OrderId has equality but no hash of its own, so a std::unordered_map keyed on it
+ *         will not compile without one. Supplied as a named type rather than a
+ *         std::hash<OrderId> specialisation so that every hashed container states its hashing
+ *         explicitly at the point of use, matching this codebase's preference for supplied
+ *         over inferred (compare InstrumentSpec's scales, which are passed in rather than
+ *         guessed). A std::hash specialisation would also be correct and is the more common
+ *         idiom; it was not chosen only because it hides the decision at the call site.
+ *
+ * @note   Forwards to std::hash<std::uint64_t> rather than inventing a mixing function.
+ *         Venue ids are already well distributed, and a hand-rolled hash here would be
+ *         unverified work on a path that does not need it.
+ */
+struct OrderIdHash {
+    std::size_t operator()(const OrderId& id) const noexcept {
+        return std::hash<std::uint64_t>{}(id.value);
+    }
+};
 
 }  // namespace te

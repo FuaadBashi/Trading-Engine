@@ -1,5 +1,6 @@
 #include <te/feed/bitstamp_snapshot.hpp>
 #include <string_view>
+#include <unordered_set>
 #include "simdjson/padded_string.h"
 #include "simdjson/padded_string-inl.h"
 #include "simdjson/padded_string_view.h"
@@ -37,10 +38,45 @@ namespace te{
         return Result<BookSnapshot, SnapshotError>::success(BookSnapshot{});
     }
 
+    // Parses one [price, quantity, order_id] row into a SnapshotOrder on the given side.
+    //
+    // Every parse result is held in a NAMED local before valueIf() is called on it. Writing
+    // `parseDecimal(...).valueIf()` instead would take the address of a temporary that is
+    // destroyed at that same semicolon, leaving a dangling pointer -- undefined behaviour that
+    // happens to return correct values most of the time, which is exactly what makes it
+    // dangerous. GCC at -O2 flags it; a debug build and a passing end-to-end run do not.
+    static Result<SnapshotOrder, SnapshotError> parseRow(const std::string_view fields[3],
+                                                         InstrumentSpec spec, Side side) {
+        SnapshotOrder order;
+        order.side = side;
+
+        const auto price_result = parseDecimal(fields[0], spec.price_decimals);
+        const std::int64_t* price = price_result.valueIf();
+        if (price == nullptr) {
+            return Result<SnapshotOrder, SnapshotError>::failure(SnapshotError::invalid_price);
+        }
+        order.price = Price{*price};
+
+        const auto qty_result = parseDecimal(fields[1], spec.quantity_decimals);
+        const std::int64_t* qty = qty_result.valueIf();
+        if (qty == nullptr) {
+            return Result<SnapshotOrder, SnapshotError>::failure(SnapshotError::invalid_quantity);
+        }
+        order.quantity = Qty{*qty};
+
+        const auto id_result = parseInteger(fields[2]);
+        const std::uint64_t* id = id_result.valueIf();
+        if (id == nullptr) {
+            return Result<SnapshotOrder, SnapshotError>::failure(SnapshotError::invalid_order_id);
+        }
+        order.order_id = OrderId{*id};
+
+        return Result<SnapshotOrder, SnapshotError>::success(order);
+    }
+
     Result<BookSnapshot, SnapshotError> parseBitstampSnapshot(std::string_view text,
                                                             InstrumentSpec spec)
     {
-        SnapshotOrder snapshotOrder;
         BookSnapshot book;
         simdjson::ondemand::parser parser;
         simdjson::padded_string buffer = simdjson::padded_string(text);
@@ -57,90 +93,57 @@ namespace te{
         if (doc["microtimestamp"].get_string().get(microtimestamp)) {
             return Result<BookSnapshot, SnapshotError>::failure(SnapshotError::missing_microtimestamp);
         }
-        book.microtimestamp = *(parseInteger(microtimestamp).valueIf());
-
-        simdjson::ondemand::array bids;
-        if (doc["bids"].get_array().get(bids)) {
-            return Result<BookSnapshot, SnapshotError>::failure(SnapshotError::missing_bids);
+        // Named local, then a null check: parseInteger can fail, and dereferencing its result
+        // unchecked would read through nullptr on any malformed timestamp.
+        const auto microtimestamp_result = parseInteger(microtimestamp);
+        const std::uint64_t* microtimestamp_value = microtimestamp_result.valueIf();
+        if (microtimestamp_value == nullptr) {
+            return Result<BookSnapshot, SnapshotError>::failure(SnapshotError::missing_microtimestamp);
         }
-        for (auto row_result : bids) {
-            std::string_view fields[3];
-            auto read = readRowFields(row_result.value(), fields);
-            if (!read.hasValue()) {
-                return read;
+        book.microtimestamp = *microtimestamp_value;
+
+        // A duplicate id means the snapshot cannot be trusted as a starting state, and the
+        // parser must not leave the caller to guess which copy is real (see the header).
+        std::unordered_set<OrderId, OrderIdHash> seen_ids;
+
+        struct SideSource {
+            const char* key;
+            Side side;
+            SnapshotError missing_error;
+        };
+        const SideSource sources[2] = {
+            {"bids", Side::buy, SnapshotError::missing_bids},
+            {"asks", Side::sell, SnapshotError::missing_asks},
+        };
+
+        for (const SideSource& source : sources) {
+            simdjson::ondemand::array rows;
+            if (doc[source.key].get_array().get(rows)) {
+                return Result<BookSnapshot, SnapshotError>::failure(source.missing_error);
             }
-
-            //Price
-            const int64_t *snapshot_price = te::parseDecimal(fields[0], spec.price_decimals).valueIf();
-            if (snapshot_price == nullptr){
-                    return Result<BookSnapshot, SnapshotError>::failure(te::SnapshotError::invalid_price);
-                } else {
-                    snapshotOrder.price = Price{*snapshot_price};
+            for (auto row_result : rows) {
+                std::string_view fields[3];
+                const auto read = readRowFields(row_result.value(), fields);
+                if (!read.hasValue()) {
+                    return read;
                 }
 
-            //Qty
-            const int64_t *snapshot_qty = te::parseDecimal(fields[1], spec.quantity_decimals).valueIf();
-            if (snapshot_qty == nullptr){
-                    return Result<BookSnapshot, SnapshotError>::failure(te::SnapshotError::invalid_quantity);
-                } else {
-                    snapshotOrder.quantity = Qty{*snapshot_qty};
+                const auto parsed = parseRow(fields, spec, source.side);
+                if (!parsed.hasValue()) {
+                    return Result<BookSnapshot, SnapshotError>::failure(*parsed.errorIf());
                 }
-            //ID
-            const uint64_t *snapshot_ID = te::parseInteger(fields[2]).valueIf();
-            if (snapshot_ID == nullptr){
-                    return Result<BookSnapshot, SnapshotError>::failure(te::SnapshotError::invalid_order_id);
-                } else {
-                    snapshotOrder.order_id = OrderId{*snapshot_ID};
+                const SnapshotOrder& order = *parsed.valueIf();
+
+                if (!seen_ids.insert(order.order_id).second) {
+                    return Result<BookSnapshot, SnapshotError>::failure(
+                        SnapshotError::duplicate_order_id);
                 }
 
-            //Side
-            snapshotOrder.side = te::Side::buy;
-
-            book.orders.push_back(snapshotOrder);
-
-        }
-
-        simdjson::ondemand::array asks;
-        if (doc["asks"].get_array().get(asks)) {
-            return Result<BookSnapshot, SnapshotError>::failure(SnapshotError::missing_asks);
-        }
-        for (auto row_result : asks) {
-            std::string_view fields[3];
-            auto read = readRowFields(row_result.value(), fields);
-            if (!read.hasValue()) {
-                return read;
+                book.orders.push_back(order);
             }
-
-            //Price
-            const int64_t *snapshot_price = te::parseDecimal(fields[0], spec.price_decimals).valueIf();
-            if (snapshot_price == nullptr){
-                    return Result<BookSnapshot, SnapshotError>::failure(te::SnapshotError::invalid_price);
-                } else {
-                    snapshotOrder.price = Price{*snapshot_price};
-                }
-
-            //Qty
-            const int64_t *snapshot_qty = te::parseDecimal(fields[1], spec.quantity_decimals).valueIf();
-            if (snapshot_qty == nullptr){
-                    return Result<BookSnapshot, SnapshotError>::failure(te::SnapshotError::invalid_quantity);
-                } else {
-                    snapshotOrder.quantity = Qty{*snapshot_qty};
-                }
-            //ID
-            const uint64_t *snapshot_ID = te::parseInteger(fields[2]).valueIf();
-            if (snapshot_ID == nullptr){
-                    return Result<BookSnapshot, SnapshotError>::failure(te::SnapshotError::invalid_order_id);
-                } else {
-                    snapshotOrder.order_id = OrderId{*snapshot_ID};
-                }
-              //Side
-            snapshotOrder.side = te::Side::sell;
-
-            book.orders.push_back(snapshotOrder);
         }
 
         return Result<BookSnapshot, SnapshotError>::success(book);
-
     }
 
 }

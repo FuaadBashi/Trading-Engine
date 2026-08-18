@@ -2,7 +2,7 @@
     "C_Cpp.intelliSenseEngine": "disabled",
     "clangd.path": "/opt/homebrew/opt/llvm/bin/clangd",
     "clangd.arguments": [
-        "--compile-commands-dir=${workspaceFolder}",
+        "--compile-commands-dir=${workspaceFolder}/build",
         "--background-index",
         "--header-insertion=never"
     ],

@@ -22,22 +22,20 @@ enum class ApplyError {
     invalid_price,
     invalid_quantity,
     side_mismatch,
-    price_mismatch,
     level_quantity_overflow,
 };
 
 class OrderBook {
 public:
-    // Never silently ignores an event; see ADR 0012 for add/modify/remove rules, including that
-    // remove locates and erases the order's *stored* price/quantity, not the message's own.
-    Result<ApplyOutcome, ApplyError> apply(const OrderEvent&);
+    // Never silently ignores an event; see ADR 0012 for the add/modify/remove rules.
+    Result<ApplyOutcome, ApplyError> apply(const OrderEvent& orderEvent);
 
-    // Empty side is absence, not a sentinel price -- see ADR 0012.
+    // Empty side is absence, not a sentinel price 
     std::optional<Price> bestBid() const;
     std::optional<Price> bestAsk() const;
 
     // "No level" and "zero resting quantity" share the same meaning for this aggregate query.
-    Qty qtyAt(Side, Price) const;
+    Qty qtyAt(Side side, Price price) const;
 
     // invariant: !bestBid() || !bestAsk() || *bestBid() < *bestAsk()
 };

@@ -108,6 +108,33 @@ closed.
 No v3 file may be labelled complete unless its byte size matches its declared record count and all
 record/header/hash checks pass.
 
+### Open: whether v3 records carry `order_subtype`
+
+Deferred deliberately, not overlooked. Bitstamp sends an `order_subtype` on every order message
+that the decoder currently discards, so it reaches neither `OrderEvent` nor any record. Measured
+across the available corpora:
+
+| Corpus | order events | `order_subtype` values observed |
+|---|---:|---|
+| 29s reference segment | 1,433 | `5` (1,231), `4` (178), `0` (24) |
+| hour capture | 252,374 | `5` (225,830), `4` (22,075), `0` (4,288), `6` (177), `2` (4) |
+
+Five distinct values, two of them rare enough (`6` at 0.07%, `2` at 0.002%) that their meaning
+cannot be inferred from frequency alone. Nothing in the public Bitstamp documentation defines
+them, so assigning them meaning now would be guessing.
+
+The decision on whether v3 stores subtype is therefore blocked on evidence, specifically on
+joining `live_orders` against `live_trades` so that each subtype can be checked against whether
+its orders actually traded. Until then:
+
+- `OrderEvent` stays unchanged, so the legacy 56-byte `Record` does not get to dictate the
+  permanent domain model by accident, and no format bump is spent on an unvalidated field.
+- Venue-specific classification that *can* be justified from the data today lives in
+  `BitstampEventClassifier` (see `feed/bitstamp_classifier.hpp`), between the decoder and the
+  book, rather than being pushed into `OrderEvent` or `OrderBook`.
+- When the joined-data investigation resolves what subtype means, adding it is a v3 schema
+  decision recorded here, not a silent widening of the in-memory event.
+
 ## Consequences
 
 - Files are portable across compilers and little-/big-endian hosts when decoded according to the

@@ -52,7 +52,11 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
         // no "id_str" field at all
         return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
     } else {
-        const uint64_t* decoded_id = parseInteger(id_str).valueIf();
+        // Named local, not parseInteger(...).valueIf() directly: the latter takes the address
+        // of a temporary Result destroyed at that semicolon, leaving decoded_id dangling. The
+        // three parses below already do this correctly; this one did not.
+        const Result<uint64_t, ParseError> id_result = parseInteger(id_str);
+        const uint64_t* decoded_id = id_result.valueIf();
         if (decoded_id == nullptr){
             return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
         } else {

@@ -40,6 +40,15 @@ struct BookSnapshot {
  * @brief  Reason a snapshot document could not be parsed into a BookSnapshot.
  */
 enum class SnapshotError {
+    /**
+     * @brief  The document could not be opened as JSON at all.
+     *
+     * @note   Narrower than it sounds. simdjson On Demand does not validate a whole document up
+     *         front, so in practice only empty input fails this early; other malformed text is
+     *         rejected later, at the first field it cannot supply (usually
+     *         missing_microtimestamp). Every malformed input is still rejected -- only the
+     *         reported reason is less specific than the name suggests.
+     */
     malformed_json,
     missing_microtimestamp,
     missing_bids,

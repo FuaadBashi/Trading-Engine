@@ -39,11 +39,26 @@ te::Result<std::int64_t, te::ParseError> parseDecimal(std::string_view text, std
                 continue;
             }
             int x = static_cast<int>(text[i] - '0');
+            // Check before operating, never after: a wrapped int64 can land back under any
+            // later range check, so a post-hoc test passes on already-corrupt data. Signed
+            // overflow is also UB in its own right, so the multiply must not happen at all.
+            if (parsed_text_before_decimal > INT64_MAX / 10) {
+                return te::Result<std::int64_t, te::ParseError>::failure(te::ParseError::overflow);
+            }
             parsed_text_before_decimal *= (10);
+            if (parsed_text_before_decimal > INT64_MAX - x) {
+                return te::Result<std::int64_t, te::ParseError>::failure(te::ParseError::overflow);
+            }
             parsed_text_before_decimal += x;
         } else {
             int x = static_cast<int>(text[i] - '0');
+            if (parsed_text_after_decimal > INT64_MAX / 10) {
+                return te::Result<std::int64_t, te::ParseError>::failure(te::ParseError::overflow);
+            }
             parsed_text_after_decimal *= (10);
+            if (parsed_text_after_decimal > INT64_MAX - x) {
+                return te::Result<std::int64_t, te::ParseError>::failure(te::ParseError::overflow);
+            }
             parsed_text_after_decimal += x;
             ++fractionalDigitCount;
         }
@@ -54,6 +69,10 @@ te::Result<std::int64_t, te::ParseError> parseDecimal(std::string_view text, std
     if (fractionalDigitCount < scale) {
         int number_of_zeros = scale - fractionalDigitCount;
         for (int j = 0; j < number_of_zeros; ++j) {
+            // Same reasoning as the digit loop: guard the multiply, do not detect afterwards.
+            if (parsed_text_after_decimal > INT64_MAX / 10) {
+                return te::Result<std::int64_t, te::ParseError>::failure(te::ParseError::overflow);
+            }
             parsed_text_after_decimal *= 10;
         }
     }
