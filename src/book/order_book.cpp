@@ -1,5 +1,4 @@
 #include <cassert>
-#include <numeric>
 #include <te/book/order_book.hpp>
 
 namespace te {
