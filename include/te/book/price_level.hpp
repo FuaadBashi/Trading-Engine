@@ -22,9 +22,11 @@ public:
 
     Qty totalQuantity() const { return total_quantity_; }
     bool isEmpty() const;
+    auto begin() const { return restingOrders_.begin(); }
+    auto end()   const { return restingOrders_.end(); }
 
 private:
-    std::list<RestingOrder> restingOrders_;
+    std::list<RestingOrder> restingOrders_{};
     Qty total_quantity_{};
 };
 

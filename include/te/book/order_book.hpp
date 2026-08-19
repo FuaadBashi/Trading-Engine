@@ -1,9 +1,12 @@
 #pragma once
 
 #include <optional>
-
+#include <type_traits>
 #include <te/core/result.hpp>
 #include <te/feed/events.hpp>
+#include <map>
+#include <te/book/price_level.hpp>
+#include <unordered_map>
 
 // Slice 2. Reference book. Interface and failure contract per ADR 0012.
 
@@ -25,10 +28,28 @@ enum class ApplyError {
     level_quantity_overflow,
 };
 
+struct OrderLocator{
+    Side side;
+    Price price;
+    OrderHandle order_pos;
+};
+
+
 class OrderBook {
 public:
+    OrderBook() = default;
+
+    // OrderLocator stores iterators into this book's PriceLevel lists. A normal copy would copy
+    // those iterators while copying the lists into different nodes, leaving the copied locators
+    // referring to the original book. Moving transfers ownership of the existing nodes instead.
+    OrderBook(const OrderBook&) = delete;
+    OrderBook& operator=(const OrderBook&) = delete;
+    OrderBook(OrderBook&&) = default;
+    OrderBook& operator=(OrderBook&&) = default;
+
     // Never silently ignores an event; see ADR 0012 for the add/modify/remove rules.
     Result<ApplyOutcome, ApplyError> apply(const OrderEvent& orderEvent);
+    void validate() const;
 
     // Empty side is absence, not a sentinel price 
     std::optional<Price> bestBid() const;
@@ -38,6 +59,24 @@ public:
     Qty qtyAt(Side side, Price price) const;
 
     // invariant: !bestBid() || !bestAsk() || *bestBid() < *bestAsk()
+
+    private:
+    std::map<Price, PriceLevel> bids_{};
+    std::map<Price, PriceLevel> asks_{};
+    std::unordered_map<OrderId, OrderLocator, OrderIdHash> orderIndex_{};
 };
+
+static_assert(!std::is_copy_constructible_v<OrderBook>,
+              "OrderBook must not be copied because its OrderLocators contain iterators into its "
+              "own PriceLevel lists.");
+static_assert(!std::is_copy_assignable_v<OrderBook>,
+              "OrderBook must not be copy-assigned because its OrderLocators contain iterators "
+              "into its own PriceLevel lists.");
+static_assert(std::is_move_constructible_v<OrderBook>,
+              "OrderBook must remain movable so ownership can be transferred without copying "
+              "iterator-bearing state.");
+static_assert(std::is_move_assignable_v<OrderBook>,
+              "OrderBook must remain move-assignable so ownership can be transferred without "
+              "copying iterator-bearing state.");
 
 }  // namespace te

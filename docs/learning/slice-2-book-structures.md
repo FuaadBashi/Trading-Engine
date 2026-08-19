@@ -1,9 +1,10 @@
 # Slice 2 book structures: revision notes
 
-**Snapshot:** 2026-08-17
-**Purpose:** Same spirit as `slice-1-foundations-notes.md`, one slice early: how `OrderBook`'s
-storage is shaped and why, written down before any of it is implemented. Read it beside ADR 0007
-and ADR 0012, which it summarises and cross-references rather than replaces.
+**Snapshot:** 2026-08-19
+**Purpose:** Same spirit as `slice-1-foundations-notes.md`: how `OrderBook`'s storage is shaped
+and why. §1-8 were written before any of it was implemented; §9 was added once `apply()` and its
+ownership semantics existed to describe. Read it beside ADR 0007 and ADR 0012, which it
+summarises and cross-references rather than replaces.
 
 ## 1. The three containers, and how they relate
 
@@ -180,3 +181,128 @@ names, types beyond what §3 already names, or `apply()`'s actual body -- that i
 per this project's own rule that bodies are the project. What this file is for: so the shape of
 the two containers, why a running total exists, and why a price-changing modify is not an error,
 do not have to be re-derived while also writing the first working line of `PriceLevel`.
+
+*(§9 picks up from here: by the time it was written, that work was done.)*
+
+## 9. Copy and move: why `OrderBook` is move-only
+
+`OrderLocator` (§3) turned out to hold an iterator, not a copy of anything -- `order_pos` is a
+`std::list<RestingOrder>::iterator` sitting inside the exact same list a `PriceLevel` already
+owns. That single fact is the whole reason `OrderBook` cannot use the copy constructor and
+copy-assignment operator the compiler would otherwise generate for free.
+
+**What a default copy would do.** Copying `bids_`/`asks_`/`orderIndex_` member-by-member copies
+the maps and lists honestly -- new nodes, equal values. But copying an iterator only copies
+*where it points*; it has no way to retarget itself at the new list. The result:
+
+```text
+original.orderIndex_[42].order_pos  ->  original's RestingOrder node
+
+copy{original} constructed:
+  copy.bids_[100]                 ->  a new PriceLevel, a new list, a new RestingOrder node
+  copy.orderIndex_[42].order_pos  ->  still the same iterator value -- original's node, not copy's
+```
+
+`copy.qtyAt(...)` would look correct, because it only reads `copy.bids_`. But Modify or Remove on
+order 42 goes through `copy.orderIndex_`, follows `order_pos`, and touches `original`'s order
+instead -- and if `original` has since been destroyed, that iterator is dangling. Dereferencing it
+is undefined behaviour: it may crash, corrupt memory, silently edit the wrong book, or simply
+appear to work during testing and fail later. Same bug class as the dangling `Result::valueIf()`
+sites found earlier this slice (`bitstamp_snapshot.cpp`) -- a reference that outlives what it
+refers to, invisible until something actually exercises the stale copy.
+
+**The fix, in `order_book.hpp`:**
+
+```cpp
+OrderBook() = default;
+
+OrderBook(const OrderBook&)            = delete;
+OrderBook& operator=(const OrderBook&) = delete;
+OrderBook(OrderBook&&)                 = default;
+OrderBook& operator=(OrderBook&&)      = default;
+```
+
+`= delete` turns the runtime bug above into a compile error instead: `OrderBook second{first};`
+and `second = first;` both fail to build, for every caller, before the program ever runs. That is
+not "safer" than the runtime failure it replaces -- it is a different category of failure, caught
+at build time instead of possibly not at all.
+
+**Why moving is still allowed.** Moving asks a different question than copying: not "build an
+equivalent independent object," but "transfer ownership of the object that already exists." With
+the standard allocators used here, moving a `std::map`, `std::list`, or `std::unordered_map`
+transfers their existing nodes rather than duplicating them -- no node changes address, so every
+`order_pos` iterator is still correct after the move:
+
+```text
+te::OrderBook destination{std::move(original)};
+
+before:  original owns the nodes; every order_pos resolves inside original
+after:   destination owns the identical nodes (not copies); every order_pos still resolves
+         correctly, because the node itself never moved in memory -- only which OrderBook
+         object owns it changed
+```
+
+`std::move` does not itself move anything -- it is a cast that makes the move constructor
+eligible for overload resolution. The actual node transfer happens inside `std::map`'s and
+`std::list`'s own move constructors, which `OrderBook`'s `= default` simply delegates to, member
+by member. `original` remains destructible and assignable afterward, but nothing should be
+assumed about what, if anything, still resolves inside it. This will matter directly for snapshot
+seeding (task #14): the natural way to hand a freshly-built book to a replay controller is a
+move, not a copy.
+
+**The gotcha that makes the explicit list necessary.** Declaring a copy constructor -- even a
+deleted one -- stops the compiler from implicitly generating the move constructor and
+move-assignment operator. Writing only `OrderBook(const OrderBook&) = delete;` and stopping there
+would have left `OrderBook` neither copyable nor movable, silently, with no obvious reason why
+snapshot seeding's eventual move would refuse to compile. This is the classic **Rule of Five**:
+once any one of the five special member functions is declared, state intent for all five, not
+just the one that motivated the change.
+
+| Operation | Declared as | Why |
+| --- | --- | --- |
+| `~OrderBook()` | not declared | standard containers clean up their own nodes; nothing custom to release |
+| `OrderBook(const OrderBook&)` | `= delete` | a default copy would leave `order_pos` pointing into the wrong book |
+| `operator=(const OrderBook&)` | `= delete` | same hazard, on assignment into an already-live book |
+| `OrderBook(OrderBook&&)` | `= default` | standard containers transfer nodes on move; every locator stays correct |
+| `operator=(OrderBook&&)` | `= default` | same guarantee, on assignment |
+
+Also explicit for the same reason: `OrderBook() = default;`. It changes nothing by itself -- an
+empty book from value-initialised maps is what would happen anyway -- but once any special member
+is declared, a reader can no longer assume the rest are the ordinary compiler-generated ones, so
+this states the full policy in one place rather than leaving part of it implicit.
+
+**Compile-time proof, not just prose:**
+
+```cpp
+static_assert(!std::is_copy_constructible_v<OrderBook>, "...");
+static_assert(!std::is_copy_assignable_v<OrderBook>,    "...");
+static_assert( std::is_move_constructible_v<OrderBook>, "...");
+static_assert( std::is_move_assignable_v<OrderBook>,    "...");
+```
+
+These belong beside the class because they are a permanent property of the *type*, not a fact
+about any particular call site. If a future edit deletes the deleted-copy lines thinking them dead
+code, the assertion fails at the point of the mistake, with a message that explains why -- rather
+than as a dangling-iterator bug reported from wherever Modify or Remove eventually happened to
+run. Verified against the header as it currently stands (`order_book.hpp:40-79`):
+`clang++ -std=c++20 -Wall -Wextra -fsyntax-only` compiles clean, so all four assertions hold now,
+not just in intent.
+
+**The same pattern, twice already, elsewhere in this codebase:**
+
+| Type | Owns | Copy | Move | Why |
+| --- | --- | --- | --- | --- |
+| `OrderBook` | interconnected containers -- locators hold iterators into its own lists | deleted | defaulted | a copy's iterators would still resolve into the original book |
+| `Sink` (`telemetry/sink.hpp:115`) | an open output file stream | deleted | defaulted | two `Sink`s must not both believe they own the same stream |
+| `TempFile` (`tests/unit/test_recorder.cpp:24`) | a path on disk, removed by its own destructor | deleted | not declared | two copies would each try to delete the same file; the second delete is a bug waiting to happen |
+
+`TempFile` stops one step short of the other two only because nothing in its current use ever
+needs to hand ownership onward -- there was no move to write, not a reason it couldn't have one.
+
+The general question behind all three: *if every member were duplicated, would the new object be
+completely independent and internally correct?* For plain values (`Price`, `Qty`, `OrderId`,
+`OrderEvent`) the answer is trivially yes -- duplicate every field and the two objects owe each
+other nothing. For anything that owns a resource or encodes a relationship between its own
+members, the answer is usually no, and copying should be forbidden until something deliberately
+writes a real deep copy -- for `OrderBook`, one that rebuilds every locator against the freshly
+copied lists from scratch, which does not exist today.
