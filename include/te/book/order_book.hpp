@@ -58,7 +58,9 @@ public:
     // "No level" and "zero resting quantity" share the same meaning for this aggregate query.
     Qty qtyAt(Side side, Price price) const;
 
-    // invariant: !bestBid() || !bestAsk() || *bestBid() < *bestAsk()
+    // Derived fresh from bids_/asks_ every call, never cached -- there's no expensive walk to
+    // avoid here (std::map::size() is already O(1)), so there's nothing worth caching.
+    std::size_t levelCount() const { return bids_.size() + asks_.size(); }
 
     private:
     std::map<Price, PriceLevel> bids_{};
