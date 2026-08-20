@@ -53,6 +53,8 @@ target_sources(te_core PRIVATE
     src/feed/bitstamp_snapshot.cpp
     src/feed/bitstamp_classifier.cpp
     src/feed/bitstamp_bootstrap.cpp
+    src/feed/bitstamp_trade_decoder.cpp
+    src/feed/trade_reconciler.cpp
     src/util/intrusive_list.cpp
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
     #

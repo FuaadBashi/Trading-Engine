@@ -1,9 +1,9 @@
 # Slice 2 book structures: revision notes
 
-**Snapshot:** 2026-08-19
+**Snapshot:** 2026-08-20
 **Purpose:** Same spirit as `slice-1-foundations-notes.md`: how `OrderBook`'s storage is shaped
-and why. §1-8 were written before any of it was implemented; §9 was added once `apply()` and its
-ownership semantics existed to describe. Read it beside ADR 0007 and ADR 0012, which it
+and why. §1-8 were written before any of it was implemented; §9-10 were added once `apply()` and
+the golden replay test existed to describe. Read it beside ADR 0007 and ADR 0012, which it
 summarises and cross-references rather than replaces.
 
 ## 1. The three containers, and how they relate
@@ -306,3 +306,35 @@ other nothing. For anything that owns a resource or encodes a relationship betwe
 members, the answer is usually no, and copying should be forbidden until something deliberately
 writes a real deep copy -- for `OrderBook`, one that rebuilds every locator against the freshly
 copied lists from scratch, which does not exist today.
+
+## 10. `TradeReconciler`: what `live_orders` alone doesn't tell you
+
+The golden replay test (`tests/unit/test_golden_replay.cpp`) found a real gap against Bitstamp's
+own snapshot: 3 of 8,320 replayed orders were still resting in the book with no matching order in
+the venue's later snapshot. All three sat in the starting snapshot, untouched by any event across
+the entire capture -- no `order_deleted`, ever. A second, joined order+trade capture confirmed the
+same pattern from a different angle: 8 of 468 trades referenced order ids that never appeared on
+`live_orders` at all, only as a party to a trade.
+
+Root cause: `live_orders` reliably announces cancels, but not every removal is a cancel. An order
+fully consumed by a trade can leave the book with no `order_deleted`, and a marketable order that
+crosses and fills instantly may never rest long enough to be announced at all. Neither is a code
+bug -- `apply()` was told everything `live_orders` sent, correctly. The information gap is in the
+venue feed, not the processing.
+
+**The fix:** `TradeReconciler` (`feed/trade_reconciler.hpp`), fed by a new `live_trades` decoder
+(`decodeBitstampTrade`, `feed/bitstamp_trade_decoder.hpp`). It keeps a minimal shadow of resting
+orders (side, price, quantity, by id), built from the same events `apply()` sees. When a trade
+references an id it still believes is resting, it emits a `modify` (partial fill) or `remove`
+(full fill) `OrderEvent`, fed through the same `apply()` as everything else -- `OrderBook` never
+needs to know trades exist. A correction that turns out redundant (`live_orders` reports the same
+removal moments later) fails `apply()`'s existing `unknown_order_id` check harmlessly; nothing
+new was needed there.
+
+Verified against the real joined capture: 438 corrections emitted, 22 confirmed redundant by
+actually failing that way, `validate()` clean throughout. Not yet wired into a live/replay driver
+-- this is the reconciler itself, proven correct in isolation. See task "Investigate order_subtype
+with joined order/trade data" for the open thread this closes the first real evidence for.
+
+All five lifecycles (both feeds sufficient, both feeds required, and the case where nothing was
+ever wrong), diagrammed: `output/pdf/Trading_Engine_TradeReconciler_Lifecycles.pdf`.
