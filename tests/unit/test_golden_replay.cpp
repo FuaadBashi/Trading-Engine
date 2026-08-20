@@ -14,10 +14,10 @@
 #include <string>
 
 #include <te/book/order_book.hpp>
-#include <te/feed/bitstamp_bootstrap.hpp>
-#include <te/feed/bitstamp_classifier.hpp>
-#include <te/feed/bitstamp_decoder.hpp>
-#include <te/feed/bitstamp_snapshot.hpp>
+#include <te/feed/bitstamp/bootstrap.hpp>
+#include <te/feed/bitstamp/classifier.hpp>
+#include <te/feed/bitstamp/decoder.hpp>
+#include <te/feed/bitstamp/snapshot.hpp>
 
 namespace {
 
@@ -40,17 +40,17 @@ std::string readWholeFile(const std::string& path) {
 // The capture's own event stream only covers what changed after the capture connected --
 // orders resting since before that moment never appear as order_created and would otherwise
 // be invisible to a replay starting from an empty book. Seeding from the snapshot taken at
-// capture start (via bootstrapBitstampEvent) supplies that missing pre-capture history; the
+// capture start (via te::bitstamp::bootstrap) supplies that missing pre-capture history; the
 // event stream then carries the book forward from there, same decode -> classify -> apply
 // pipeline the rest of this project runs, stopping once an event's own venue timestamp passes
 // the cutoff. The stream is timestamp-ordered, so once one event is past the cutoff, everything
 // after it is too -- nothing here belongs before the instant the target snapshot represents.
-te::OrderBook replayFromSeedTo(const te::BookSnapshot& seed, const std::string& jsonl,
+te::OrderBook replayFromSeedTo(const te::bitstamp::BookSnapshot& seed, const std::string& jsonl,
                                std::uint64_t cutoffMicros, te::InstrumentSpec spec) {
-    auto seeded = te::bootstrapBitstampEvent(seed);
+    auto seeded = te::bitstamp::bootstrap(seed);
     EXPECT_TRUE(seeded.hasValue()) << "seed snapshot failed to bootstrap";
     te::OrderBook book = std::move(*seeded.valueIf());
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     std::istringstream lines(jsonl);
     std::string line;
@@ -59,7 +59,7 @@ te::OrderBook replayFromSeedTo(const te::BookSnapshot& seed, const std::string& 
             continue;
         }
 
-        const auto decoded = te::decodeBitstampEvent(line, spec);
+        const auto decoded = te::bitstamp::decodeEvent(line, spec);
         if (!decoded.hasValue()) {
             continue;  // not_order_event (e.g. bts:subscription_succeeded), or malformed
         }
@@ -67,7 +67,7 @@ te::OrderBook replayFromSeedTo(const te::BookSnapshot& seed, const std::string& 
         if (event.venue_timestamp_us > cutoffMicros) {
             break;
         }
-        if (classifier.classify(event) != te::EventDisposition::apply_to_book) {
+        if (classifier.classify(event) != te::bitstamp::EventDisposition::apply_to_book) {
             continue;  // zero_price_lifecycle
         }
         book.apply(event);
@@ -89,13 +89,13 @@ TEST(GoldenReplay, ReplayedBookMatchesIndependentVenueSnapshot) {
         GTEST_SKIP() << "live capture not present: " << capture;
     }
 
-    const auto seedResult = te::parseBitstampSnapshot(readWholeFile(seedPath), btcUsd());
+    const auto seedResult = te::bitstamp::parseSnapshot(readWholeFile(seedPath), btcUsd());
     ASSERT_TRUE(seedResult.hasValue());
-    const te::BookSnapshot& seed = *seedResult.valueIf();
+    const te::bitstamp::BookSnapshot& seed = *seedResult.valueIf();
 
-    const auto targetResult = te::parseBitstampSnapshot(readWholeFile(targetPath), btcUsd());
+    const auto targetResult = te::bitstamp::parseSnapshot(readWholeFile(targetPath), btcUsd());
     ASSERT_TRUE(targetResult.hasValue());
-    const te::BookSnapshot& snapshot = *targetResult.valueIf();
+    const te::bitstamp::BookSnapshot& snapshot = *targetResult.valueIf();
 
     const te::OrderBook book =
         replayFromSeedTo(seed, readWholeFile(jsonlPath), snapshot.microtimestamp, btcUsd());

@@ -1,4 +1,4 @@
-#include <te/feed/bitstamp_decoder.hpp>
+#include <te/feed/bitstamp/decoder.hpp>
 
 #include <algorithm>
 
@@ -9,9 +9,9 @@
 #include "simdjson/padded_string_view-inl.h"
 #include "simdjson/ondemand.h"
 
-namespace te {
+namespace te::bitstamp {
 
-te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,InstrumentSpec spec) {
+Result<OrderEvent, DecoderError> decodeEvent(std::string_view text, InstrumentSpec spec) {
 
     OrderEvent orderEvent; 
     simdjson::ondemand::parser parser;
@@ -21,14 +21,14 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
     simdjson::error_code err = parser.iterate(buffer).get(doc);
     if (err) {
         // couldn't even parse this as JSON at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::malformed_json);;
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::malformed_json);;
     }
 // EVENT
     std::string_view event;
     err = doc["event"].get_string().get(event);
     if (err) {
         // no "event" field at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
     }
 
     if (event == "order_created") {
@@ -42,7 +42,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
     
     } else {
         // valid JSON, just not the kind of message we care about
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::not_order_event);
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::not_order_event);
     }
 
 // ID
@@ -50,7 +50,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
     err = doc["data"]["id_str"].get_string().get(id_str);
     if (err) {
         // no "id_str" field at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
     } else {
         // Named local, not parseInteger(...).valueIf() directly: the latter takes the address
         // of a temporary Result destroyed at that semicolon, leaving decoded_id dangling. The
@@ -58,7 +58,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
         const Result<uint64_t, ParseError> id_result = parseInteger(id_str);
         const uint64_t* decoded_id = id_result.valueIf();
         if (decoded_id == nullptr){
-            return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
+            return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         } else {
             orderEvent.order_id = OrderId{*decoded_id};
         }
@@ -68,12 +68,12 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
     err = doc["data"]["microtimestamp"].get_string().get(str_time);
     if (err) {
         // no "time" field at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
     } else { 
         Result<uint64_t, ParseError> result = parseInteger(str_time);
         const uint64_t* decoded_time = result.valueIf();
         if (decoded_time == nullptr){
-            return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
+            return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         } else {
             orderEvent.venue_timestamp_us = *decoded_time;
         } 
@@ -84,7 +84,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
     err = doc["data"]["order_type"].get_uint64().get(side_code);
     if (err) {
         // no side field at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
     } else { 
         if (side_code == 0) {
             orderEvent.side = Side::buy;
@@ -93,7 +93,7 @@ te::Result<OrderEvent, DecoderError> decodeBitstampEvent(std::string_view text,I
             orderEvent.side = Side::sell;
         } else {
             // valid JSON, just not the kind of message we care about
-            return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
+            return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         }
     }
 
@@ -103,7 +103,7 @@ std::string_view str_price;
 err = doc["data"]["price_str"].get_string().get(str_price);
   if (err) {
         // no price field at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
     } else { 
 
         Result<int64_t, ParseError> result = parseDecimal(str_price, spec.price_decimals);
@@ -112,7 +112,7 @@ err = doc["data"]["price_str"].get_string().get(str_price);
         if(decoded_price != nullptr){
             orderEvent.price = Price{*decoded_price};
         } else {
-            return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
+            return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         }
     }
 
@@ -122,7 +122,7 @@ std::string_view str_qty;
 err = doc["data"]["amount_str"].get_string().get(str_qty);
   if (err) {
         // no price field at all
-        return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::missing_field);
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
     } else { 
 
         Result<int64_t, ParseError> result = parseDecimal(str_qty, spec.quantity_decimals);
@@ -130,17 +130,17 @@ err = doc["data"]["amount_str"].get_string().get(str_qty);
         if(decoded_qty != nullptr){
             orderEvent.quantity = Qty{*decoded_qty};
         } else {
-            return te::Result<OrderEvent, DecoderError>::failure(te::DecoderError::invalid_field);
+            return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         }
     }
 
-    return te::Result<OrderEvent, DecoderError>::success(orderEvent);
+    return Result<OrderEvent, DecoderError>::success(orderEvent);
 
 }
 
 
 
-Result<ChainLink, DecoderError> decodeBitstampChain(std::string_view text) {
+Result<ChainLink, DecoderError> decodeChain(std::string_view text) {
     simdjson::ondemand::parser parser;
     simdjson::padded_string buffer = simdjson::padded_string(text);
 
@@ -172,4 +172,4 @@ Result<ChainLink, DecoderError> decodeBitstampChain(std::string_view text) {
     return Result<ChainLink, DecoderError>::success(link);
 }
 
-}  // namespace te
+}  // namespace te::bitstamp

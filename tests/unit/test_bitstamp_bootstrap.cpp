@@ -3,15 +3,15 @@
 #include <cstdint>
 #include <vector>
 
-#include <te/feed/bitstamp_bootstrap.hpp>
+#include <te/feed/bitstamp/bootstrap.hpp>
 
 namespace {
 
-te::SnapshotOrder makeOrder(std::uint64_t id,
-                            std::int64_t price,
-                            std::int64_t quantity,
-                            te::Side side) {
-    return te::SnapshotOrder{
+te::bitstamp::SnapshotOrder makeOrder(std::uint64_t id,
+                                       std::int64_t price,
+                                       std::int64_t quantity,
+                                       te::Side side) {
+    return te::bitstamp::SnapshotOrder{
         .order_id = te::OrderId{id},
         .price = te::Price{price},
         .quantity = te::Qty{quantity},
@@ -19,8 +19,8 @@ te::SnapshotOrder makeOrder(std::uint64_t id,
     };
 }
 
-te::BookSnapshot makeSnapshot(std::vector<te::SnapshotOrder> orders) {
-    return te::BookSnapshot{
+te::bitstamp::BookSnapshot makeSnapshot(std::vector<te::bitstamp::SnapshotOrder> orders) {
+    return te::bitstamp::BookSnapshot{
         .microtimestamp = 1'000'000,
         .orders = std::move(orders),
     };
@@ -29,7 +29,7 @@ te::BookSnapshot makeSnapshot(std::vector<te::SnapshotOrder> orders) {
 }  // namespace
 
 TEST(BitstampBootstrap, EmptySnapshotProducesEmptyBook) {
-    const auto result = te::bootstrapBitstampEvent(makeSnapshot({}));
+    const auto result = te::bitstamp::bootstrap(makeSnapshot({}));
 
     ASSERT_TRUE(result.hasValue());
     const te::OrderBook& book = *result.valueIf();
@@ -41,7 +41,7 @@ TEST(BitstampBootstrap, EmptySnapshotProducesEmptyBook) {
 TEST(BitstampBootstrap, SingleBidSeedsBookCorrectly) {
     auto snapshot = makeSnapshot({ makeOrder(1, 100, 5, te::Side::buy) });
 
-    const auto result = te::bootstrapBitstampEvent(std::move(snapshot));
+    const auto result = te::bitstamp::bootstrap(std::move(snapshot));
 
     ASSERT_TRUE(result.hasValue());
     const te::OrderBook& book = *result.valueIf();
@@ -57,7 +57,7 @@ TEST(BitstampBootstrap, OrdersOnBothSidesProduceCorrectBestPrices) {
         makeOrder(2, 105, 3, te::Side::sell),
     });
 
-    const auto result = te::bootstrapBitstampEvent(std::move(snapshot));
+    const auto result = te::bitstamp::bootstrap(std::move(snapshot));
 
     ASSERT_TRUE(result.hasValue());
     const te::OrderBook& book = *result.valueIf();
@@ -74,7 +74,7 @@ TEST(BitstampBootstrap, MultipleOrdersAtSamePriceAggregateIntoOneLevel) {
         makeOrder(2, 100, 7, te::Side::buy),
     });
 
-    const auto result = te::bootstrapBitstampEvent(std::move(snapshot));
+    const auto result = te::bitstamp::bootstrap(std::move(snapshot));
 
     ASSERT_TRUE(result.hasValue());
     const te::OrderBook& book = *result.valueIf();
@@ -88,7 +88,7 @@ TEST(BitstampBootstrap, DuplicateOrderIdInSnapshotFailsWithoutCrashing) {
         makeOrder(1, 101, 3, te::Side::buy),
     });
 
-    const auto result = te::bootstrapBitstampEvent(std::move(snapshot));
+    const auto result = te::bitstamp::bootstrap(std::move(snapshot));
 
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
@@ -98,7 +98,7 @@ TEST(BitstampBootstrap, DuplicateOrderIdInSnapshotFailsWithoutCrashing) {
 TEST(BitstampBootstrap, InvalidPriceInSnapshotFailsBootstrap) {
     auto snapshot = makeSnapshot({ makeOrder(1, 0, 5, te::Side::buy) });
 
-    const auto result = te::bootstrapBitstampEvent(std::move(snapshot));
+    const auto result = te::bitstamp::bootstrap(std::move(snapshot));
 
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);

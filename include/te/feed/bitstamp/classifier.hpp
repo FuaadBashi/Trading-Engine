@@ -8,7 +8,7 @@
 
 // Slice 2. The venue-aware boundary between Bitstamp decoding and the venue-neutral OrderBook.
 
-namespace te {
+namespace te::bitstamp {
 
 /**
  * @brief  What a driver should do with one decoded event.
@@ -74,7 +74,7 @@ struct ClassifierStats {
  *         about subtype is an open question to settle from joined order/trade data (ADR 0011),
  *         not one to answer by widening the in-memory domain model first.
  */
-class BitstampEventClassifier {
+class EventClassifier {
 public:
     /**
      * @brief  Classifies one decoded event, updating internal lifecycle state and counters.
@@ -106,4 +106,4 @@ private:
     ClassifierStats stats_{};
 };
 
-}  // namespace te
+}  // namespace te::bitstamp

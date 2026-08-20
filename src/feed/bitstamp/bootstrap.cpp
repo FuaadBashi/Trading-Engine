@@ -1,14 +1,15 @@
-#include "te/feed/bitstamp_bootstrap.hpp"
+#include "te/feed/bitstamp/bootstrap.hpp"
+#include <te/feed/trade_reconciler.hpp>
 
-namespace te {
+namespace te::bitstamp {
 
-
-    Result<OrderBook, ApplyError> bootstrapBitstampEvent(BookSnapshot book){
+    Result<OrderBook, ApplyError> bootstrap(BookSnapshot book, TradeReconciler* reconciler){
         OrderBook orderBook;
+
         for(size_t i {}; i < book.orders.size(); ++i){
             SnapshotOrder snapshotOrder = book.orders.at(i);
 
-            const OrderEvent &orderEvent = { 
+            const OrderEvent &orderEvent = {
                 book.microtimestamp,
                 snapshotOrder.order_id,
                 snapshotOrder.price,
@@ -21,6 +22,10 @@ namespace te {
             if(!result.hasValue()){
                 return  Result<OrderBook, ApplyError>::failure( *result.errorIf());
             }
+
+            if(reconciler){
+                reconciler->observe(orderEvent);
+            }
         }
         orderBook.validate();
 
@@ -28,5 +33,4 @@ namespace te {
 
     };
 
-
-}
+}  // namespace te::bitstamp

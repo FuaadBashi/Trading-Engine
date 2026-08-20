@@ -36,7 +36,7 @@ enum class SinkError {
  *
  * @note   "Sink" is the standard term for the destination an event stream is written to;
  *         spdlog and Serilog both use it. This is the write side of the capture pipeline that
- *         decodeBitstampEvent and buildRecord feed.
+ *         bitstamp::decodeEvent and buildRecord feed.
  *
  * @note   Opened with std::ios::app, so every write lands at the current end of the file
  *         regardless of what wrote there previously. On POSIX this maps to O_APPEND, whose

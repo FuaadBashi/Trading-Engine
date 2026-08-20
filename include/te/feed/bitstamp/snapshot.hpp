@@ -8,7 +8,7 @@
 #include <te/core/result.hpp>
 #include <te/core/types.hpp>
 
-namespace te {
+namespace te::bitstamp {
 
 /**
  * @brief  One resting order read from a REST group=2 snapshot row.
@@ -65,15 +65,14 @@ enum class SnapshotError {
  *
  * @param  text One complete JSON snapshot document, as fetched from
  *              `GET /api/v2/order_book/{market_symbol}/?group=2`.
- * @param  spec Supplies price/quantity decimal scales -- same convention as
- *              decodeBitstampEvent, not read from the document itself.
+ * @param  spec Supplies price/quantity decimal scales -- same convention as decodeEvent, not
+ *              read from the document itself.
  *
  * @return The parsed snapshot, or the reason parsing failed.
  *
  * @note   A duplicate order_id across bids/asks is rejected outright rather than resolved by the
  *         parser -- the caller must not have to guess which copy is real.
  */
-Result<BookSnapshot, SnapshotError> parseBitstampSnapshot(std::string_view text,
-                                                          InstrumentSpec spec);
+Result<BookSnapshot, SnapshotError> parseSnapshot(std::string_view text, InstrumentSpec spec);
 
-}  // namespace te
+}  // namespace te::bitstamp

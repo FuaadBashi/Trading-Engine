@@ -1,4 +1,4 @@
-#include <te/feed/bitstamp_snapshot.hpp>
+#include <te/feed/bitstamp/snapshot.hpp>
 #include <string_view>
 #include <unordered_set>
 #include "simdjson/padded_string.h"
@@ -8,7 +8,7 @@
 #include "simdjson/ondemand.h"
 #include "te/core/text_to_int.hpp"
 
-namespace te{
+namespace te::bitstamp {
 
     // Reads a snapshot row's 3 string fields in one forward pass over its own elements. On
     // Demand is single-pass/forward-only; row.at(index) does not compose safely with continuing
@@ -74,8 +74,7 @@ namespace te{
         return Result<SnapshotOrder, SnapshotError>::success(order);
     }
 
-    Result<BookSnapshot, SnapshotError> parseBitstampSnapshot(std::string_view text,
-                                                            InstrumentSpec spec)
+    Result<BookSnapshot, SnapshotError> parseSnapshot(std::string_view text, InstrumentSpec spec)
     {
         BookSnapshot book;
         simdjson::ondemand::parser parser;
@@ -86,7 +85,7 @@ namespace te{
 
         if (err) {
             // couldn't even parse this as JSON at all
-            return te::Result<BookSnapshot, SnapshotError>::failure(te::SnapshotError::malformed_json);
+            return Result<BookSnapshot, SnapshotError>::failure(SnapshotError::malformed_json);
         }
 
         std::string_view microtimestamp;
@@ -146,4 +145,4 @@ namespace te{
         return Result<BookSnapshot, SnapshotError>::success(book);
     }
 
-}
+}  // namespace te::bitstamp

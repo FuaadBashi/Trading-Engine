@@ -45,15 +45,15 @@ target_sources(te_core PRIVATE
     src/telemetry/record.cpp
     src/telemetry/recorder.cpp
     src/telemetry/sink.cpp
-    src/feed/bitstamp_decoder.cpp
+    src/feed/bitstamp/decoder.cpp
     #
     # Slice 2
     src/book/order_book.cpp
     src/book/price_level.cpp
-    src/feed/bitstamp_snapshot.cpp
-    src/feed/bitstamp_classifier.cpp
-    src/feed/bitstamp_bootstrap.cpp
-    src/feed/bitstamp_trade_decoder.cpp
+    src/feed/bitstamp/snapshot.cpp
+    src/feed/bitstamp/classifier.cpp
+    src/feed/bitstamp/bootstrap.cpp
+    src/feed/bitstamp/trade_decoder.cpp
     src/feed/trade_reconciler.cpp
     src/util/intrusive_list.cpp
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.

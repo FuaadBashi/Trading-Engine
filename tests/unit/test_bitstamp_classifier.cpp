@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <te/feed/bitstamp_classifier.hpp>
+#include <te/feed/bitstamp/classifier.hpp>
 
 namespace {
 
@@ -21,14 +21,14 @@ te::OrderEvent makeEvent(te::EventKind kind, std::uint64_t id, std::int64_t pric
 // ---- ordinary traffic passes through
 
 TEST(BitstampClassifier, PassesNormalPricedEventsToTheBook) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::add, 1, 6'484'011)),
-              te::EventDisposition::apply_to_book);
+              te::bitstamp::EventDisposition::apply_to_book);
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::modify, 1, 6'484'011)),
-              te::EventDisposition::apply_to_book);
+              te::bitstamp::EventDisposition::apply_to_book);
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::remove, 1, 6'484'011)),
-              te::EventDisposition::apply_to_book);
+              te::bitstamp::EventDisposition::apply_to_book);
 
     EXPECT_EQ(classifier.stats().appliedToBook, 3U);
     EXPECT_EQ(classifier.stats().zeroPriceLifecycle, 0U);
@@ -37,12 +37,12 @@ TEST(BitstampClassifier, PassesNormalPricedEventsToTheBook) {
 // An unknown id on a modify/remove is NOT the classifier's problem to hide. ADR 0012 makes the
 // book report it, because only a driver knows whether it is startup-boundary noise or corruption.
 TEST(BitstampClassifier, PassesUnknownIdModifyAndRemoveThroughToTheBook) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::remove, 999, 6'484'011)),
-              te::EventDisposition::apply_to_book);
+              te::bitstamp::EventDisposition::apply_to_book);
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::modify, 998, 6'484'011)),
-              te::EventDisposition::apply_to_book);
+              te::bitstamp::EventDisposition::apply_to_book);
 
     EXPECT_EQ(classifier.stats().appliedToBook, 2U);
 }
@@ -50,10 +50,10 @@ TEST(BitstampClassifier, PassesUnknownIdModifyAndRemoveThroughToTheBook) {
 // ---- price-zero lifecycles
 
 TEST(BitstampClassifier, ExcludesPriceZeroCreate) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::add, 42, 0)),
-              te::EventDisposition::zero_price_lifecycle);
+              te::bitstamp::EventDisposition::zero_price_lifecycle);
 
     EXPECT_EQ(classifier.stats().appliedToBook, 0U);
     EXPECT_EQ(classifier.stats().zeroPriceLifecycle, 1U);
@@ -62,22 +62,22 @@ TEST(BitstampClassifier, ExcludesPriceZeroCreate) {
 // The whole point of the classifier holding state: these later events carry an ordinary-looking
 // price and are indistinguishable from real traffic without the remembered id.
 TEST(BitstampClassifier, ExcludesLaterEventsOfAPriceZeroLifecycleEvenAtANormalPrice) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     ASSERT_EQ(classifier.classify(makeEvent(te::EventKind::add, 42, 0)),
-              te::EventDisposition::zero_price_lifecycle);
+              te::bitstamp::EventDisposition::zero_price_lifecycle);
 
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::modify, 42, 6'484'011)),
-              te::EventDisposition::zero_price_lifecycle);
+              te::bitstamp::EventDisposition::zero_price_lifecycle);
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::remove, 42, 6'484'011)),
-              te::EventDisposition::zero_price_lifecycle);
+              te::bitstamp::EventDisposition::zero_price_lifecycle);
 
     EXPECT_EQ(classifier.stats().appliedToBook, 0U);
     EXPECT_EQ(classifier.stats().zeroPriceLifecycle, 3U);
 }
 
 TEST(BitstampClassifier, ReleasesTrackedIdWhenTheLifecycleEnds) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     classifier.classify(makeEvent(te::EventKind::add, 42, 0));
     EXPECT_EQ(classifier.openZeroPriceLifecycles(), 1U);
@@ -88,7 +88,7 @@ TEST(BitstampClassifier, ReleasesTrackedIdWhenTheLifecycleEnds) {
 
 // A modify does not end a lifecycle, so the id must survive it.
 TEST(BitstampClassifier, KeepsTrackingAcrossAModify) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     classifier.classify(makeEvent(te::EventKind::add, 42, 0));
     classifier.classify(makeEvent(te::EventKind::modify, 42, 6'484'011));
@@ -99,18 +99,18 @@ TEST(BitstampClassifier, KeepsTrackingAcrossAModify) {
 // After a lifecycle is retired, the same id reused for a real priced order must reach the book.
 // If the classifier failed to release the id, that order would be silently dropped forever.
 TEST(BitstampClassifier, StopsExcludingAnIdOnceItsLifecycleHasEnded) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     classifier.classify(makeEvent(te::EventKind::add, 42, 0));
     classifier.classify(makeEvent(te::EventKind::remove, 42, 6'484'011));
 
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::add, 42, 6'484'011)),
-              te::EventDisposition::apply_to_book);
+              te::bitstamp::EventDisposition::apply_to_book);
     EXPECT_EQ(classifier.stats().appliedToBook, 1U);
 }
 
 TEST(BitstampClassifier, TracksSeveralOverlappingLifecyclesIndependently) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     classifier.classify(makeEvent(te::EventKind::add, 1, 0));
     classifier.classify(makeEvent(te::EventKind::add, 2, 0));
@@ -122,9 +122,9 @@ TEST(BitstampClassifier, TracksSeveralOverlappingLifecyclesIndependently) {
 
     // id 2 is still excluded; id 3 was never excluded.
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::remove, 2, 6'484'011)),
-              te::EventDisposition::zero_price_lifecycle);
+              te::bitstamp::EventDisposition::zero_price_lifecycle);
     EXPECT_EQ(classifier.classify(makeEvent(te::EventKind::remove, 3, 6'484'011)),
-              te::EventDisposition::apply_to_book);
+              te::bitstamp::EventDisposition::apply_to_book);
     EXPECT_EQ(classifier.openZeroPriceLifecycles(), 0U);
 }
 
@@ -134,7 +134,7 @@ TEST(BitstampClassifier, TracksSeveralOverlappingLifecyclesIndependently) {
 // enforces on its own counters. An event that increments neither counter has vanished silently.
 
 TEST(BitstampClassifier, CountsEveryEventExactlyOnce) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     classifier.classify(makeEvent(te::EventKind::add, 1, 0));           // zero-price
     classifier.classify(makeEvent(te::EventKind::modify, 1, 100));      // zero-price
@@ -149,7 +149,7 @@ TEST(BitstampClassifier, CountsEveryEventExactlyOnce) {
 }
 
 TEST(BitstampClassifier, StartsWithZeroedCounters) {
-    const te::BitstampEventClassifier classifier;
+    const te::bitstamp::EventClassifier classifier;
 
     EXPECT_EQ(classifier.stats().appliedToBook, 0U);
     EXPECT_EQ(classifier.stats().zeroPriceLifecycle, 0U);
@@ -158,11 +158,11 @@ TEST(BitstampClassifier, StartsWithZeroedCounters) {
 
 // A sell-side price-zero lifecycle behaves identically; nothing here is side-specific.
 TEST(BitstampClassifier, AppliesTheSameRuleToBothSides) {
-    te::BitstampEventClassifier classifier;
+    te::bitstamp::EventClassifier classifier;
 
     te::OrderEvent sellZero = makeEvent(te::EventKind::add, 7, 0);
     sellZero.side = te::Side::sell;
 
-    EXPECT_EQ(classifier.classify(sellZero), te::EventDisposition::zero_price_lifecycle);
+    EXPECT_EQ(classifier.classify(sellZero), te::bitstamp::EventDisposition::zero_price_lifecycle);
     EXPECT_EQ(classifier.openZeroPriceLifecycles(), 1U);
 }

@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include <te/feed/bitstamp_decoder.hpp>
+#include <te/feed/bitstamp/decoder.hpp>
 #include <te/telemetry/record.hpp>
 
 namespace te {
@@ -14,7 +14,7 @@ Result<RecorderStats, RecorderError> runRecorder(std::istream& input, Sink& sink
 
     // Continuity state. The first order event has no predecessor, so hasPreviousLink stays false
     // until one has been seen; without that guard every capture would open with a false gap.
-    ChainLink previousLink{};
+    bitstamp::ChainLink previousLink{};
     bool hasPreviousLink = false;
 
     while (std::getline(input, line)) {
@@ -25,13 +25,13 @@ Result<RecorderStats, RecorderError> runRecorder(std::istream& input, Sink& sink
             continue;
         }
 
-        const auto decoded = decodeBitstampEvent(line, spec);
+        const auto decoded = bitstamp::decodeEvent(line, spec);
 
         if (decoded.hasValue()) {
             // Chain ids exist only on order lifecycle messages, so this is checked here rather
             // than per line. A missing or unreadable chain is not treated as a gap: absence of
             // evidence is not evidence of loss, and inventing gaps would censor good sessions.
-            const auto chain = decodeBitstampChain(line);
+            const auto chain = bitstamp::decodeChain(line);
             if (chain.hasValue()) {
                 if (hasPreviousLink && chain.valueIf()->pre_event_id != previousLink.event_id) {
                     const Record gap = buildGapRecord(clock);
@@ -55,12 +55,12 @@ Result<RecorderStats, RecorderError> runRecorder(std::istream& input, Sink& sink
             ++stats.written;
         } else {
             switch (*decoded.errorIf()) {
-                case DecoderError::not_order_event:
+                case bitstamp::DecoderError::not_order_event:
                     ++stats.skipped;
                     break;
-                case DecoderError::malformed_json:
-                case DecoderError::missing_field:
-                case DecoderError::invalid_field:
+                case bitstamp::DecoderError::malformed_json:
+                case bitstamp::DecoderError::missing_field:
+                case bitstamp::DecoderError::invalid_field:
                     ++stats.failed;
                     break;
             }

@@ -15,8 +15,9 @@ namespace te {
  * @note   Traced against a real capture: an order can leave the book via a fill with no
  *         order_deleted ever sent, or never rest at all if it's fully consumed immediately --
  *         either way it's invisible on live_orders and only shows up as a party to a trade.
- *         Keeps its own minimal shadow of resting orders (side, price, quantity, by id) built
- *         from the same events OrderBook sees, so it composes as one more pipeline stage --
+ *         Keeps its own record of which orders it believes are still resting (side, price,
+ *         quantity, by id), built from the same events OrderBook sees, so it composes as one
+ *         more pipeline stage --
  *         decode -> classify -> reconcile -> apply -- without needing a live reference to the
  *         book it corrects. OrderBook itself never changes.
  */

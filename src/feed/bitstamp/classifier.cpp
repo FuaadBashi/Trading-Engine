@@ -1,8 +1,8 @@
-#include <te/feed/bitstamp_classifier.hpp>
+#include <te/feed/bitstamp/classifier.hpp>
 
-namespace te {
+namespace te::bitstamp {
 
-EventDisposition BitstampEventClassifier::classify(const OrderEvent& event) {
+EventDisposition EventClassifier::classify(const OrderEvent& event) {
     // A price-zero create opens a lifecycle that never belongs in the book. Only the id is
     // kept, because the events that follow it look ordinary and cannot be recognised any other
     // way. This mirrors scripts/audit_book_bootstrap.py, the Python oracle the C++ side is
@@ -35,4 +35,4 @@ EventDisposition BitstampEventClassifier::classify(const OrderEvent& event) {
     return EventDisposition::apply_to_book;
 }
 
-}  // namespace te
+}  // namespace te::bitstamp

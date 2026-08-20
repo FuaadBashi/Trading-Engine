@@ -1,4 +1,4 @@
-#include <te/feed/bitstamp_trade_decoder.hpp>
+#include <te/feed/bitstamp/trade_decoder.hpp>
 
 #include "te/core/text_to_int.hpp"
 #include "simdjson/padded_string.h"
@@ -7,9 +7,9 @@
 #include "simdjson/padded_string_view-inl.h"
 #include "simdjson/ondemand.h"
 
-namespace te {
+namespace te::bitstamp {
 
-Result<TradeEvent, DecoderError> decodeBitstampTrade(std::string_view text, InstrumentSpec spec) {
+Result<TradeEvent, DecoderError> decodeTrade(std::string_view text, InstrumentSpec spec) {
     TradeEvent tradeEvent;
     simdjson::ondemand::parser parser;
     simdjson::padded_string buffer = simdjson::padded_string(text);
@@ -66,4 +66,4 @@ Result<TradeEvent, DecoderError> decodeBitstampTrade(std::string_view text, Inst
     return Result<TradeEvent, DecoderError>::success(tradeEvent);
 }
 
-}  // namespace te
+}  // namespace te::bitstamp
