@@ -53,6 +53,7 @@ target_sources(te_core PRIVATE
     src/feed/bitstamp/snapshot.cpp
     src/feed/bitstamp/classifier.cpp
     src/feed/bitstamp/bootstrap.cpp
+    src/feed/bitstamp/replay.cpp
     src/feed/bitstamp/trade_decoder.cpp
     src/feed/trade_reconciler.cpp
     src/util/intrusive_list.cpp

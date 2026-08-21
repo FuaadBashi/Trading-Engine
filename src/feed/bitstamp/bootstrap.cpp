@@ -9,7 +9,7 @@ namespace te::bitstamp {
         for(size_t i {}; i < book.orders.size(); ++i){
             SnapshotOrder snapshotOrder = book.orders.at(i);
 
-            const OrderEvent &orderEvent = {
+            const OrderEvent &orderEvent {
                 book.microtimestamp,
                 snapshotOrder.order_id,
                 snapshotOrder.price,
@@ -22,11 +22,13 @@ namespace te::bitstamp {
             if(!result.hasValue()){
                 return  Result<OrderBook, ApplyError>::failure( *result.errorIf());
             }
+           
 
             if(reconciler){
                 reconciler->observe(orderEvent);
             }
         }
+        // Replay that read order JSONL sequentially that takes the orderbook and the reconciler here and then use the info if timestamp is > T 
         orderBook.validate();
 
         return  Result<OrderBook, ApplyError>::success(std::move(orderBook));

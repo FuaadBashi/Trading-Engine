@@ -1,5 +1,11 @@
 # Trading Engine Project Plan v2
 
+> **Historical document.** This plan has been superseded by
+> [`project-plan-v4.md`](project-plan-v4.md), which reflects the implemented L3 book, snapshot
+> bootstrap, golden checkpoint replay, trade decoding/reconciliation and the revised
+> industry-aligned evidence roadmap. Keep this file as design history; do not use its status table
+> or immediate actions as current instructions.
+
 **Owner:** Fuaad Bashi  
 **Revised:** 2026-08-09  
 **Purpose:** Learn modern C++ and low-latency systems by building a defensible L3 replay,

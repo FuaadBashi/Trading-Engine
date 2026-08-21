@@ -16,6 +16,7 @@ void TradeReconciler::observe(const OrderEvent& event) {
 }
 
 std::vector<OrderEvent> TradeReconciler::reconcile(const TradeEvent& trade) {
+    
     std::vector<OrderEvent> corrections;
 
     for (OrderId id : {trade.buy_order_id, trade.sell_order_id}) {

@@ -4,23 +4,25 @@ One C++/Python system in which the same strategy binary runs against recorded hi
 (backtest) and a live feed (paper trading), with only the data source and the clock swapped.
 
 **The deliverable combines a validated engine and an interactive local dashboard.** The technical
-evidence is a gap-aware L3 replay system plus an out-of-sample evaluation of fill-within-horizon
-forecasts on real observed resting orders. The dashboard then exposes the same C++ engine for
-historical replay, live observation and local paper-order experiments. See [the revised project
-plan](docs/project-plan-v2.md) for the validation limits and schedule.
+evidence is a deterministic, gap-aware L3 order/trade replay system, a reference-versus-optimized
+C++ performance study, and an out-of-sample evaluation of fill-within-horizon forecasts on real
+observed resting orders. The dashboard exposes the same C++ engine for historical replay, live
+observation and local paper-order experiments. See the current
+[Project Plan v4](docs/project-plan-v4.md) for the evidence gates, limitations and schedule.
 
 ## Status
 
 | Slice | Weeks | State |
 |---|---|---|
 | 0 Foundations | 0 | complete |
-| 1 Data contract + recorder | 1 to 3 | in progress — capture, value types and normalized event storage complete; exact parser next |
-| 2 Book builder | 3 to 5 | not started |
-| 3 Replay engine v1 | 6 to 8 | not started |
-| 4 Queue + execution model | 9 to 11 | not started |
-| 5 Corpus validation | 12 to 14 | not started |
-| 6 Operational live-data path | 15 to 16 | not started |
-| 7 Interactive dashboard | after engine validation | not started |
+| 1 Data contract + recorder | 1 to 3 | substantially implemented; durable v3 and two contract fixes remain |
+| 2 L3 book + reconciliation | 3 to 5 | in progress; reference book, bootstrap, checkpoint replay and reconciler implemented |
+| 3 Deterministic replay + accounting | after joined replay | not started |
+| 4 Queue labels + execution model | after replay core | not started |
+| 5 Held-out corpus validation | after label-quality gate | not started |
+| 6 Performance laboratory | after deterministic correctness | not started |
+| 7 Operational live/paper path | after validated core | not started |
+| 8 Interactive dashboard | after stable telemetry contract | not started |
 
 ## The one idea this repo is shaped around
 
@@ -33,7 +35,8 @@ Only three things vary between backtest and live:
 | `ExecutionVenue` | `SimulatedVenue` | `PaperVenue` (external sandbox adapter is stretch) |
 
 If any file outside those six implementations calls the system clock or knows what a WebSocket
-is, the design has leaked. CI enforces the clock half of that.
+is, the design has leaked. The injected clock boundary exists; the automated CI source guard is
+still an explicit Plan v4 Stage 0 action and is not yet claimed as enforced.
 
 ## Layout
 
@@ -73,17 +76,18 @@ cannot exactly verify a Bitstamp book.
 | Primary | `scripts/dump_raw_ws_bitstamp.py` | none | L3, order-by-order |
 | Secondary | `scripts/dump_raw_ws.py` | none | L2, price-aggregated |
 
-## Slice 1 order of attack
+## Current order of attack
 
-Never do these in parallel. Full detail in [docs/slice-1-plan.md](docs/slice-1-plan.md).
+Never do these in parallel. Full detail and exit gates are in
+[Project Plan v4](docs/project-plan-v4.md).
 
-1. ~~Raw order JSON to snapshot-backed segments.~~ — capture and manifest validation work.
-2. ~~C++ value types and normalized events, tests first.~~ — header contracts and behavior tests pass.
-3. `InstrumentSpec` and exact decimal parsing, with no `double` conversion.
-4. C++ decoder reading **that file**. No networking.
-5. Explicit versioned binary writer + semantic/binary golden tests.
-6. Add the joined Bitstamp order/trade capture contract required for fill labels.
-7. Only now, swap the file reader for Boost.Beast.
+1. Correct the timestamp-unit and `id`/`id_str` contracts and activate truthful CI guards.
+2. Capture orders and trades under one run/manifest with one shared `captureOrdinal`.
+3. Specify and test the deterministic merge/reconciliation controller.
+4. Replace manual checkpoint adjustments with joined trade evidence and zero silent apply errors.
+5. Make a small end-to-end golden fixture mandatory on a clean checkout.
+6. Implement portable v3 encoding after the joined schema and timing fields are stable.
+7. Only then begin the general replay/strategy/accounting engine.
 
 Each Bitstamp run creates `data/raw/bitstamp-btcusd-<UTC timestamp>/` containing an
 atomic `manifest.json` plus one `.snapshot` and payload-only `.jsonl` file per continuous

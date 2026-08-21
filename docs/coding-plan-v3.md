@@ -1,5 +1,10 @@
 # Paper Trading Engine — Coding Plan v3
 
+> **Historical document.** Current scope, status and stage gates live in
+> [`project-plan-v4.md`](project-plan-v4.md). This document remains useful for its original C++
+> curriculum and the reasoning that led to later decisions, but several implementation-status
+> statements below are intentionally preserved history.
+
 **Owner:** Fuaad Bashi
 **Revised:** 2026-08-15
 **Supersedes:** `Trading_Engine_Coding_Plan.pdf` (August 2026)
