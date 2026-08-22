@@ -1,13 +1,14 @@
-"""Capture public Bitstamp L3 events as snapshot-backed segments.
+"""Capture joined Bitstamp L3 orders and trades as snapshot-backed segments.
 
-Each run creates a directory containing a manifest and one or more segments. Every
-segment has its own group=2 REST snapshot and payload-only JSONL stream. A requested
-reconnect, chain gap, or transport failure closes the segment; a new connection and
-snapshot are required before capture resumes. This implements ADR 0006.
+Each run owns one WebSocket connection and subscribes to both ``live_orders`` and
+``live_trades``. Every inbound text frame is preserved unchanged in the segment's
+payload-only JSONL file. A second JSONL index records its shared arrival ordinal,
+stream kind, timestamps, run/segment identity, and payload line number.
 
-The JSONL stores each decoded WebSocket text payload unchanged, followed by a newline.
-WebSocket framing and compression are handled by the websockets library, so the file is
-payload-preserving rather than byte-identical to the network wire.
+The raw payload file is authoritative: derived metadata never rewrites it. The
+``captureOrdinal`` is local observation order, not a claim about Bitstamp's matching
+engine order. A reconnect, order-chain gap, or transport failure closes a segment;
+the next segment starts only after a new snapshot.
 
 Usage:
     python scripts/dump_raw_ws_bitstamp.py       # run until Ctrl-C
@@ -16,11 +17,13 @@ Usage:
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import signal
 import sys
 import time
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -30,13 +33,17 @@ from websockets.asyncio.client import connect
 
 URI = "wss://ws.bitstamp.net"
 PAIR = "btcusd"
-CHANNEL = f"live_orders_{PAIR}"
+ORDER_CHANNEL = f"live_orders_{PAIR}"
+TRADE_CHANNEL = f"live_trades_{PAIR}"
+CHANNELS = (ORDER_CHANNEL, TRADE_CHANNEL)
 SNAPSHOT_URL = f"https://www.bitstamp.net/api/v2/order_book/{PAIR}/?group=2"
 CAPTURE_PARENT = Path("data/raw")
 
 FLUSH_EVERY = 1000
 MAX_FRAME_BYTES = 64 * 1024 * 1024
 RECONNECT_DELAY_SECONDS = 1.0
+SUBSCRIPTION_TIMEOUT_SECONDS = 30.0
+POST_CHECKPOINT_DRAIN_SECONDS = 5.0
 ORDER_EVENTS = {"order_created", "order_changed", "order_deleted"}
 
 
@@ -64,14 +71,16 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
-def build_subscription() -> str:
-    return json.dumps({"event": "bts:subscribe", "data": {"channel": CHANNEL}})
+def build_subscription(channel: str) -> str:
+    return json.dumps({"event": "bts:subscribe", "data": {"channel": channel}})
 
 
 def fetch_snapshot(path: Path) -> dict[str, Any]:
     """Store one REST snapshot verbatim and return metadata used by the manifest."""
+    requested_at = utc_now()
     with urllib.request.urlopen(SNAPSHOT_URL, timeout=30) as response:
         body = response.read()
+    received_at = utc_now()
 
     snapshot = json.loads(body)
     microtimestamp = snapshot.get("microtimestamp")
@@ -82,9 +91,54 @@ def fetch_snapshot(path: Path) -> dict[str, Any]:
     print(f"snapshot: {len(body):,} bytes -> {path}", flush=True)
     return {
         "bytes": len(body),
+        "sha256": hashlib.sha256(body).hexdigest(),
         "microtimestamp": str(microtimestamp),
-        "received_at": utc_now(),
+        "requested_at": requested_at,
+        "received_at": received_at,
     }
+
+
+def classify_message(envelope: dict[str, Any]) -> tuple[str, Optional[str]]:
+    """Return the immutable frame's stream kind and venue timestamp, if present."""
+    event = envelope.get("event")
+    channel = envelope.get("channel")
+    data = envelope.get("data")
+    microtimestamp = None
+    if isinstance(data, dict) and data.get("microtimestamp") is not None:
+        microtimestamp = str(data["microtimestamp"])
+
+    if event in ORDER_EVENTS and channel == ORDER_CHANNEL:
+        return "order", microtimestamp
+    if event == "trade" and channel == TRADE_CHANNEL:
+        return "trade", microtimestamp
+    return "control", microtimestamp
+
+
+def make_frame(
+    capture_ordinal: int,
+    run_id: str,
+    segment_id: int,
+    payload_line: int,
+    stream_kind: str,
+    venue_timestamp_micros: Optional[str],
+) -> dict[str, Any]:
+    """Build metadata that points at, rather than rewrites, the raw payload line."""
+    return {
+        "captureOrdinal": capture_ordinal,
+        "localWallTimestampNanos": time.time_ns(),
+        "localSteadyTimestampNanos": time.monotonic_ns(),
+        "streamKind": stream_kind,
+        "venueTimestampMicros": venue_timestamp_micros,
+        "runId": run_id,
+        "segmentId": segment_id,
+        "payloadLine": payload_line,
+    }
+
+
+def write_json_line(sink: Any, value: dict[str, Any], digest: Any) -> None:
+    line = json.dumps(value, separators=(",", ":"), ensure_ascii=False) + "\n"
+    sink.write(line)
+    digest.update(line.encode("utf-8"))
 
 
 async def capture_segment(
@@ -92,52 +146,155 @@ async def capture_segment(
     segment: dict[str, Any],
     manifest: dict[str, Any],
     manifest_path: Path,
+    capture_state: dict[str, int],
+    stop_requested: asyncio.Event,
 ) -> str:
     """Capture one continuity segment and return the reason it ended."""
     index = segment["index"]
     payload_path = run_directory / segment["payload"]
+    frames_path = run_directory / segment["frame_index"]
     snapshot_path = run_directory / segment["snapshot"]
+    checkpoint_path = run_directory / segment["checkpoint"]
+    run_id = manifest["runId"]
 
     state: dict[str, Any] = {
-        "count": 0,
+        "frames": 0,
         "order_events": 0,
+        "trade_events": 0,
+        "control_frames": 0,
         "previous_event_id": None,
         "first_event_id": None,
         "last_event_id": None,
-        "first_microtimestamp": None,
-        "last_microtimestamp": None,
+        "first_order_microtimestamp": None,
+        "last_order_microtimestamp": None,
+        "first_trade_microtimestamp": None,
+        "last_trade_microtimestamp": None,
+        "first_capture_ordinal": None,
+        "last_capture_ordinal": None,
+        "subscriptions": set(),
         "end_reason": "connection_closed",
         "diagnostic": None,
     }
-
+    payload_digest = hashlib.sha256()
+    frames_digest = hashlib.sha256()
     cancellation: Optional[asyncio.CancelledError] = None
 
     try:
-        with payload_path.open("x", encoding="utf-8") as sink:
+        with (
+            payload_path.open("x", encoding="utf-8", newline="\n") as payload_sink,
+            frames_path.open("x", encoding="utf-8", newline="\n") as frames_sink,
+        ):
             async with connect(URI, max_size=MAX_FRAME_BYTES) as websocket:
-                await websocket.send(build_subscription())
+                for channel in CHANNELS:
+                    await websocket.send(build_subscription(channel))
+
+                subscriptions_ready = asyncio.Event()
 
                 async def drain() -> None:
                     async for message in websocket:
-                        sink.write(message)
-                        sink.write("\n")
-                        state["count"] += 1
+                        state["frames"] += 1
+                        payload_line = state["frames"]
+                        capture_ordinal = capture_state["next_capture_ordinal"]
+                        capture_state["next_capture_ordinal"] += 1
+                        state["first_capture_ordinal"] = (
+                            state["first_capture_ordinal"] or capture_ordinal
+                        )
+                        state["last_capture_ordinal"] = capture_ordinal
 
-                        if state["count"] % FLUSH_EVERY == 0:
-                            sink.flush()
-                            print(
-                                f"segment {index:04d}: {state['count']:,} messages",
-                                flush=True,
-                            )
+                        raw_line = message + "\n"
+                        payload_sink.write(raw_line)
+                        payload_digest.update(raw_line.encode("utf-8"))
 
                         try:
                             envelope = json.loads(message)
                         except json.JSONDecodeError as exc:
+                            frame = make_frame(
+                                capture_ordinal,
+                                run_id,
+                                index,
+                                payload_line,
+                                "control",
+                                None,
+                            )
+                            write_json_line(frames_sink, frame, frames_digest)
+                            state["control_frames"] += 1
                             state["end_reason"] = "malformed_payload"
-                            state["diagnostic"] = {"error": str(exc)}
+                            state["diagnostic"] = {
+                                "payload_line": payload_line,
+                                "error": str(exc),
+                            }
                             return
 
+                        if not isinstance(envelope, dict):
+                            frame = make_frame(
+                                capture_ordinal,
+                                run_id,
+                                index,
+                                payload_line,
+                                "control",
+                                None,
+                            )
+                            write_json_line(frames_sink, frame, frames_digest)
+                            state["control_frames"] += 1
+                            state["end_reason"] = "malformed_payload"
+                            state["diagnostic"] = {
+                                "payload_line": payload_line,
+                                "error": "payload is not a JSON object",
+                            }
+                            return
+
+                        stream_kind, microtimestamp = classify_message(envelope)
+                        frame = make_frame(
+                            capture_ordinal,
+                            run_id,
+                            index,
+                            payload_line,
+                            stream_kind,
+                            microtimestamp,
+                        )
+                        write_json_line(frames_sink, frame, frames_digest)
+
+                        if stream_kind == "order":
+                            state["order_events"] += 1
+                            state["first_order_microtimestamp"] = (
+                                state["first_order_microtimestamp"] or microtimestamp
+                            )
+                            state["last_order_microtimestamp"] = microtimestamp
+                        elif stream_kind == "trade":
+                            state["trade_events"] += 1
+                            state["first_trade_microtimestamp"] = (
+                                state["first_trade_microtimestamp"] or microtimestamp
+                            )
+                            state["last_trade_microtimestamp"] = microtimestamp
+                        else:
+                            state["control_frames"] += 1
+
+                        if state["frames"] % FLUSH_EVERY == 0:
+                            payload_sink.flush()
+                            frames_sink.flush()
+                            print(
+                                f"segment {index:04d}: {state['frames']:,} frames "
+                                f"({state['order_events']:,} orders, "
+                                f"{state['trade_events']:,} trades)",
+                                flush=True,
+                            )
+
                         event = envelope.get("event")
+                        channel = envelope.get("channel")
+                        if event == "bts:subscription_succeeded":
+                            if channel not in CHANNELS:
+                                state["end_reason"] = "unexpected_subscription"
+                                state["diagnostic"] = {"channel": channel}
+                                return
+                            if channel in state["subscriptions"]:
+                                state["end_reason"] = "duplicate_subscription"
+                                state["diagnostic"] = {"channel": channel}
+                                return
+                            state["subscriptions"].add(channel)
+                            if state["subscriptions"] == set(CHANNELS):
+                                subscriptions_ready.set()
+                            continue
+
                         if event == "bts:request_reconnect":
                             state["end_reason"] = "venue_requested_reconnect"
                             return
@@ -145,16 +302,23 @@ async def capture_segment(
                             state["end_reason"] = "venue_error"
                             state["diagnostic"] = envelope.get("data")
                             return
+                        if event == "trade" and channel != TRADE_CHANNEL:
+                            state["end_reason"] = "unexpected_trade_channel"
+                            state["diagnostic"] = {"channel": channel}
+                            return
                         if event not in ORDER_EVENTS:
                             continue
+                        if channel != ORDER_CHANNEL:
+                            state["end_reason"] = "unexpected_order_channel"
+                            state["diagnostic"] = {"channel": channel}
+                            return
 
                         event_id = envelope.get("event_id")
                         pre_event_id = envelope.get("pre_event_id")
-                        microtimestamp = envelope.get("data", {}).get("microtimestamp")
                         if event_id is None or pre_event_id is None:
                             state["end_reason"] = "malformed_order_event"
                             state["diagnostic"] = {
-                                "message_number": state["count"],
+                                "payload_line": payload_line,
                                 "missing": "event_id or pre_event_id",
                             }
                             return
@@ -163,47 +327,118 @@ async def capture_segment(
                         if previous is not None and pre_event_id != previous:
                             state["end_reason"] = "chain_gap"
                             state["diagnostic"] = {
-                                "message_number": state["count"],
+                                "payload_line": payload_line,
                                 "expected_pre_event_id": previous,
                                 "actual_pre_event_id": pre_event_id,
                                 "microtimestamp": microtimestamp,
                             }
                             return
 
-                        state["order_events"] += 1
                         state["previous_event_id"] = event_id
                         state["first_event_id"] = state["first_event_id"] or event_id
                         state["last_event_id"] = event_id
-                        state["first_microtimestamp"] = (
-                            state["first_microtimestamp"] or microtimestamp
-                        )
-                        state["last_microtimestamp"] = microtimestamp
 
-                # Draining must begin before the blocking HTTP snapshot request. Events
-                # received during that request are buffered in this segment and replay
-                # can discard those at or before the snapshot microtimestamp.
+                # Begin reading before the blocking REST request. Waiting for both
+                # acknowledgements proves the single connection is carrying both sources;
+                # frames received before the snapshot remain in the raw prefix for cutoff logic.
                 reader = asyncio.create_task(drain())
+                subscription_waiter = asyncio.create_task(subscriptions_ready.wait())
+                stop_waiter: Optional[asyncio.Task[bool]] = None
                 try:
-                    snapshot_metadata = await asyncio.get_running_loop().run_in_executor(
-                        None, fetch_snapshot, snapshot_path
+                    done, _ = await asyncio.wait(
+                        {reader, subscription_waiter},
+                        timeout=SUBSCRIPTION_TIMEOUT_SECONDS,
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
-                    segment["snapshot_metadata"] = snapshot_metadata
-                    write_manifest(manifest_path, manifest)
-                    await reader
+                    if subscription_waiter in done and not reader.done():
+                        try:
+                            snapshot_metadata = await (
+                                asyncio.get_running_loop().run_in_executor(
+                                    None, fetch_snapshot, snapshot_path
+                                )
+                            )
+                        except Exception:
+                            state["end_reason"] = "snapshot_error"
+                            raise
+                        segment["snapshot_metadata"] = snapshot_metadata
+                        write_manifest(manifest_path, manifest)
+
+                        stop_waiter = asyncio.create_task(stop_requested.wait())
+                        done, _ = await asyncio.wait(
+                            {reader, stop_waiter},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if reader in done:
+                            await reader
+                        else:
+                            checkpoint_request_ordinal = (
+                                capture_state["next_capture_ordinal"] - 1
+                            )
+                            try:
+                                checkpoint_metadata = await (
+                                    asyncio.get_running_loop().run_in_executor(
+                                        None, fetch_snapshot, checkpoint_path
+                                    )
+                                )
+                            except Exception:
+                                state["end_reason"] = "checkpoint_error"
+                                raise
+
+                            checkpoint_metadata.update(
+                                {
+                                    "capture_ordinal_before_request": (
+                                        checkpoint_request_ordinal
+                                    ),
+                                    "capture_ordinal_at_receive": (
+                                        capture_state["next_capture_ordinal"] - 1
+                                    ),
+                                    "post_checkpoint_drain_seconds": (
+                                        POST_CHECKPOINT_DRAIN_SECONDS
+                                    ),
+                                }
+                            )
+                            segment["checkpoint_metadata"] = checkpoint_metadata
+                            write_manifest(manifest_path, manifest)
+
+                            if reader.done():
+                                await reader
+                            else:
+                                done, _ = await asyncio.wait(
+                                    {reader}, timeout=POST_CHECKPOINT_DRAIN_SECONDS
+                                )
+                                if reader in done:
+                                    await reader
+                                else:
+                                    state["end_reason"] = "graceful_checkpoint"
+                                    reader.cancel()
+                                    await asyncio.gather(
+                                        reader, return_exceptions=True
+                                    )
+                    elif reader in done:
+                        await reader
+                    else:
+                        state["end_reason"] = "subscription_timeout"
+                        reader.cancel()
+                        await asyncio.gather(reader, return_exceptions=True)
                 except asyncio.CancelledError as exc:
-                    state["end_reason"] = "capture_stopped"
+                    state["end_reason"] = "forced_cancel"
                     cancellation = exc
                     reader.cancel()
                     await asyncio.gather(reader, return_exceptions=True)
                 except Exception:
-                    state["end_reason"] = "snapshot_error"
                     reader.cancel()
                     await asyncio.gather(reader, return_exceptions=True)
                     raise
                 finally:
-                    sink.flush()
+                    subscription_waiter.cancel()
+                    await asyncio.gather(subscription_waiter, return_exceptions=True)
+                    if stop_waiter is not None:
+                        stop_waiter.cancel()
+                        await asyncio.gather(stop_waiter, return_exceptions=True)
+                    payload_sink.flush()
+                    frames_sink.flush()
     except asyncio.CancelledError as exc:
-        state["end_reason"] = "capture_stopped"
+        state["end_reason"] = "forced_cancel"
         cancellation = exc
     except Exception as exc:
         if state["end_reason"] == "connection_closed":
@@ -214,28 +449,46 @@ async def capture_segment(
             }
         raise
     finally:
+        manifest["lastCaptureOrdinal"] = capture_state["next_capture_ordinal"] - 1
         segment.update(
             {
                 "ended_at": utc_now(),
                 "end_reason": state["end_reason"],
-                "messages": state["count"],
+                "frames": state["frames"],
                 "order_events": state["order_events"],
+                "trade_events": state["trade_events"],
+                "control_frames": state["control_frames"],
                 "payload_bytes": payload_path.stat().st_size
                 if payload_path.exists()
                 else 0,
+                "payload_sha256": payload_digest.hexdigest(),
+                "frames_bytes": frames_path.stat().st_size if frames_path.exists() else 0,
+                "frames_sha256": frames_digest.hexdigest(),
                 "first_event_id": state["first_event_id"],
                 "last_event_id": state["last_event_id"],
-                "first_microtimestamp": state["first_microtimestamp"],
-                "last_microtimestamp": state["last_microtimestamp"],
+                "first_order_microtimestamp": state["first_order_microtimestamp"],
+                "last_order_microtimestamp": state["last_order_microtimestamp"],
+                "first_trade_microtimestamp": state["first_trade_microtimestamp"],
+                "last_trade_microtimestamp": state["last_trade_microtimestamp"],
+                "first_capture_ordinal": state["first_capture_ordinal"],
+                "last_capture_ordinal": state["last_capture_ordinal"],
+                "subscriptions": sorted(state["subscriptions"]),
                 "chain_valid": state["end_reason"] != "chain_gap",
             }
         )
         if state["diagnostic"] is not None:
             segment["diagnostic"] = state["diagnostic"]
+        checkpoint_metadata = segment.get("checkpoint_metadata")
+        if isinstance(checkpoint_metadata, dict):
+            checkpoint_metadata["capture_ordinal_after_drain"] = (
+                capture_state["next_capture_ordinal"] - 1
+            )
+            checkpoint_metadata["drain_completed_at"] = utc_now()
         write_manifest(manifest_path, manifest)
         print(
-            f"segment {index:04d}: stopped after {state['count']:,} messages "
-            f"({state['end_reason']})",
+            f"segment {index:04d}: stopped after {state['frames']:,} frames "
+            f"({state['order_events']:,} orders, {state['trade_events']:,} trades; "
+            f"{state['end_reason']})",
             flush=True,
         )
 
@@ -244,19 +497,23 @@ async def capture_segment(
     return str(state["end_reason"])
 
 
-async def run_capture(run_directory: Path) -> None:
+async def run_capture(run_directory: Path, stop_requested: asyncio.Event) -> None:
     manifest_path = run_directory / "manifest.json"
     manifest: dict[str, Any] = {
-        "format_version": 1,
+        "format_version": 2,
+        "capture_format": "bitstamp_joined_frames_v1",
         "venue": "bitstamp",
         "instrument": PAIR,
-        "channel": CHANNEL,
+        "channels": list(CHANNELS),
         "websocket_uri": URI,
         "snapshot_url": SNAPSHOT_URL,
+        "runId": str(uuid.uuid4()),
         "created_at": utc_now(),
         "status": "running",
+        "lastCaptureOrdinal": 0,
         "segments": [],
     }
+    capture_state = {"next_capture_ordinal": 1}
     write_manifest(manifest_path, manifest)
     print(f"capture directory: {run_directory}", flush=True)
 
@@ -266,7 +523,9 @@ async def run_capture(run_directory: Path) -> None:
             segment = {
                 "index": index,
                 "payload": f"segment-{index:04d}.jsonl",
+                "frame_index": f"segment-{index:04d}.frames.jsonl",
                 "snapshot": f"segment-{index:04d}.snapshot",
+                "checkpoint": f"checkpoint-{index:04d}.snapshot",
                 "started_at": utc_now(),
                 "start_reason": "capture_started" if index == 0 else "reconnected",
             }
@@ -274,20 +533,41 @@ async def run_capture(run_directory: Path) -> None:
             write_manifest(manifest_path, manifest)
 
             reason = await capture_segment(
-                run_directory, segment, manifest, manifest_path
+                run_directory,
+                segment,
+                manifest,
+                manifest_path,
+                capture_state,
+                stop_requested,
             )
+            if reason == "graceful_checkpoint":
+                manifest["status"] = "completed"
+                manifest["ended_at"] = utc_now()
+                write_manifest(manifest_path, manifest)
+                return
             if reason in {
                 "venue_requested_reconnect",
                 "chain_gap",
                 "connection_closed",
             }:
-                await asyncio.sleep(RECONNECT_DELAY_SECONDS)
-                continue
-            if reason in {"venue_error", "malformed_payload", "malformed_order_event"}:
-                raise RuntimeError(f"segment ended because of {reason}")
+                if stop_requested.is_set():
+                    raise RuntimeError(
+                        "capture stopped without a healthy terminal checkpoint"
+                    )
+                try:
+                    await asyncio.wait_for(
+                        stop_requested.wait(), timeout=RECONNECT_DELAY_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    continue
+                raise RuntimeError(
+                    "capture stopped during reconnect without a terminal checkpoint"
+                )
+            raise RuntimeError(f"segment ended because of {reason}")
     except asyncio.CancelledError:
-        manifest["status"] = "completed"
+        manifest["status"] = "interrupted"
         manifest["ended_at"] = utc_now()
+        manifest["error"] = "capture was force-cancelled before checkpoint completion"
         write_manifest(manifest_path, manifest)
         raise
     except Exception as exc:
@@ -306,16 +586,28 @@ async def main() -> None:
         raise SystemExit("duration_seconds must be positive")
 
     run_directory = make_capture_directory()
-    task = asyncio.create_task(run_capture(run_directory))
+    stop_requested = asyncio.Event()
+    task = asyncio.create_task(run_capture(run_directory, stop_requested))
     loop = asyncio.get_running_loop()
+
+    def request_stop() -> None:
+        if stop_requested.is_set():
+            print("forcing capture cancellation", flush=True)
+            task.cancel()
+            return
+        print(
+            "graceful stop requested; fetching terminal checkpoint",
+            flush=True,
+        )
+        stop_requested.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         with contextlib.suppress(NotImplementedError):
-            loop.add_signal_handler(sig, task.cancel)
+            loop.add_signal_handler(sig, request_stop)
 
     timer = None
     if duration is not None:
-        timer = loop.call_later(duration, task.cancel)
+        timer = loop.call_later(duration, request_stop)
 
     try:
         await task
@@ -324,6 +616,9 @@ async def main() -> None:
     finally:
         if timer is not None:
             timer.cancel()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            with contextlib.suppress(NotImplementedError):
+                loop.remove_signal_handler(sig)
 
 
 if __name__ == "__main__":

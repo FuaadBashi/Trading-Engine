@@ -222,6 +222,15 @@ def validate_manifest(manifest_path: Path) -> int:
             print(problem)
         return 1
 
+    if manifest.get("format_version") == 2:
+        try:
+            from validate_joined_capture import validate_manifest as validate_joined_manifest
+        except ModuleNotFoundError:
+            from scripts.validate_joined_capture import (
+                validate_manifest as validate_joined_manifest,
+            )
+        return validate_joined_manifest(manifest_path)
+
     root = manifest_path.parent
     if manifest.get("format_version") != 1:
         problems.append(f"unsupported format_version {manifest.get('format_version')!r}")

@@ -266,7 +266,15 @@ def replay_payload(
             event = message.get("event", "<missing>")
             result.counts[event] += 1
             if event not in ORDER_EVENTS:
-                if event not in ("bts:subscription_succeeded", "bts:request_reconnect"):
+                # A format-v2 joined capture interleaves live_trades with the raw
+                # order stream. This audit intentionally reconstructs only the
+                # order book, so trades are retained as evidence for Replay but do
+                # not belong in this order-only reference calculation.
+                if event not in (
+                    "bts:subscription_succeeded",
+                    "bts:request_reconnect",
+                    "trade",
+                ):
                     result.errors.append(f"line {line_number}: unexpected event {event!r}")
                 continue
 
