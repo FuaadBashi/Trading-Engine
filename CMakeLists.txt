@@ -60,10 +60,10 @@ target_sources(te_core PRIVATE
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
     #
     # Slice 3
-    # src/engine/engine.cpp
-    # src/engine/portfolio.cpp
-    # src/feed/replay_feed.cpp
-    # src/venue/simulated_venue.cpp
+    src/engine/engine.cpp
+    src/engine/portfolio.cpp
+    src/feed/replay_feed.cpp
+    src/venue/simulated_venue.cpp
 )
 
 
