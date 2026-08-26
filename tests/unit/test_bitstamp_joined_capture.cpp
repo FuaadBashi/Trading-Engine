@@ -2,10 +2,12 @@
 
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <te/feed/bitstamp/joined_capture.hpp>
+#include <te/feed/bitstamp/replay.hpp>
 
 namespace {
 
@@ -74,6 +76,26 @@ void writeCommonCaptureFiles(const TempCaptureDirectory& capture) {
     writeTextFile(capture.path() / "manifest.json", kManifest);
     writeTextFile(capture.path() / "seed.snapshot", kSeed);
     writeTextFile(capture.path() / "checkpoint.snapshot", kCheckpoint);
+}
+
+void expectBookMatchesSnapshot(const te::OrderBook& book,
+                               const te::bitstamp::BookSnapshot& snapshot) {
+    std::map<te::Price, te::Qty> expectedBids;
+    std::map<te::Price, te::Qty> expectedAsks;
+
+    for (const te::bitstamp::SnapshotOrder& order : snapshot.orders) {
+        auto& expectedLevels = order.side == te::Side::buy ? expectedBids : expectedAsks;
+        expectedLevels[order.price].units += order.quantity.units;
+    }
+
+    for (const auto& [price, quantity] : expectedBids) {
+        EXPECT_EQ(book.qtyAt(te::Side::buy, price), quantity);
+    }
+    for (const auto& [price, quantity] : expectedAsks) {
+        EXPECT_EQ(book.qtyAt(te::Side::sell, price), quantity);
+    }
+
+    EXPECT_EQ(book.levelCount(), expectedBids.size() + expectedAsks.size());
 }
 
 TEST(BitstampJoinedCapture, MissingPayloadFileReturnsPayloadUnreadable) {
@@ -195,6 +217,48 @@ TEST(BitstampJoinedCapture, AppendsDecodedEventsToJcVectors) {
     EXPECT_EQ(result.valueIf()->jc_orderEvents.front().order_id, te::OrderId{2037493297635328ULL});
     EXPECT_EQ(result.valueIf()->jc_tradeEvents.front().buy_order_id,
               te::OrderId{2041200416022642ULL});
+}
+
+TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
+    const TempCaptureDirectory capture{"te_joined_capture_replays_to_checkpoint"};
+
+    constexpr std::string_view seed =
+        R"({"timestamp":"1","microtimestamp":"1000","bids":[["100.00","2.00000000","42"]],"asks":[]})";
+    constexpr std::string_view checkpoint =
+        R"({"timestamp":"2","microtimestamp":"2500","bids":[["100.00","1.50000000","42"]],"asks":[["101.00","1.00000000","77"]]})";
+    constexpr std::string_view orderPayload =
+        R"({"data":{"id_str":"77","order_type":1,"microtimestamp":"1500","price_str":"101.00","amount_str":"1.00000000"},"event":"order_created"})";
+    constexpr std::string_view tradePayload =
+        R"({"data":{"microtimestamp":"2000","buy_order_id":42,"sell_order_id":999,"amount_str":"0.50000000"},"event":"trade"})";
+
+    writeTextFile(capture.path() / "manifest.json", kManifest);
+    writeTextFile(capture.path() / "seed.snapshot", seed);
+    writeTextFile(capture.path() / "checkpoint.snapshot", checkpoint);
+    writeTextFile(capture.path() / "payload.jsonl",
+                  std::string{orderPayload} + "\n" + std::string{tradePayload} + "\n");
+    writeTextFile(capture.path() / "frames.jsonl", R"({"streamKind":"order"})"
+                                                   "\n"
+                                                   R"({"streamKind":"trade"})"
+                                                   "\n");
+
+    const auto loaded = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    ASSERT_TRUE(loaded.hasValue());
+    ASSERT_NE(loaded.valueIf(), nullptr);
+    const te::bitstamp::JoinedCapture& joinedCapture = *loaded.valueIf();
+
+    te::bitstamp::Replay replay;
+    const auto replayed =
+        replay.replay(joinedCapture.seed, joinedCapture.jc_orderEvents,
+                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint.microtimestamp);
+
+    ASSERT_TRUE(replayed.hasValue());
+    ASSERT_NE(replayed.valueIf(), nullptr);
+    EXPECT_EQ(replayed.valueIf()->stats.orderEventsApplied, 1U);
+    EXPECT_EQ(replayed.valueIf()->stats.tradeEventsRead, 1U);
+    EXPECT_EQ(replayed.valueIf()->stats.correctionsApplied, 1U);
+
+    replayed.valueIf()->book.validate();
+    expectBookMatchesSnapshot(replayed.valueIf()->book, joinedCapture.checkpoint);
 }
 
 }  // namespace

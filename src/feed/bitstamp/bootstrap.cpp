@@ -28,7 +28,6 @@ namespace te::bitstamp {
                 reconciler->observe(orderEvent);
             }
         }
-        // Replay that read order JSONL sequentially that takes the orderbook and the reconciler here and then use the info if timestamp is > T 
         orderBook.validate();
 
         return  Result<OrderBook, ApplyError>::success(std::move(orderBook));
