@@ -63,7 +63,7 @@ enum class DecoderError {
  * @note   order_type is read as a JSON integer, not a string, because Bitstamp sends no
  *         string form of it. 0 maps to Side::buy and 1 to Side::sell.
  */
-Result<OrderEvent, DecoderError> decodeEvent(std::string_view text, InstrumentSpec spec);
+Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSpec spec);
 
 /** @brief Length of a Bitstamp event_id, which is UUID-shaped and always 36 characters. */
 constexpr std::size_t kChainIdLength = 36;
@@ -101,7 +101,7 @@ struct ChainLink {
  *         bts:subscription_succeeded have none and yield DecoderError::missing_field. Callers
  *         should therefore only check continuity across order events.
  *
- * @note   Separate from decodeEvent so the event decoder's contract stays unchanged. The cost
+ * @note   Separate from decodeOrder so the order decoder's contract stays unchanged. The cost
  *         is a second parse of the same line, which is acceptable while capture is file-driven
  *         and correctness matters more than throughput.
  */

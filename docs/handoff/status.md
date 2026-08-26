@@ -19,7 +19,7 @@ Clean build, 166/166 CTest cases pass locally (GCC via the default toolchain; CI
 ### The Bitstamp adapter is namespaced and folder-scoped
 `include/te/feed/bitstamp/` and `src/feed/bitstamp/` hold everything venue-specific, all under
 `namespace te::bitstamp`, with the `Bitstamp` prefix dropped from identifiers since the namespace now
-carries that context: `EventClassifier`, `decodeEvent`, `decodeChain`, `decodeTrade`, `parseSnapshot`,
+carries that context: `EventClassifier`, `decodeOrder`, `decodeChain`, `decodeTrade`, `parseSnapshot`,
 `bootstrap`. Venue-neutral core (`OrderBook`, `OrderEvent`, `TradeEvent`, `TradeReconciler`, `Result`)
 stays untouched by this and lives directly under `te`. `VenueId::bitstamp` and prose references to the
 real venue in comments/ADRs were deliberately left alone — only identifier/file naming changed.

@@ -65,7 +65,7 @@ enum class SnapshotError {
  *
  * @param  text One complete JSON snapshot document, as fetched from
  *              `GET /api/v2/order_book/{market_symbol}/?group=2`.
- * @param  spec Supplies price/quantity decimal scales -- same convention as decodeEvent, not
+ * @param  spec Supplies price/quantity decimal scales -- same convention as decodeOrder, not
  *              read from the document itself.
  *
  * @return The parsed snapshot, or the reason parsing failed.

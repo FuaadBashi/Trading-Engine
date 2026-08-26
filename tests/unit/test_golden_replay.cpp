@@ -59,7 +59,7 @@ te::OrderBook replayFromSeedTo(const te::bitstamp::BookSnapshot& seed, const std
             continue;
         }
 
-        const auto decoded = te::bitstamp::decodeEvent(line, spec);
+        const auto decoded = te::bitstamp::decodeOrder(line, spec);
         if (!decoded.hasValue()) {
             continue;  // not_order_event (e.g. bts:subscription_succeeded), or malformed
         }

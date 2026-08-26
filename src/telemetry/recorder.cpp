@@ -25,7 +25,7 @@ Result<RecorderStats, RecorderError> runRecorder(std::istream& input, Sink& sink
             continue;
         }
 
-        const auto decoded = bitstamp::decodeEvent(line, spec);
+        const auto decoded = bitstamp::decodeOrder(line, spec);
 
         if (decoded.hasValue()) {
             // Chain ids exist only on order lifecycle messages, so this is checked here rather

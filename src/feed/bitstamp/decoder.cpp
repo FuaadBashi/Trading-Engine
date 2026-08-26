@@ -11,7 +11,7 @@
 
 namespace te::bitstamp {
 
-Result<OrderEvent, DecoderError> decodeEvent(std::string_view text, InstrumentSpec spec) {
+Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSpec spec) {
 
     OrderEvent orderEvent; 
     simdjson::ondemand::parser parser;
