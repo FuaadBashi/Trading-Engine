@@ -50,21 +50,8 @@ Result<BookSnapshot, JoinedCaptureError> loadSnapshot(const std::filesystem::pat
 
 }  // namespace
 
-Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
-    const std::filesystem::path& captureDirectory, InstrumentSpec spec) {
-    // 1. Read manifest. [x]
-    // 2. Find S0, S1, raw JSONL, and frame-index JSONL. [x]
-    // 3. Parse S0 and S1 using parseSnapshot. [x]
-    // 4. Open raw and frame files.[x]
-    // 5. Read them in pairs until both end.[x]
-    // 6. Reject if only one file has a next line.[x]
-    // 7. Parse frame JSON.[x]
-    // 8. Check streamKind.[x]
-    // 9. order → decodeOrder → append jc_orderEvents.[x]
-    // 10. trade → decodeTrade → append jc_tradeEvents.[x]
-    // 11. control → skip.[x]
-    // 12. Return the completed JoinedCapture.
-
+Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesystem::path& captureDirectory, InstrumentSpec spec) {
+    
     // If captureDirectory is data/raw/bitstamp-btcusd-20260822T000512Z,
     // manifestPath becomes
     // data/raw/bitstamp-btcusd-20260822T000512Z/manifest.json.
