@@ -163,7 +163,7 @@ TEST(BitstampJoinedCapture, AcceptsBothStreamsEndingTogether) {
     ASSERT_NE(result.valueIf(), nullptr);
     EXPECT_EQ(result.valueIf()->seed.microtimestamp, 1000U);
     EXPECT_EQ(result.valueIf()->checkpoint.microtimestamp, 2000U);
-    EXPECT_TRUE(result.valueIf()->jc_orderEvents.empty());
+    EXPECT_TRUE(result.valueIf()->jc_captureOrderEvents.empty());
     EXPECT_TRUE(result.valueIf()->jc_tradeEvents.empty());
 }
 
@@ -193,7 +193,7 @@ TEST(BitstampJoinedCapture, AcceptsValidFrameJson) {
 
     ASSERT_TRUE(result.hasValue());
     ASSERT_NE(result.valueIf(), nullptr);
-    EXPECT_TRUE(result.valueIf()->jc_orderEvents.empty());
+    EXPECT_TRUE(result.valueIf()->jc_captureOrderEvents.empty());
     EXPECT_TRUE(result.valueIf()->jc_tradeEvents.empty());
 }
 
@@ -212,9 +212,11 @@ TEST(BitstampJoinedCapture, AppendsDecodedEventsToJcVectors) {
 
     ASSERT_TRUE(result.hasValue());
     ASSERT_NE(result.valueIf(), nullptr);
-    ASSERT_EQ(result.valueIf()->jc_orderEvents.size(), 1U);
+    ASSERT_EQ(result.valueIf()->jc_captureOrderEvents.size(), 1U);
     ASSERT_EQ(result.valueIf()->jc_tradeEvents.size(), 1U);
-    EXPECT_EQ(result.valueIf()->jc_orderEvents.front().order_id, te::OrderId{2037493297635328ULL});
+    EXPECT_EQ(result.valueIf()->jc_captureOrderEvents.front().event.order_id,
+              te::OrderId{2037493297635328ULL});
+    EXPECT_EQ(result.valueIf()->jc_captureOrderEvents.front().amountTraded, te::Qty{});
     EXPECT_EQ(result.valueIf()->jc_tradeEvents.front().buy_order_id,
               te::OrderId{2041200416022642ULL});
 }
@@ -227,7 +229,7 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
     constexpr std::string_view checkpoint =
         R"({"timestamp":"2","microtimestamp":"2500","bids":[["100.00","1.50000000","42"]],"asks":[["101.00","1.00000000","77"]]})";
     constexpr std::string_view orderPayload =
-        R"({"data":{"id_str":"77","order_type":1,"microtimestamp":"1500","price_str":"101.00","amount_str":"1.00000000"},"event":"order_created"})";
+        R"({"data":{"id_str":"77","order_type":1,"microtimestamp":"1500","price_str":"101.00","amount_str":"1.00000000","amount_traded":"0.00000000"},"event":"order_created"})";
     constexpr std::string_view tradePayload =
         R"({"data":{"microtimestamp":"2000","buy_order_id":42,"sell_order_id":999,"amount_str":"0.50000000"},"event":"trade"})";
 
@@ -248,7 +250,7 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
 
     te::bitstamp::Replay replay;
     const auto replayed =
-        replay.replay(joinedCapture.seed, joinedCapture.jc_orderEvents,
+        replay.replay(joinedCapture.seed, joinedCapture.jc_captureOrderEvents,
                       joinedCapture.jc_tradeEvents, joinedCapture.checkpoint.microtimestamp);
 
     ASSERT_TRUE(replayed.hasValue());

@@ -136,9 +136,9 @@ Result<Qty, DecoderError> decodeFill(std::string_view text, InstrumentSpec spec)
     }
 
     Result<std::int64_t, ParseError> amount_traded = parseDecimal(amount_traded_str, spec.quantity_decimals);
-    if(!amount_traded.hasValue()){  
-        return Result<Qty, DecoderError>::failure(DecoderError::missing_field);
-    }   
+    if (!amount_traded.hasValue()) {
+        return Result<Qty, DecoderError>::failure(DecoderError::invalid_field);
+    }
     return Result<Qty, DecoderError>::success(Qty{ *amount_traded.valueIf() });
 
 };

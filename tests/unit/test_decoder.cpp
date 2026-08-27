@@ -26,3 +26,64 @@ TEST(BitstampDecoder, DecodesOrderDeletedEvent) {
     EXPECT_EQ(event->quantity, te::Qty{171371});
     EXPECT_EQ(event->venue_timestamp_us, 1786269861947000ULL);
 }
+
+TEST(BitstampDecoder, DecodesZeroAmountTraded) {
+    const te::InstrumentSpec btcUsd{
+        .venue_id = te::VenueId::bitstamp,
+        .instrument_id = te::InstrumentId::btc_usd,
+        .price_decimals = 2,
+        .quantity_decimals = 8,
+    };
+    constexpr std::string_view line = R"({"data":{"amount_traded":"0"}})";
+
+    const auto result = te::bitstamp::decodeFill(line, btcUsd);
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(*result.valueIf(), te::Qty{});
+}
+
+TEST(BitstampDecoder, DecodesNonzeroAmountTradedExactly) {
+    const te::InstrumentSpec btcUsd{
+        .venue_id = te::VenueId::bitstamp,
+        .instrument_id = te::InstrumentId::btc_usd,
+        .price_decimals = 2,
+        .quantity_decimals = 8,
+    };
+    constexpr std::string_view line = R"({"data":{"amount_traded":"0.12345678"}})";
+
+    const auto result = te::bitstamp::decodeFill(line, btcUsd);
+
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(*result.valueIf(), te::Qty{12345678});
+}
+
+TEST(BitstampDecoder, MissingAmountTradedIsAnError) {
+    const te::InstrumentSpec btcUsd{
+        .venue_id = te::VenueId::bitstamp,
+        .instrument_id = te::InstrumentId::btc_usd,
+        .price_decimals = 2,
+        .quantity_decimals = 8,
+    };
+
+    const auto result = te::bitstamp::decodeFill(R"({"data":{}})", btcUsd);
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::bitstamp::DecoderError::missing_field);
+}
+
+TEST(BitstampDecoder, InvalidAmountTradedIsAnInvalidField) {
+    const te::InstrumentSpec btcUsd{
+        .venue_id = te::VenueId::bitstamp,
+        .instrument_id = te::InstrumentId::btc_usd,
+        .price_decimals = 2,
+        .quantity_decimals = 8,
+    };
+
+    const auto result =
+        te::bitstamp::decodeFill(R"({"data":{"amount_traded":"not-a-number"}})", btcUsd);
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::bitstamp::DecoderError::invalid_field);
+}
