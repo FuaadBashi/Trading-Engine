@@ -1,7 +1,7 @@
 # ADR 0013: Merge ordering and fill double-counting in the replay controller
 
-- **Status:** proposed
-- **Date:** 2026-08-22
+- **Status:** accepted
+- **Date:** 2026-08-27
 - **Slice:** 2 (plan v4 Stage 2)
 
 ## Context
@@ -118,22 +118,80 @@ The per-event fill quantity reaches the reconciler through a **separate decode**
 `decodeChain` precedent, rather than as a new `OrderEvent` field. `OrderEvent`'s layout and Record v2
 are unchanged.
 
+## Correction to the first draft of this design
+
+The first version of the shortfall rule kept **one running credit per order**, with no timestamp.
+That is wrong, and the counter-example is worth recording because the flaw is not obvious.
+
+Take a trade-only fill (no order event ever arrives) followed by an ordinary paired fill later:
+
+```
+start                              book 10   credit  0
+trade-only fill of 6 at T1         book  4   credit -6      (correction fires, correctly)
+order_changed at T2, traded 1      book  3   credit -5
+matching trade of 1 at T2                    credit is negative, so a correction fires again
+```
+
+The correct book quantity is 3. The single running credit produces less, because a debt left over
+from T1 contaminated an unrelated fill at T2. The positive direction fails the same way: a credit
+of +6 whose trade never arrives silently swallows a later genuine fill of 1.
+
+The fix is to scope each credit to a **fill correlation key**:
+
+```
+(orderId, venueTimestampMicros)
+```
+
+Credits at different timestamps are isolated and can never consume each other. Within one timestamp
+the credit is a fungible pot, which is required: 10 orders in the reference capture carry more than
+one fill at the same microsecond.
+
+The capture supports this key directly: 144 of 146 `(orderId, timestamp)` buckets balance to exactly
+zero between the two streams, and **zero** fills have a matching trade at a *different* timestamp.
+The two that do not balance share timestamp `1787357166111000` and the same quantity — the two sides
+of one trade whose message fell outside the capture window.
+
 ## Consequences
 
-- Corrections become order-independent: whether the trade or its `order_changed` is processed first,
-  the resulting book quantity is the same. The tie-break remains as a determinism rule, not a
+Measured on `data/raw/bitstamp-btcusd-20260822T000512Z`, locked in by
+`BitstampJoinedCapture.RealCaptureReplaysToCheckpointWithNoResiduals`:
+
+| | Before | After |
+|---|---|---|
+| replay outcome | `unexpected_order_apply_failure` | completes |
+| `unknown_order_id` failures | 9 | **0** |
+| checkpoint level mismatches | n/a (aborted) | **0 of 4533** |
+| `redundantOrderRemovals` | — | 0 |
+| corrections generated | — | 0 |
+
+- Corrections are order-independent: whether the trade or its `order_changed` is processed first,
+  the resulting book quantity is the same. The tie-break is now a determinism rule, not a
   correctness dependency.
-- The nine `unknown_order_id` failures on the reference capture should reach zero without any
-  hand-listed exceptions. This is the mechanism the three hardcoded adjustments in
-  `test_golden_replay.cpp` were standing in for; those should be revisited once this lands.
-- Cost: the fill quantity must travel decoder → `JoinedCapture` → `Replay` → `TradeReconciler`.
-  `JoinedCapture` needs somewhere to hold it and `TradeReconciler::observe` needs to accept it.
-  This is real work and touches four components.
-- `Replay`'s `redundantOrderRemovals` tolerance stays, but should become rare rather than routine. If
-  it stays common after this change, the shortfall logic is not working and the counter is the
-  evidence.
-- The two fill-carrying order events (of 170) that do not match a trade on `(timestamp, amount)` are
-  unexplained. They should be traced before this ADR moves to accepted.
+- The replayed book reproduces the independent S1 snapshot exactly, with no hand-listed exceptions.
+  The three hardcoded adjustments in `test_golden_replay.cpp` are the older single-stream path and
+  should be revisited against this mechanism.
+- **This capture does not exercise the correction path.** `live_orders` reports every fill in these
+  60 seconds, so the credit covers all 82 trades and `correctionsGenerated` is 0. The zero-mismatch
+  result validates the loader, bootstrap, classifier, merge ordering and `OrderBook`; it says nothing
+  about corrections firing when they should. Only the unit tests cover that. A capture containing a
+  resting order consumed with no `order_deleted` is still wanted as evidence.
+- Cost, as predicted: the fill travels decoder → `JoinedCapture` → `Replay` → `TradeReconciler`,
+  touching four components. `decodeFill` is a separate decode following the `decodeChain` precedent,
+  so `OrderEvent`'s layout and Record v2 are unchanged.
+
+### The health counter had to be redefined
+
+The first counter, `ordersRemovedWithOpenFillBalance`, read **21** on a capture with zero residuals —
+so it was not measuring a fault. All 21 are orders whose fill-carrying `order_changed` shares a
+timestamp with its `order_deleted`. Because order events win exact ties, every order event at time T
+is processed before any trade at T, so the delete always erases the credit before the matching trade
+can clear it. That is structural and unavoidable under this tie-break.
+
+Renamed to `ordersRemovedWithUnmatchedFill` and restricted to credits from an **earlier** timestamp,
+where a trade genuinely never arrived while the order was live. It now reads **0**, alongside
+`staleFillsDiscarded` at **0**. Both are meaningful signals again: non-zero means one stream reported
+a fill the other never confirmed.
+
 - Revisit if: a capture shows a quantity decrease with `amount_traded == 0`; a venue other than
   Bitstamp is added whose feed does not report post-fill quantities; or gap/reseed handling (still
   unspecified, plan v4 §7) changes what the reconciler can assume across a discontinuity.

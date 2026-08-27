@@ -263,4 +263,52 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
     expectBookMatchesSnapshot(replayed.valueIf()->book, joinedCapture.checkpoint);
 }
 
+// The real-corpus gate: a full joined capture replayed from its own S0 seed must reproduce the
+// independently fetched S1 snapshot exactly, with no hand-listed exceptions. The synthetic test
+// above proves the wiring; only this one proves the merge, classifier and fill accounting against
+// 29k real events. Capture data is gitignored, so this skips rather than fails when absent.
+TEST(BitstampJoinedCapture, RealCaptureReplaysToCheckpointWithNoResiduals) {
+    const std::filesystem::path capture =
+        std::filesystem::path(TE_PROJECT_ROOT_DIR) / "data/raw/bitstamp-btcusd-20260822T000512Z";
+    if (!std::filesystem::exists(capture / "manifest.json")) {
+        GTEST_SKIP() << "joined capture not present: " << capture;
+    }
+
+    const auto loaded = te::bitstamp::loadJoinedCapture(capture, btcUsd());
+    ASSERT_TRUE(loaded.hasValue());
+    const te::bitstamp::JoinedCapture& joinedCapture = *loaded.valueIf();
+    EXPECT_EQ(joinedCapture.jc_captureOrderEvents.size(), 29404U);
+    EXPECT_EQ(joinedCapture.jc_tradeEvents.size(), 84U);
+
+    te::bitstamp::Replay replay;
+    const auto replayed =
+        replay.replay(joinedCapture.seed, joinedCapture.jc_captureOrderEvents,
+                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint.microtimestamp);
+
+    // Before ADR 0013 this returned unexpected_order_apply_failure: nine live orders were deleted
+    // by corrections that double-counted a fill live_orders had already reported.
+    ASSERT_TRUE(replayed.hasValue())
+        << "replay failed with error " << (replayed.errorIf() ? int(*replayed.errorIf()) : -1);
+    const te::bitstamp::ReplayResult& result = *replayed.valueIf();
+
+    // Every in-window order event survives classification on this capture.
+    EXPECT_EQ(result.stats.orderEventsRead, 25196U);
+    EXPECT_EQ(result.stats.orderEventsApplied, 25196U);
+    EXPECT_EQ(result.stats.tradeEventsRead, 82U);
+
+    // live_orders reports every fill here, so the credit covers all 82 trades and the reconciler
+    // has nothing to correct. This capture therefore does NOT exercise the correction path; the
+    // unit tests in test_trade_reconciler.cpp are what cover it.
+    EXPECT_EQ(result.stats.correctionsGenerated, 0U);
+    EXPECT_EQ(result.stats.correctionsApplied, 0U);
+    EXPECT_EQ(result.stats.redundantOrderRemovals, 0U);
+
+    // Both health counters clean: every reported fill was matched by a trade.
+    EXPECT_EQ(result.stats.reconciler.ordersRemovedWithUnmatchedFill, 0U);
+    EXPECT_EQ(result.stats.reconciler.staleFillsDiscarded, 0U);
+
+    result.book.validate();
+    expectBookMatchesSnapshot(result.book, joinedCapture.checkpoint);
+}
+
 }  // namespace

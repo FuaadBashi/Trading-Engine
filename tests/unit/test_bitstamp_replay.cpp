@@ -226,3 +226,55 @@ TEST(BitstampReplay, SameTimestampUncreditedTradeRemovesRestingOrder) {
     EXPECT_EQ(replayed.stats.correctionsGenerated, 1U);
     EXPECT_EQ(replayed.stats.correctionsApplied, 1U);
 }
+
+TEST(BitstampReplay, ExposesStaleFillDiscardedAtNewerTimestamp) {
+    te::bitstamp::Replay replay;
+    const auto result = replay.replay(
+        makeSnapshot({makeSnapshotOrder(42, 100, 100, te::Side::buy)}),
+        {
+            capture(makeModify(101, 42, 100, 90, te::Side::buy), 10),
+            capture(makeModify(102, 42, 100, 80, te::Side::buy), 10),
+        },
+        {}, 200);
+
+    ASSERT_TRUE(result.hasValue());
+    const auto& replayed = *result.valueIf();
+    EXPECT_EQ(replayed.book.qtyAt(te::Side::buy, te::Price{100}), te::Qty{80});
+    EXPECT_EQ(replayed.stats.reconciler.staleFillsDiscarded, 1U);
+}
+
+// A fill reported at 101 that no trade ever matched, with the order removed at a later 102.
+TEST(BitstampReplay, ExposesOrderRemovedWithUnmatchedFill) {
+    te::bitstamp::Replay replay;
+    const auto result = replay.replay(
+        makeSnapshot({makeSnapshotOrder(42, 100, 100, te::Side::buy)}),
+        {
+            capture(makeModify(101, 42, 100, 90, te::Side::buy), 10),
+            capture(makeRemove(102, 42, 100, 90, te::Side::buy)),
+        },
+        {}, 200);
+
+    ASSERT_TRUE(result.hasValue());
+    const auto& replayed = *result.valueIf();
+    EXPECT_EQ(replayed.book.levelCount(), 0U);
+    EXPECT_EQ(replayed.stats.reconciler.ordersRemovedWithUnmatchedFill, 1U);
+}
+
+// Same timestamp on the fill and the delete is structural, not a fault: order events win exact
+// ties, so the delete always runs before that microsecond's trades and the credit cannot clear.
+// This shape accounts for all 21 hits the counter reported before it excluded the case.
+TEST(BitstampReplay, SameTimestampDeleteAfterFillIsNotCountedAsUnmatched) {
+    te::bitstamp::Replay replay;
+    const auto result = replay.replay(
+        makeSnapshot({makeSnapshotOrder(42, 100, 100, te::Side::buy)}),
+        {
+            capture(makeModify(101, 42, 100, 90, te::Side::buy), 10),
+            capture(makeRemove(101, 42, 100, 90, te::Side::buy)),
+        },
+        {}, 200);
+
+    ASSERT_TRUE(result.hasValue());
+    const auto& replayed = *result.valueIf();
+    EXPECT_EQ(replayed.book.levelCount(), 0U);
+    EXPECT_EQ(replayed.stats.reconciler.ordersRemovedWithUnmatchedFill, 0U);
+}

@@ -162,6 +162,7 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
     }
 
     orderBook.validate();
+    replayStats.reconciler = tradeReconciler.stats();
     return Result<ReplayResult, ReplayError>::success(
         ReplayResult{.book = std::move(orderBook), .stats = replayStats});
 }

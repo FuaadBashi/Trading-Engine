@@ -41,8 +41,12 @@ void TradeReconciler::observe(const OrderEvent& event, Qty amountTraded) {
 
             const auto ledgerIt = fillLedger_.find(event.order_id);
             if (ledgerIt != fillLedger_.end()) {
-                if (ledgerIt->second.quantity.units > 0) {
-                    ++stats_.ordersRemovedWithOpenFillBalance;
+                // A credit at this same timestamp never had a chance to clear: order events win
+                // exact ties, so this delete ran before any trade at the same microsecond. Only an
+                // older unmatched credit means a trade genuinely never arrived.
+                if (ledgerIt->second.quantity.units > 0 &&
+                    ledgerIt->second.timestamp != event.venue_timestamp_us) {
+                    ++stats_.ordersRemovedWithUnmatchedFill;
                 }
                 fillLedger_.erase(ledgerIt);
             }

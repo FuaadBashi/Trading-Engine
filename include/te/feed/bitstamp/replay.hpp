@@ -9,6 +9,7 @@
 #include <te/feed/events.hpp>
 #include <te/feed/trade_event.hpp>
 #include <vector>
+#include "te/feed/trade_reconciler.hpp"
 
 namespace te::bitstamp {
 
@@ -19,6 +20,7 @@ struct ReplayStats {
     std::size_t correctionsGenerated{};
     std::size_t correctionsApplied{};
     std::size_t redundantOrderRemovals{};
+    ReconcilerStats reconciler {};
 };
 
 enum class ReplayError {
