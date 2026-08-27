@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 3. Strategy interface: onBookUpdate, onTrade, onFill, onTimer.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 3 TODO: test-first strategy callbacks for book, trade, fill, and timer events.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

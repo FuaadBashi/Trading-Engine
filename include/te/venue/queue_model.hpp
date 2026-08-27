@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 4. Queue-ahead estimate. The cancel-ambiguity assumption is chosen in ADR 0007.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 4 TODO: test-first queue-ahead estimate using ADR 0007's cancel assumption.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 5. WebSocket source. Sequence-gap detection lives here.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 5 TODO: test-first WebSocket source that owns sequence-gap detection.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

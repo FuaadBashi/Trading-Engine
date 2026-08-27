@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 3. Read-only handle passed to strategies. Must not outlive the callback.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 3 TODO: test-first read-only strategy handle that must not outlive its callback.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

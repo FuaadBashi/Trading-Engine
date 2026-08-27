@@ -1,24 +1,21 @@
 #pragma once
 
+#include <map>
 #include <optional>
-#include <type_traits>
+#include <te/book/price_level.hpp>
 #include <te/core/result.hpp>
 #include <te/feed/events.hpp>
-#include <map>
-#include <te/book/price_level.hpp>
+#include <type_traits>
 #include <unordered_map>
-
-// Slice 2. Reference book. Interface and failure contract per ADR 0012.
 
 namespace te {
 
-/** @brief What applying an event changed, for telemetry without exposing internal storage. */
+// Reports structural changes without exposing the book's containers.
 struct ApplyOutcome {
     bool createdLevel{};
     bool removedLevel{};
 };
 
-/** @brief Reason apply() could not accept an event. See ADR 0012 for the event-by-event rules. */
 enum class ApplyError {
     duplicate_order_id,
     unknown_order_id,
@@ -28,13 +25,15 @@ enum class ApplyError {
     level_quantity_overflow,
 };
 
-struct OrderLocator{
+// Non-owning index entry. The PriceLevel owns the order node; this stores its stable list handle.
+struct OrderLocator {
     Side side;
     Price price;
     OrderHandle order_pos;
 };
 
-
+// Sparse reference L3 book: ordered maps own levels and orderIndex_ gives direct ID lookup.
+// It is the correctness oracle; optimized books must reproduce its results (ADR 0007/0012).
 class OrderBook {
 public:
     OrderBook() = default;
@@ -47,22 +46,22 @@ public:
     OrderBook(OrderBook&&) = default;
     OrderBook& operator=(OrderBook&&) = default;
 
-    // Never silently ignores an event; see ADR 0012 for the add/modify/remove rules.
+    // Every rejected event has a reason; callers decide whether it means bad input or resync.
     Result<ApplyOutcome, ApplyError> apply(const OrderEvent& orderEvent);
+
+    // Debug assertions for index, aggregate, and best-price invariants.
     void validate() const;
 
-    // Empty side is absence, not a sentinel price 
+    // Empty side is absence, never a sentinel price.
     std::optional<Price> bestBid() const;
     std::optional<Price> bestAsk() const;
 
     // "No level" and "zero resting quantity" share the same meaning for this aggregate query.
     Qty qtyAt(Side side, Price price) const;
 
-    // Derived fresh from bids_/asks_ every call, never cached -- there's no expensive walk to
-    // avoid here (std::map::size() is already O(1)), so there's nothing worth caching.
     std::size_t levelCount() const { return bids_.size() + asks_.size(); }
 
-    private:
+private:
     std::map<Price, PriceLevel> bids_{};
     std::map<Price, PriceLevel> asks_{};
     std::unordered_map<OrderId, OrderLocator, OrderIdHash> orderIndex_{};

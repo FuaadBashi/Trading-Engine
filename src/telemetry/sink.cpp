@@ -1,5 +1,4 @@
 #include <te/telemetry/sink.hpp>
-
 #include <utility>
 
 namespace te {

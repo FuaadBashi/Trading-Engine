@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 3. Event loop and wiring. Deliberately boring.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 3 TODO: implement the deliberately simple event loop and wiring test-first.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

@@ -1,15 +1,16 @@
 #include <te/feed/bitstamp/trade_decoder.hpp>
 
-#include "te/core/text_to_int.hpp"
-#include "simdjson/padded_string.h"
-#include "simdjson/padded_string-inl.h"
-#include "simdjson/padded_string_view.h"
-#include "simdjson/padded_string_view-inl.h"
 #include "simdjson/ondemand.h"
+#include "simdjson/padded_string-inl.h"
+#include "simdjson/padded_string.h"
+#include "simdjson/padded_string_view-inl.h"
+#include "simdjson/padded_string_view.h"
+#include "te/core/text_to_int.hpp"
 
 namespace te::bitstamp {
 
 Result<TradeEvent, DecoderError> decodeTrade(std::string_view text, InstrumentSpec spec) {
+    // Trade price is irrelevant to ID/quantity reconciliation, so it is intentionally omitted.
     TradeEvent tradeEvent;
     simdjson::ondemand::parser parser;
     simdjson::padded_string buffer = simdjson::padded_string(text);

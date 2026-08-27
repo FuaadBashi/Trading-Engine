@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 3. ExecutionVenue interface: submit and cancel.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 3 TODO: test-first ExecutionVenue interface for submit and cancel.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

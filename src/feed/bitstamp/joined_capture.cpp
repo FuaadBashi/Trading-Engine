@@ -50,11 +50,8 @@ Result<BookSnapshot, JoinedCaptureError> loadSnapshot(const std::filesystem::pat
 
 }  // namespace
 
-Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesystem::path& captureDirectory, InstrumentSpec spec) {
-    
-    // If captureDirectory is data/raw/bitstamp-btcusd-20260822T000512Z,
-    // manifestPath becomes
-    // data/raw/bitstamp-btcusd-20260822T000512Z/manifest.json.
+Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
+    const std::filesystem::path& captureDirectory, InstrumentSpec spec) {
     const std::filesystem::path manifestPath = captureDirectory / "manifest.json";
     JoinedCapture joinedCapture;
 
@@ -74,7 +71,6 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesyste
     simdjson::ondemand::document doc;
     simdjson::error_code err = parser.iterate(buffer).get(doc);
     if (err) {
-        // couldn't even parse this as JSON at all
         return Result<JoinedCapture, JoinedCaptureError>::failure(
             JoinedCaptureError::manifest_malformed);
     }
@@ -83,7 +79,6 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesyste
 
     err = doc["segments"].get_array().get(segments);
     if (err) {
-        // "segments" missing or not an array
         return Result<JoinedCapture, JoinedCaptureError>::failure(
             JoinedCaptureError::manifest_missing_field);
     }
@@ -99,36 +94,32 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesyste
 
         err = segmentResult.get_object().get(segment);
         if (err) {
-            // array item is not { ... }
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::manifest_missing_field);
         }
         err = segment["payload"].get_string().get(payloadName);
         if (err) {
-            // no payload" field at all
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::manifest_missing_field);
         }
         err = segment["frame_index"].get_string().get(frameIndexName);
         if (err) {
-            // no payload" field at all
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::manifest_missing_field);
         }
 
         err = segment["snapshot"].get_string().get(snapshotName);
         if (err) {
-            // no payload" field at all
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::manifest_missing_field);
         }
 
         err = segment["checkpoint"].get_string().get(checkpointName);
         if (err) {
-            // no payload" field at all
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::manifest_missing_field);
         }
+        // This first implementation consumes one segment; multi-segment replay comes later.
         foundSegment = true;
         break;
     }
@@ -137,6 +128,8 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesyste
             JoinedCaptureError::manifest_missing_segment);
     }
 
+    // simdjson string_views borrow manifestText. Copy them into owning paths before that buffer
+    // leaves this function.
     const std::filesystem::path payloadPath =
         captureDirectory / std::filesystem::path{std::string{payloadName}};
     const std::filesystem::path frameIndexPath =
@@ -180,6 +173,7 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesyste
     std::string frameIndexLine;
 
     while (true) {
+        // The files form a positional join: payload line N is described by frame line N.
         const bool hasPayloadLine = static_cast<bool>(std::getline(payloadInput, payloadLine));
 
         const bool hasFrameIndexLine =
@@ -213,6 +207,7 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesyste
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::frame_malformed);
         }
+        // The frame index selects the decoder; the raw payload line carries the actual event.
         if (streamKind == "order") {
             const auto decodedOrder = decodeOrder(payloadLine, spec);
             if (!decodedOrder.hasValue()) {
@@ -228,7 +223,7 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(const std::filesyste
             }
             joinedCapture.jc_tradeEvents.push_back(*decodedTrade.valueIf());
         } else if (streamKind == "control") {
-            // Subscription confirmations: skip.
+            // Subscription confirmations carry no book state.
         } else {
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::unknown_stream_kind);

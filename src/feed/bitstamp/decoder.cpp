@@ -1,133 +1,113 @@
+#include <algorithm>
 #include <te/feed/bitstamp/decoder.hpp>
 
-#include <algorithm>
-
-#include "te/core/text_to_int.hpp"
-#include "simdjson/padded_string.h"
-#include "simdjson/padded_string-inl.h"
-#include "simdjson/padded_string_view.h"
-#include "simdjson/padded_string_view-inl.h"
 #include "simdjson/ondemand.h"
+#include "simdjson/padded_string-inl.h"
+#include "simdjson/padded_string.h"
+#include "simdjson/padded_string_view-inl.h"
+#include "simdjson/padded_string_view.h"
+#include "te/core/text_to_int.hpp"
 
 namespace te::bitstamp {
 
 Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSpec spec) {
-
-    OrderEvent orderEvent; 
+    OrderEvent orderEvent;
     simdjson::ondemand::parser parser;
     simdjson::padded_string buffer = simdjson::padded_string(text);
 
     simdjson::ondemand::document doc;
     simdjson::error_code err = parser.iterate(buffer).get(doc);
     if (err) {
-        // couldn't even parse this as JSON at all
-        return Result<OrderEvent, DecoderError>::failure(DecoderError::malformed_json);;
+        return Result<OrderEvent, DecoderError>::failure(DecoderError::malformed_json);
+        ;
     }
-// EVENT
+
     std::string_view event;
     err = doc["event"].get_string().get(event);
     if (err) {
-        // no "event" field at all
         return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
     }
 
     if (event == "order_created") {
         orderEvent.kind = EventKind::add;
-     
+
     } else if (event == "order_changed") {
         orderEvent.kind = EventKind::modify;
-    
-    }else if (event == "order_deleted") {
+
+    } else if (event == "order_deleted") {
         orderEvent.kind = EventKind::remove;
-    
+
     } else {
-        // valid JSON, just not the kind of message we care about
         return Result<OrderEvent, DecoderError>::failure(DecoderError::not_order_event);
     }
 
-// ID
     std::string_view id_str;
     err = doc["data"]["id_str"].get_string().get(id_str);
     if (err) {
-        // no "id_str" field at all
         return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
     } else {
-        // Named local, not parseInteger(...).valueIf() directly: the latter takes the address
-        // of a temporary Result destroyed at that semicolon, leaving decoded_id dangling. The
-        // three parses below already do this correctly; this one did not.
+        // Keep Result alive while using valueIf(); calling it on a temporary would dangle.
+        // ADR 0005 also requires a future cross-check against the numeric "id" field.
         const Result<uint64_t, ParseError> id_result = parseInteger(id_str);
         const uint64_t* decoded_id = id_result.valueIf();
-        if (decoded_id == nullptr){
+        if (decoded_id == nullptr) {
             return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         } else {
             orderEvent.order_id = OrderId{*decoded_id};
         }
     }
-    // TIME
     std::string_view str_time;
     err = doc["data"]["microtimestamp"].get_string().get(str_time);
     if (err) {
-        // no "time" field at all
         return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
-    } else { 
+    } else {
         Result<uint64_t, ParseError> result = parseInteger(str_time);
         const uint64_t* decoded_time = result.valueIf();
-        if (decoded_time == nullptr){
+        if (decoded_time == nullptr) {
             return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         } else {
             orderEvent.venue_timestamp_us = *decoded_time;
-        } 
+        }
     }
 
-// SIDE
     std::uint64_t side_code;
     err = doc["data"]["order_type"].get_uint64().get(side_code);
     if (err) {
-        // no side field at all
         return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
-    } else { 
+    } else {
         if (side_code == 0) {
             orderEvent.side = Side::buy;
-     
+
         } else if (side_code == 1) {
             orderEvent.side = Side::sell;
         } else {
-            // valid JSON, just not the kind of message we care about
             return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         }
     }
 
-
-// PRICE
-std::string_view str_price;
-err = doc["data"]["price_str"].get_string().get(str_price);
-  if (err) {
-        // no price field at all
+    std::string_view str_price;
+    err = doc["data"]["price_str"].get_string().get(str_price);
+    if (err) {
         return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
-    } else { 
-
+    } else {
         Result<int64_t, ParseError> result = parseDecimal(str_price, spec.price_decimals);
         const int64_t* decoded_price = result.valueIf();
 
-        if(decoded_price != nullptr){
+        if (decoded_price != nullptr) {
             orderEvent.price = Price{*decoded_price};
         } else {
             return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
         }
     }
 
-// QTY
-
-std::string_view str_qty;
-err = doc["data"]["amount_str"].get_string().get(str_qty);
-  if (err) {
-        // no price field at all
+    std::string_view str_qty;
+    err = doc["data"]["amount_str"].get_string().get(str_qty);
+    if (err) {
         return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
-    } else { 
-
+    } else {
         Result<int64_t, ParseError> result = parseDecimal(str_qty, spec.quantity_decimals);
-        const int64_t* decoded_qty= result.valueIf();
-        if(decoded_qty != nullptr){
+        const int64_t* decoded_qty = result.valueIf();
+        if (decoded_qty != nullptr) {
             orderEvent.quantity = Qty{*decoded_qty};
         } else {
             return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
@@ -135,10 +115,7 @@ err = doc["data"]["amount_str"].get_string().get(str_qty);
     }
 
     return Result<OrderEvent, DecoderError>::success(orderEvent);
-
 }
-
-
 
 Result<ChainLink, DecoderError> decodeChain(std::string_view text) {
     simdjson::ondemand::parser parser;

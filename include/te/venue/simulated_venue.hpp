@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 3. Fill ladder L0 to L4 lives here and nowhere else.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 3 TODO: test-first simulated venue that exclusively owns fill levels L0-L4.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

@@ -2,20 +2,14 @@
 
 #include <cstdint>
 #include <string_view>
-#include <vector>
-
 #include <te/core/instrument.hpp>
 #include <te/core/result.hpp>
 #include <te/core/types.hpp>
+#include <vector>
 
 namespace te::bitstamp {
 
-/**
- * @brief  One resting order read from a REST group=2 snapshot row.
- *
- * @note   No EventKind: this is starting state, not a live add/modify/remove message. It has no
- *         observed arrival order relative to other orders already in the snapshot.
- */
+// Starting state, not a live event; therefore it has no EventKind.
 struct SnapshotOrder {
     OrderId order_id{};
     Price price{};
@@ -23,32 +17,15 @@ struct SnapshotOrder {
     Side side{};
 };
 
-/**
- * @brief  A parsed group=2 snapshot: every resting order at one point in time.
- *
- * @note   Row order within bids/asks is preserved (deterministic replay), but Bitstamp's public
- *         API does not document that same-price rows are returned in matching-engine FIFO order.
- *         Treat same-price ordering among snapshot orders as unproven; only orders observed
- *         joining live, after this snapshot, have known arrival order. See ADR 0007/0011.
- */
+// Complete group=2 L3 state. Row order is preserved for determinism, but snapshot FIFO priority
+// is unproven; only later live arrivals have observed ordering (ADR 0007).
 struct BookSnapshot {
     std::uint64_t microtimestamp{};
     std::vector<SnapshotOrder> orders;
 };
 
-/**
- * @brief  Reason a snapshot document could not be parsed into a BookSnapshot.
- */
 enum class SnapshotError {
-    /**
-     * @brief  The document could not be opened as JSON at all.
-     *
-     * @note   Narrower than it sounds. simdjson On Demand does not validate a whole document up
-     *         front, so in practice only empty input fails this early; other malformed text is
-     *         rejected later, at the first field it cannot supply (usually
-     *         missing_microtimestamp). Every malformed input is still rejected -- only the
-     *         reported reason is less specific than the name suggests.
-     */
+    // On Demand validates lazily; later malformed text may surface as a missing/invalid field.
     malformed_json,
     missing_microtimestamp,
     missing_bids,
@@ -60,19 +37,8 @@ enum class SnapshotError {
     duplicate_order_id,
 };
 
-/**
- * @brief  Parses one Bitstamp group=2 snapshot document into a BookSnapshot.
- *
- * @param  text One complete JSON snapshot document, as fetched from
- *              `GET /api/v2/order_book/{market_symbol}/?group=2`.
- * @param  spec Supplies price/quantity decimal scales -- same convention as decodeOrder, not
- *              read from the document itself.
- *
- * @return The parsed snapshot, or the reason parsing failed.
- *
- * @note   A duplicate order_id across bids/asks is rejected outright rather than resolved by the
- *         parser -- the caller must not have to guess which copy is real.
- */
+// Parses one complete group=2 document. Duplicate IDs are rejected across both sides rather
+// than guessed away, because the snapshot is the replay's trusted starting state.
 Result<BookSnapshot, SnapshotError> parseSnapshot(std::string_view text, InstrumentSpec spec);
 
 }  // namespace te::bitstamp

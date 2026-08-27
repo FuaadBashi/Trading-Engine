@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 4. Sampled latency distribution, fitted from your own measurements.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 4 TODO: test-first sampled latency distribution fitted from measured data.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

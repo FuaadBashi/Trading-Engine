@@ -1,8 +1,7 @@
-// Slice 5. Same strategy, live feed and live venue. Same binary.
-// If this needs a code change to the strategy, the abstraction failed.
-// TODO(fuaad): write this yourself.
+// Slice 5: same strategy with a live feed/venue; implement test-first without changing strategy.
 
 int main(int argc, char** argv) {
-    (void)argc; (void)argv;
+    (void)argc;
+    (void)argv;
     return 0;
 }

@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 2. Nodes embed their own prev/next. FIFO per price level.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 2 TODO: test-first intrusive FIFO whose nodes embed their own links.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

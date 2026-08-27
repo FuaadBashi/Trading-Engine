@@ -1,9 +1,7 @@
-#include <te/telemetry/recorder.hpp>
-
 #include <string>
-
 #include <te/feed/bitstamp/decoder.hpp>
 #include <te/telemetry/record.hpp>
+#include <te/telemetry/recorder.hpp>
 
 namespace te {
 

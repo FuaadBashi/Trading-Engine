@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
-
 #include <te/core/instrument.hpp>
 #include <te/core/time.hpp>
 #include <te/telemetry/recorder.hpp>
@@ -24,8 +23,7 @@ int main(int argc, char** argv) {
     // concatenate two runs into one file that looks like a single continuous session. Refuse
     // instead: the caller can delete or rename deliberately, but must not do it by accident.
     if (std::filesystem::exists(outputPath)) {
-        std::fprintf(stderr, "output already exists, refusing to append: %s\n",
-                     outputPath.c_str());
+        std::fprintf(stderr, "output already exists, refusing to append: %s\n", outputPath.c_str());
         return 1;
     }
 

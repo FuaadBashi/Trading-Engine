@@ -1,11 +1,9 @@
-#include <te/feed/bitstamp/replay.hpp>
-
-#include <unordered_map>
-#include <utility>
-
 #include <te/feed/bitstamp/bootstrap.hpp>
 #include <te/feed/bitstamp/classifier.hpp>
+#include <te/feed/bitstamp/replay.hpp>
 #include <te/feed/trade_reconciler.hpp>
+#include <unordered_map>
+#include <utility>
 
 namespace te::bitstamp {
 namespace {
@@ -31,6 +29,8 @@ bool processOrder(OrderBook& orderBook, TradeReconciler& tradeReconciler,
 
     const auto result = orderBook.apply(order);
     if (!result.hasValue()) {
+        // Tolerate only a later raw remove for an order this replay can prove a trade correction
+        // already removed. Other unknown removes and every failed modify remain real errors.
         const auto correction = correctionRemovals.find(order.order_id);
         if (order.kind == EventKind::remove && result.errorIf() != nullptr &&
             *result.errorIf() == ApplyError::unknown_order_id &&
@@ -42,15 +42,16 @@ bool processOrder(OrderBook& orderBook, TradeReconciler& tradeReconciler,
         return false;
     }
     if (order.kind == EventKind::add) {
+        // Order IDs may be reused; a new lifecycle invalidates any old removal tombstone.
         correctionRemovals.erase(order.order_id);
     }
+    // Observe only successfully applied raw events so the shadow matches the real book.
     tradeReconciler.observe(order);
     ++replayStats.orderEventsApplied;
     return true;
 }
 
-bool processTrade(OrderBook& orderBook, TradeReconciler& tradeReconciler,
-                  ReplayStats& replayStats,
+bool processTrade(OrderBook& orderBook, TradeReconciler& tradeReconciler, ReplayStats& replayStats,
                   std::unordered_map<OrderId, Side, OrderIdHash>& correctionRemovals,
                   const TradeEvent& trade) {
     ++replayStats.tradeEventsRead;
@@ -65,6 +66,7 @@ bool processTrade(OrderBook& orderBook, TradeReconciler& tradeReconciler,
         if (correction.kind == EventKind::remove) {
             correctionRemovals.insert_or_assign(correction.order_id, correction.side);
         }
+        // reconcile() already updates its shadow; observing this correction would apply it twice.
         ++replayStats.correctionsApplied;
     }
     return true;
@@ -72,14 +74,18 @@ bool processTrade(OrderBook& orderBook, TradeReconciler& tradeReconciler,
 
 }  // namespace
 
-Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed, const std::vector<OrderEvent>& orderEvents,
-                                                    const std::vector<TradeEvent>& tradeEvents, std::uint64_t cutoffMicros) 
-{
+Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
+                                                 const std::vector<OrderEvent>& orderEvents,
+                                                 const std::vector<TradeEvent>& tradeEvents,
+                                                 std::uint64_t cutoffMicros) {
+    // The two-pointer merge is valid only when each input is ordered independently.
     if (!isTimeOrdered(orderEvents)) {
-        return Result<ReplayResult, ReplayError>::failure(ReplayError::order_input_not_time_ordered);
+        return Result<ReplayResult, ReplayError>::failure(
+            ReplayError::order_input_not_time_ordered);
     }
     if (!isTimeOrdered(tradeEvents)) {
-        return Result<ReplayResult, ReplayError>::failure(ReplayError::trade_input_not_time_ordered);
+        return Result<ReplayResult, ReplayError>::failure(
+            ReplayError::trade_input_not_time_ordered);
     }
 
     const std::uint64_t seedTimestamp = seed.microtimestamp;
@@ -96,6 +102,8 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed, const std::v
     std::size_t orderPtr{};
     std::size_t tradePtr{};
 
+    // Pre-seed orders still train the stateful classifier (notably price-zero lifecycles), but
+    // never touch the seeded book. Pre-seed trades are already represented by the snapshot.
     while (orderPtr < orderEvents.size() &&
            orderEvents.at(orderPtr).venue_timestamp_us <= seedTimestamp) {
         classifier.classify(orderEvents.at(orderPtr));
@@ -114,6 +122,8 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed, const std::v
         return tradePtr < tradeEvents.size() &&
                tradeEvents.at(tradePtr).venue_timestamp_us <= cutoffMicros;
     };
+    // Merge by venue time until the cutoff. Exact timestamp ties deliberately process orders
+    // first so a newly resting order is visible to a trade at the same timestamp.
     while (orderInWindow() || tradeInWindow()) {
         if (!orderInWindow()) {
             auto result = processTrade(orderBook, tradeReconciler, replayStats, correctionRemovals,
@@ -123,7 +133,8 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed, const std::v
                     ReplayError::unexpected_correction_apply_failure);
             }
             ++tradePtr;
-        } else if (!tradeInWindow() || orderEvents.at(orderPtr).venue_timestamp_us <= tradeEvents.at(tradePtr).venue_timestamp_us) {
+        } else if (!tradeInWindow() || orderEvents.at(orderPtr).venue_timestamp_us <=
+                                           tradeEvents.at(tradePtr).venue_timestamp_us) {
             auto result = processOrder(orderBook, tradeReconciler, classifier, replayStats,
                                        correctionRemovals, orderEvents.at(orderPtr));
             if (!result) {

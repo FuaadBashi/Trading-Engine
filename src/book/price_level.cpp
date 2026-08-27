@@ -1,6 +1,6 @@
-#include <te/book/price_level.hpp>
-#include <limits>
 #include <cassert>
+#include <limits>
+#include <te/book/price_level.hpp>
 
 namespace te {
 
@@ -33,6 +33,7 @@ bool PriceLevel::changeQty(OrderHandle orderHandle, Qty newQty) {
     }
 
     const std::int64_t withoutOld = total_quantity_.units - orderHandle->qty.units;
+    // Compute the candidate total before mutating either the aggregate or the order node.
     if (withoutOld > std::numeric_limits<std::int64_t>::max() - newQty.units) {
         return false;
     }
@@ -40,11 +41,8 @@ bool PriceLevel::changeQty(OrderHandle orderHandle, Qty newQty) {
     total_quantity_.units = withoutOld + newQty.units;
     orderHandle->qty = newQty;
     return true;
-
 }
 
-bool PriceLevel::isEmpty() const {
-    return restingOrders_.empty();
-}
+bool PriceLevel::isEmpty() const { return restingOrders_.empty(); }
 
 }  // namespace te

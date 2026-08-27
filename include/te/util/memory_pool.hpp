@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 2. Fixed-block allocator. No heap traffic after startup.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 2 TODO: test-first fixed-block allocator with no heap traffic after startup.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

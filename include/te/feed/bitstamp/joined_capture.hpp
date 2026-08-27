@@ -11,17 +11,13 @@
 namespace te::bitstamp {
 
 enum class JoinedCaptureError {
-    // Raw payload has a line but the frame index ended.
     frame_index_ended_early,
-
-    // Frame index has a line but the raw payload ended.
     payload_ended_early,
 
     payload_unreadable,
     frame_index_unreadable,
     frame_malformed,
 
-    // The frame is valid JSON but streamKind is unsupported.
     unknown_stream_kind,
 
     manifest_unreadable,
@@ -39,14 +35,18 @@ enum class JoinedCaptureError {
 };
 
 struct JoinedCapture {
+    // S0 seeds replay; the later independent S1 checkpoint is its correctness oracle.
     BookSnapshot seed;
     BookSnapshot checkpoint;
 
-    
+    // Payload/frame rows are joined and decoded; control frames are deliberately omitted.
     std::vector<OrderEvent> jc_orderEvents;
     std::vector<TradeEvent> jc_tradeEvents;
 };
 
+// Loads the first manifest segment and requires payload/frame-index files to end together.
+// It decodes files but does not verify hashes or chains; validate_joined_capture.py does that.
+// Current limitation: captureOrdinal and order amount_traded are not preserved yet (ADR 0013).
 Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
     const std::filesystem::path& captureDirectory, InstrumentSpec spec);
 

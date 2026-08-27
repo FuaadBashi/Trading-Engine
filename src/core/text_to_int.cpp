@@ -85,7 +85,7 @@ te::Result<std::int64_t, te::ParseError> parseDecimal(std::string_view text, std
     if (parsed_text_before_decimal > maxWholeAllowed) {
         return te::Result<std::int64_t, te::ParseError>::failure(te::ParseError::overflow);
     }
-    int64_t scaledWhole = parsed_text_before_decimal * multiplier;  
+    int64_t scaledWhole = parsed_text_before_decimal * multiplier;
 
     if (scaledWhole > INT64_MAX - parsed_text_after_decimal) {
         return te::Result<std::int64_t, te::ParseError>::failure(te::ParseError::overflow);
@@ -95,24 +95,24 @@ te::Result<std::int64_t, te::ParseError> parseDecimal(std::string_view text, std
                                                              parsed_text_after_decimal);
 };
 
-
-te::Result<std::uint64_t, ParseError> parseInteger(std::string_view id_str){
-
-    uint64_t parsed_int {0};
+te::Result<std::uint64_t, ParseError> parseInteger(std::string_view id_str) {
+    uint64_t parsed_int{0};
     uint64_t maxWholeAllowed = UINT64_MAX / 10;
 
     if (id_str.size() == 0) {
         return te::Result<std::uint64_t, te::ParseError>::failure(te::ParseError::empty_input);
     }
     for (std::size_t i = 0; i < id_str.size(); ++i) {
-         if (id_str[i] == '-') {
-            return Result<std::uint64_t, te::ParseError>::failure(te::ParseError::negative_not_allowed);
+        if (id_str[i] == '-') {
+            return Result<std::uint64_t, te::ParseError>::failure(
+                te::ParseError::negative_not_allowed);
         }
-        if (parsed_int > maxWholeAllowed){
+        if (parsed_int > maxWholeAllowed) {
             return Result<std::uint64_t, te::ParseError>::failure(te::ParseError::overflow);
         }
-        if (id_str[i] < '0' || id_str[i] > '9'){
-            return Result<std::uint64_t, te::ParseError>::failure(te::ParseError::invalid_character);
+        if (id_str[i] < '0' || id_str[i] > '9') {
+            return Result<std::uint64_t, te::ParseError>::failure(
+                te::ParseError::invalid_character);
         }
         parsed_int *= 10;
         uint64_t digit = static_cast<uint64_t>(id_str[i] - '0');

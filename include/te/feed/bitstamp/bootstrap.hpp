@@ -12,9 +12,10 @@ class TradeReconciler;
 
 namespace bitstamp {
 
-// reconciler, if non-null, observes every seeded order so a pre-existing resting order
-// (present only in the snapshot, never announced by live_orders) is still known to it.
-Result<OrderBook, ApplyError> bootstrap(BookSnapshot parseText, TradeReconciler* reconciler = nullptr);
+// Builds a fresh book from snapshot state. An optional reconciler observes each successful add,
+// otherwise snapshot-only orders could never be corrected by later trades.
+Result<OrderBook, ApplyError> bootstrap(BookSnapshot snapshot,
+                                        TradeReconciler* reconciler = nullptr);
 
 }  // namespace bitstamp
 }  // namespace te

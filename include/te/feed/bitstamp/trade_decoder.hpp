@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string_view>
-
 #include <te/core/instrument.hpp>
 #include <te/core/result.hpp>
 #include <te/feed/bitstamp/decoder.hpp>  // reuses DecoderError
@@ -9,7 +8,7 @@
 
 namespace te::bitstamp {
 
-/** @brief Decodes one Bitstamp live_trades WebSocket payload into a TradeEvent. */
+// Reads amount_str exactly; buy/sell order IDs are JSON integers in this channel.
 Result<TradeEvent, DecoderError> decodeTrade(std::string_view text, InstrumentSpec spec);
 
 }  // namespace te::bitstamp

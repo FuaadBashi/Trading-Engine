@@ -1,8 +1,5 @@
 #pragma once
 
-// Slice 5. Live orders. Client order IDs, order state machine, rejects.
-// TODO(fuaad): write this yourself. Declarations first, then the test, then the body.
+// Slice 5 TODO: test-first live orders, client IDs, state transitions, and rejects.
 
-namespace te {
-
-}  // namespace te
+namespace te {}  // namespace te

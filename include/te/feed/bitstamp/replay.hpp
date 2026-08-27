@@ -2,13 +2,12 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
-
 #include <te/book/order_book.hpp>
 #include <te/core/result.hpp>
 #include <te/feed/bitstamp/snapshot.hpp>
 #include <te/feed/events.hpp>
 #include <te/feed/trade_event.hpp>
+#include <vector>
 
 namespace te::bitstamp {
 
@@ -36,11 +35,12 @@ struct ReplayResult {
 
 class Replay {
 public:
-    // Events at or before the seed timestamp are already represented by the snapshot and are
-    // skipped. Events later than cutoffMicros are not replayed. Equal order/trade timestamps are
-    // processed order first as the current provisional replay policy.
-    Result<ReplayResult, ReplayError> replay( BookSnapshot seed, const std::vector<OrderEvent>& orderEvents, 
-                                                const std::vector<TradeEvent>& tradeEvents, std::uint64_t cutoffMicros);
+    // Bootstraps internally, merges two individually time-ordered streams, and applies only
+    // seedTimestamp < eventTimestamp <= cutoff. Exact ties process the order first.
+    Result<ReplayResult, ReplayError> replay(BookSnapshot seed,
+                                             const std::vector<OrderEvent>& orderEvents,
+                                             const std::vector<TradeEvent>& tradeEvents,
+                                             std::uint64_t cutoffMicros);
 };
 
 }  // namespace te::bitstamp
