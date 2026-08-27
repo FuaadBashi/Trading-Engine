@@ -117,12 +117,21 @@ TEST(GoldenReplay, ReplayedBookMatchesIndependentVenueSnapshot) {
     // capture, yet absent from the target snapshot. Confirmed independently (a separate Python
     // replay finds the same three ids) and confirmed exhaustively (present across the *entire*
     // capture window, not just up to this cutoff -- so this is not "the delete arrives later").
-    // Most likely explanation: each was fully filled rather than cancelled, and live_orders does
-    // not emit a delete for a fill the way it does for a cancel -- that evidence lives only on
-    // live_trades, which this project does not yet capture. See docs task tracked as "Investigate
-    // order_subtype with joined order/trade data". Named explicitly, at exact prices verified to
-    // collide with nothing else in the target snapshot, so a *different*, unexplained discrepancy
-    // still fails this test rather than being silently absorbed by a bare tolerance.
+    //
+    // The hypothesis is now settled: each was fully filled rather than cancelled, and live_orders
+    // emits no delete for a fill. This is the case TradeReconciler exists for, and ADR 0013
+    // specifies how corrections for it are applied. These three cannot be resolved here, because
+    // this capture is order-only -- it has no live_trades stream, and the window is historical, so
+    // one cannot be captured after the fact. They are a permanent property of this fixture, not a
+    // gap awaiting a fix.
+    //
+    // This test therefore remains the legacy single-stream gate. The current correctness gate is
+    // BitstampJoinedCapture.RealCaptureReplaysToCheckpointWithNoResiduals, which replays a joined
+    // order+trade capture and requires zero residuals with no exceptions at all.
+    //
+    // Named explicitly, at exact prices verified to collide with nothing else in the target
+    // snapshot, so a *different*, unexplained discrepancy still fails this test rather than being
+    // silently absorbed by a bare tolerance.
     expectedAsks[te::Price{6902200}].units += 5000000;   // id 2041192224071690, 0.05 BTC
     expectedBids[te::Price{6210051}].units += 164369;    // id 2041192226299912, 0.00164369 BTC
     expectedAsks[te::Price{6900772}].units += 61000000;  // id 2041192226377736, 0.61 BTC

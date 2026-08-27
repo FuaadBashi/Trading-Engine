@@ -1,158 +1,161 @@
 # Status handoff
 
-Written for whichever Claude session picks this project up next. Built by reading the actual repo
-state at `HEAD` (`bdbb539`, 2026-08-22) plus the design conversation that led to it — not from memory
-of the chat alone. Treat `docs/project-plan-v4.md` as the authoritative long-range plan; this file is
-the shorter "what's actually true right now" companion to it, since v4's own baseline table
-(section 2) already predates the work described below and hasn't been refreshed.
+Written for whichever Claude session picks this project up next. Built by reading the repo at `HEAD`
+(`9cbefca`, 2026-08-27) and running the tests, not from memory of any conversation.
 
-Verify before trusting: re-run the build/test commands at the bottom before relying on anything here
-as still current.
+`docs/project-plan-v4.md` is the authoritative long-range plan. This file is the shorter "what is
+actually true right now" companion, because v4's own baseline table (§2) predates most of the work
+below.
 
-## Build state right now
+Verify before trusting: re-run the commands at the bottom.
 
-Clean build, 166/166 CTest cases pass locally (GCC via the default toolchain; CI's dual GCC/Clang
-+ ASan/UBSan matrix not re-verified in this pass — see `Runtime checking` in v4 §2).
+## Build state
 
-## What's actually done
+Clean build from scratch, **189/189 CTest cases pass** (Apple Clang, default toolchain). The CI
+dual GCC/Clang + ASan/UBSan matrix has not been re-verified in this pass.
 
-### The Bitstamp adapter is namespaced and folder-scoped
-`include/te/feed/bitstamp/` and `src/feed/bitstamp/` hold everything venue-specific, all under
-`namespace te::bitstamp`, with the `Bitstamp` prefix dropped from identifiers since the namespace now
-carries that context: `EventClassifier`, `decodeOrder`, `decodeChain`, `decodeTrade`, `parseSnapshot`,
-`bootstrap`. Venue-neutral core (`OrderBook`, `OrderEvent`, `TradeEvent`, `TradeReconciler`, `Result`)
-stays untouched by this and lives directly under `te`. `VenueId::bitstamp` and prose references to the
-real venue in comments/ADRs were deliberately left alone — only identifier/file naming changed.
+## The most recent piece of work: ADR 0013
 
-### `bitstamp::bootstrap()` — one-time cold start, done
-`include/te/feed/bitstamp/bootstrap.hpp` / `src/feed/bitstamp/bootstrap.cpp`. Takes a `BookSnapshot`
-and an optional `TradeReconciler*` (default `nullptr`). Seeds a fresh `OrderBook` from the snapshot's
-flat order list, and — this was the fix made this session — if given a reconciler, calls
-`observe()` on each seeded order too, so a pre-existing resting order the live stream never announces
-is still known to the reconciler. `apply()` runs and must succeed before `observe()` is called on the
-same event, not the other order — this was a deliberate correction to the original design sketch, and
-it's the same ordering principle the replay controller below also depends on.
+Worth reading first, because it changed four components and is the reason the current tests look the
+way they do.
 
-### `TradeReconciler` — the fill-correction primitive, done
-`include/te/feed/trade_reconciler.hpp` / `src/feed/trade_reconciler.cpp`. Keeps its own record of which
-orders it believes are currently resting (side/price/quantity, by id), built from the same `OrderEvent`s
-`OrderBook` sees via `observe()`. `reconcile(TradeEvent)` checks both the trade's buy-side and sell-side
-order id against that record and returns zero, one, or two corrective `OrderEvent`s (`remove` on full
-consumption, `modify` with the remainder on partial). Never manufactures an `add` — only ever corrects
-an order it already knew about.
+**The bug.** Bitstamp announces every fill **twice** — once on `live_orders` (the `amount_traded`
+field on an order message, whose `amount` is already post-fill) and once on `live_trades`. The
+reconciler treated the trade as fresh news and subtracted the same fill a second time, wrongly
+deleting 9 live orders on the reference capture and aborting replay with
+`unexpected_order_apply_failure`.
 
-### `bitstamp::Replay` — the merge/replay controller, first version done
-`include/te/feed/bitstamp/replay.hpp` / `src/feed/bitstamp/replay.cpp`, `tests/unit/test_bitstamp_replay.cpp`
-(8 tests, all passing). This is what was being designed by hand across most of this conversation, later
-written independently. Signature:
+**The fix.** `TradeReconciler` keeps a *fill ledger* of credits keyed by
+`(orderId, venueTimestampMicros)`. An order event's `amount_traded` adds a credit; a trade consumes
+the credit at its own timestamp and corrects only the **uncovered** part. A trade whose fill the
+venue already reported produces no correction.
+
+**Why the timestamp is in the key** — this is the non-obvious part. A single running credit per order
+is wrong: a leftover debt from an unmatched fill at T1 contaminates an unrelated fill at T2. The
+counter-example is written out in the ADR. Credits at different timestamps must be isolated; within
+one timestamp the credit is a fungible pot, which is required because 10 orders in the reference
+capture carry more than one fill at the same microsecond.
+
+**The tie-break is no longer load-bearing.** Order events still win an exact timestamp tie (the
+reconciler must know about an order before a trade can ask about it), but corrections are now
+idempotent, so processing order no longer changes the resulting book.
+
+## What is done and verified
+
+| Area | Where | Evidence |
+|---|---|---|
+| Venue-namespaced adapter | `include/te/feed/bitstamp/`, `src/feed/bitstamp/`, all in `te::bitstamp` | core (`OrderBook`, `OrderEvent`, `TradeEvent`, `TradeReconciler`, `Result`) has no dependency on it |
+| Order/trade/chain/fill decoding | `bitstamp/decoder.cpp`, `trade_decoder.cpp` | `decodeOrder`, `decodeChain`, `decodeTrade`, `decodeFill` |
+| Snapshot parsing | `bitstamp/snapshot.cpp` | `parseSnapshot`, synthetic + real snapshot tests |
+| Cold start | `bitstamp/bootstrap.cpp` | seeds `OrderBook` and, given a `TradeReconciler*`, seeds its records too |
+| Fill correction | `feed/trade_reconciler.cpp` | fill ledger, shortfall corrections, two health counters |
+| Merge controller | `bitstamp/replay.cpp` | two-pointer merge by venue time, order-wins-tie, `ReplayStats` |
+| Joined capture loading | `bitstamp/joined_capture.cpp` | manifest + payload/frames join, decodes into `CapturedOrderEvent` |
+| Joined capture tooling (Python) | `scripts/dump_raw_ws_bitstamp.py`, `scripts/validate_joined_capture.py` | implements the v4 §6 frame contract; own pytest file |
+
+`decodeFill` is a **separate decode** on the same line, following the `decodeChain` precedent, so
+`amount_traded` never enters `OrderEvent`. That keeps `OrderEvent` at 40 bytes and
+`static_assert(sizeof(Record) == 56)` intact — adding a field would have forced a v3 on-disk format
+bump as a side effect of a bug fix.
+
+### Current `Replay` signature
 
 ```cpp
 Result<ReplayResult, ReplayError> Replay::replay(
     BookSnapshot seed,
-    const std::vector<OrderEvent>& orderEvents,
+    const std::vector<CapturedOrderEvent>& orderEvents,   // event + its amountTraded
     const std::vector<TradeEvent>& tradeEvents,
     std::uint64_t cutoffMicros);
 ```
 
-What it does: bootstraps internally from `seed`, then walks both already-decoded vectors with two
-indices, comparing `venue_timestamp_us` — earlier wins, exact tie goes to the order event, matching
-the ordering discipline established in this session (`apply()` before `observe()`, never `observe()` a
-correction). Skips anything at or before the seed timestamp; stops at `cutoffMicros`. Tracks which
-order ids were removed by a trade correction (`correctionRemovals`) so a later raw `live_orders` delete
-for the same id/side is recognized as redundant and counted (`redundantOrderRemovals`) rather than
-treated as a real failure — a more careful version of "tolerate the expected no-op" than what was
-originally sketched. Returns `ReplayStats` (counts: read/applied per stream, corrections
-generated/applied, redundant removals) alongside the book, rather than the bare `void`/no-stats shape
-first proposed — closer to `RecorderStats`'s precedent, which is what this session's review was pushing
-toward. Rejects out-of-time-order input outright (`ReplayError::order_input_not_time_ordered` /
-`trade_input_not_time_ordered`) rather than trying to reorder it.
+It deliberately does **not** take a `JoinedCapture`. `JoinedCapture` carries a checkpoint, which is
+the golden test's *oracle* and something `Replay` never uses; requiring one would force live mode and
+unit tests to invent a fake. Callers unpack `JoinedCapture` at the call site.
 
-### Joined-capture Python tooling exists and matches the plan's field contract
-`scripts/dump_raw_ws_bitstamp.py` and `scripts/validate_joined_capture.py` (new, 732 lines) implement
-the frame contract from `docs/project-plan-v4.md` §6 field-for-field: `captureOrdinal`,
-`localWallTimestampNanos`, `localSteadyTimestampNanos`, `streamKind`, `runId`, `segmentId` are all
-present and assigned per accepted frame. `validate_joined_capture.py`'s own docstring: it proves a
-`segment-NNNN.jsonl` (raw payload) and `segment-NNNN.frames.jsonl` (provenance) pair still agree —
-one consecutive ordinal, order-chain checks scoped to the order stream only, hashes/sizes matching the
-manifest. Has its own test file, `tests/python/test_validate_joined_capture.py`.
+## The measured result on real data
 
-## What's partially done — the real gap to know about
+`BitstampJoinedCapture.RealCaptureReplaysToCheckpointWithNoResiduals`, over
+`data/raw/bitstamp-btcusd-20260822T000512Z` (29,404 order events, 84 trades, ~60 seconds):
 
-**The C++ side does not yet consume `captureOrdinal` at all.** `OrderEvent` and `TradeEvent`
-(`include/te/feed/events.hpp`, `include/te/feed/trade_event.hpp`) have no such field — grep confirms
-it. The plan's own declared deterministic replay key is `(venueTimestampMicros, captureOrdinal)`
-(v4 §6), but `Replay::replay()` currently only ever compares `venue_timestamp_us`, falling back to a
-fixed "order always wins an exact tie" policy instead of consulting a real capture-arrival ordinal.
-That policy is a reasonable provisional stand-in — and was arrived at independently in this session's
-design discussion before `captureOrdinal` existed anywhere in the plan — but it is not what v4 §6/§7
-specifies as the real tie-break. The Python capture layer is already producing the field; nothing on
-the C++ decode/replay path reads it yet.
+| | Before ADR 0013 | Now |
+|---|---|---|
+| replay outcome | `unexpected_order_apply_failure` | completes |
+| `unknown_order_id` failures | 9 | **0** |
+| checkpoint level mismatches | n/a (aborted) | **0 of 4,533** |
+| `redundantOrderRemovals` | — | 0 |
+| `ordersRemovedWithUnmatchedFill` | — | 0 |
+| `staleFillsDiscarded` | — | 0 |
 
-**`Replay` covers most, not all, of v4 §7's contract.** Checked against the "Real order event" /
-"Trade event" numbered lists in `docs/project-plan-v4.md` §7:
+The replayed book reproduces the independently fetched S1 snapshot exactly, with no hand-listed
+exceptions. Capture data is gitignored, so the test skips rather than fails when absent.
 
-- Done: select-earlier-of-two, tie→order, classify→apply→observe-on-success, reconcile→apply
-  corrections, never `observe()` a correction, count the redundant-removal case by name.
-- Not done: a documented ADR for tie-breaking/reorder-window/backward-timestamp policy (§7's "must
-  have an ADR" line — no such ADR exists yet); the book-health state machine
-  (`unseeded → warming → valid → stale_or_gapped → resyncing → valid`, v4 §7 "Book health") — nothing
-  like this exists on `OrderBook` or `Replay` today; gap/reconnect/reseed behavior — explicitly out of
-  scope per the design PDF, and still unaddressed in code; repeated-run digest/hash reproducibility —
-  the Stage 2 gate in v4 §12 ("ten runs over the same fixture produce identical event and final-book
-  hashes") has no corresponding test yet.
+## Read this before claiming the reconciler is validated
 
-**Stale comment left behind.** `src/feed/bitstamp/bootstrap.cpp` has a comment — *"Replay that read
-order JSONL sequentially that takes the orderbook and the reconciler here and then use the info if
-timestamp is > T"* — describing an earlier version of the design (raw JSONL text streams) that isn't
-what `Replay::replay()` actually consumes (it takes already-decoded `std::vector`s instead). Worth
-deleting or rewriting so it doesn't mislead the next reader.
+**`correctionsGenerated` is 0 on that capture.** `live_orders` reports every fill in those 60
+seconds, so the credit covers all 82 trades and the reconciler never fires. It is not being
+over-suppressed — over-suppression would leave excess quantity resting and show up as mismatches, and
+there are none.
 
-## What's not started
+But it means the zero-residual result validates the **loader, bootstrap, classifier, merge ordering
+and `OrderBook`**. It says nothing about corrections firing when they should. Only the unit tests in
+`test_trade_reconciler.cpp` and `test_bitstamp_replay.cpp` cover that path.
 
-Per `docs/project-plan-v4.md`'s own stage roadmap (§9-§12), in stage order:
+**The case is real and does occur.** The three hardcoded adjustments in `test_golden_replay.cpp` are
+three individually traced orders that were fully filled with no `order_deleted` — exactly the case
+`TradeReconciler` exists for. They cannot be resolved there: that capture
+(`bitstamp-btcusd-20260819T205520Z`) is order-only, has no `live_trades` stream, and the window is
+historical. They are a permanent property of that fixture, not a gap awaiting a fix. That test is now
+the legacy single-stream gate; the joined-capture test above is the current one.
 
-- **Stage 0** (truth/contract cleanup): receipt-timestamp type/naming fix, `id` vs `id_str` mismatch
-  rejection (`src/feed/bitstamp/decoder.cpp` still trusts `id_str` alone — confirmed still true),
-  structural-vs-decision-ready validation split, CI guard activation, the mandatory small fixture. Not
-  started.
-- **Stage 1** (joined capture) is further along than its own plan doc's baseline table suggests — see
-  above — but the *validator proving one coherent segment* gate (v4 §11) hasn't been run/confirmed
-  end-to-end against a real capture in this pass.
-- Everything from **Stage 3 onward** (golden correctness closure, durable v3 corpus, replay/accounting
-  engine, queue-position labels, held-out validation, performance lab, live/paper path, dashboard) is
-  still ahead, per the plan.
+## Open work
 
-## Suggested next step
+**Highest value first:**
 
-Two independent, small threads, either is a reasonable place to pick back up:
+1. **A longer joined capture that exercises the reconciler.** The order-only Aug 19 run surfaced 3
+   fully-filled-no-delete orders; the 60-second Aug 22 joined run surfaced 0. Once a joined capture
+   contains one, extend the real-corpus test to assert `correctionsGenerated > 0` *and* zero
+   residuals. This is the single thing between "verified by unit tests" and "verified against the
+   venue."
 
-1. Decide how `captureOrdinal` reaches the C++ side — probably a new field on `OrderEvent`/`TradeEvent`
-   or a wrapping "frame" type — and switch `Replay`'s tie-break from the fixed "order wins" policy to
-   the documented `(venueTimestampMicros, captureOrdinal)` key. Write the ADR v4 §7 says the controller
-   needs before doing this, since the tie-break policy is exactly the kind of decision an ADR is for.
-2. Delete/rewrite the stale comment in `bootstrap.cpp`, and consider whether `Replay`'s current
-   fixed-vector inputs (`std::vector<OrderEvent>`, `std::vector<TradeEvent>`) are the final shape, or a
-   deliberate stepping stone before wiring in the real `Feed` interface (still an empty stub — Slice 3 /
-   Stage 5 territory) or a captureOrdinal-aware frame source.
+2. **`captureOrdinal` on the C++ side.** Plan v4 §6 declares the replay key as
+   `(venueTimestampMicros, captureOrdinal)`. The Python capture layer emits it; nothing in C++ reads
+   it (`joined_capture.hpp:55` says so). `Replay` still falls back to the fixed order-wins-tie
+   policy. Since ADR 0013 that policy is no longer load-bearing for correctness, but it is still not
+   what the plan specifies for determinism.
+
+3. **Stage 2 gate (v4 §12)** — "ten runs over the same fixture produce identical event and final-book
+   hashes." No hashing exists yet.
+
+4. **Stage 0 cleanup (v4 §10)** — receipt-timestamp type/naming, `id` vs `id_str` mismatch rejection
+   (`decoder.cpp` still trusts `id_str` alone), structural-vs-decision-ready validation split, CI
+   guard activation, the mandatory small fixture. None started.
+
+**Deliberately deferred, documented as such in ADR 0013:** gap/reconnect/reseed behaviour, the book
+health state machine (`unseeded → warming → valid → stale_or_gapped → resyncing → valid`), and any
+reorder window. After a gap a quantity decrease may reflect fills that were never observed, and no
+policy covers that. It needs its own decision and its own evidence — do not guess at it.
 
 ## Where to read more
 
-- `docs/project-plan-v4.md` — the authoritative plan (stages, gates, contracts). Read §6-§7 and §11-§12
-  before touching capture or replay code.
-- `docs/pdf/Trading_Engine_Order_Trade_Merge_Deep_Dive.pdf` — the problem/industry-context/plan document
-  produced during this session, written before `Replay` existed. Its design (peek/compare/apply-before-
-  observe/reconcile-then-apply, never observe a correction) matches what got built almost exactly; its
-  build-order and edge-case list are still a reasonable checklist to test `Replay` against.
-- `docs/decisions/0010-venue-selection.md` — why Bitstamp specifically, and why the venue-neutral core
-  vs. venue-specific-adapter split exists at all.
-- `docs/coding-plan-v3.md` — the older Slice-numbered plan; superseded by v4's Stage numbering, but
-  still useful for the lower-level "how do I actually implement X" guidance v4 doesn't repeat (e.g. the
-  SPSC queue memory-ordering questions under the old Slice 3).
+- `docs/decisions/0013-merge-ordering-and-fill-double-counting.md` — accepted. Read the
+  counter-example section before touching the fill ledger.
+- `docs/project-plan-v4.md` §6–§7 and §11–§12 — the capture and controller contracts, and their gates.
+- `output/pdf/Trading_Engine_Orders_Trades_Credit_All_Cases.pdf` — glossary plus 18 worked cases and
+  8 failure modes. **Partly stale:** written before the timestamp key, so its "credit is a pot"
+  framing (cases A3/A4) holds only *within* one timestamp, and its E1 advice to "just count it" was
+  wrong — that was a correctness hole, not an observability task.
+- `output/pdf/Trading_Engine_Order_Trade_Merge_Deep_Dive.pdf` — problem framing and industry context
+  (k-way merge, ITCH vs Bitstamp, event-time stream processing).
+- `docs/decisions/0010-venue-selection.md` — why Bitstamp, and why the venue-neutral/adapter split.
 
 ## Commands to reverify this file
 
 ```bash
 git log --oneline -5
-cmake --build build -j
+cmake --build build --clean-first -j
 ctest --test-dir build --output-on-failure
 ```
+
+`cmake --build build` alone can report success against stale objects — this bit us once, and a green
+run was reported against a library that did not match its own headers. Use `--clean-first` when the
+answer matters.
