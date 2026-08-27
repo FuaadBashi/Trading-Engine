@@ -1,17 +1,53 @@
+#include <algorithm>
 #include <te/feed/trade_reconciler.hpp>
 
 namespace te {
 
-void TradeReconciler::observe(const OrderEvent& event) {
+void TradeReconciler::observe(const OrderEvent& event, Qty amountTraded) {
     switch (event.kind) {
         case EventKind::add:
-        case EventKind::modify:
-            // Quantity is the resulting resting amount, not a delta.
             resting_[event.order_id] = RestingInfo{event.side, event.price, event.quantity};
             break;
-        case EventKind::remove:
-            resting_.erase(event.order_id);
+        case EventKind::modify: {
+            // Quantity is the resulting resting amount, not a delta.
+            resting_[event.order_id] = RestingInfo{event.side, event.price, event.quantity};
+
+            auto ledgerIt = fillLedger_.find(event.order_id);
+            if (ledgerIt == fillLedger_.end()) {
+                if (amountTraded.units > 0) {
+                    fillLedger_.emplace(event.order_id,
+                                        AmountTradeInfo{event.venue_timestamp_us, amountTraded});
+                }
+                break;
+            }
+
+            AmountTradeInfo& info = ledgerIt->second;
+            if (info.timestamp == event.venue_timestamp_us) {
+                info.quantity.units += amountTraded.units;
+            } else {
+                if (info.quantity.units > 0) {
+                    ++stats_.staleFillsDiscarded;
+                }
+                if (amountTraded.units > 0) {
+                    info = AmountTradeInfo{event.venue_timestamp_us, amountTraded};
+                } else {
+                    fillLedger_.erase(ledgerIt);
+                }
+            }
             break;
+        }
+        case EventKind::remove: {
+            resting_.erase(event.order_id);
+
+            const auto ledgerIt = fillLedger_.find(event.order_id);
+            if (ledgerIt != fillLedger_.end()) {
+                if (ledgerIt->second.quantity.units > 0) {
+                    ++stats_.ordersRemovedWithOpenFillBalance;
+                }
+                fillLedger_.erase(ledgerIt);
+            }
+            break;
+        }
     }
 }
 
@@ -25,27 +61,51 @@ std::vector<OrderEvent> TradeReconciler::reconcile(const TradeEvent& trade) {
             continue;
         }
 
-        const RestingInfo info = it->second;
+        const RestingInfo restingInfo = it->second;
+        std::int64_t shortfallUnits = trade.quantity.units;
+
+        auto ledgerIt = fillLedger_.find(id);
+        if (ledgerIt != fillLedger_.end()) {
+            AmountTradeInfo& credit = ledgerIt->second;
+            if (credit.timestamp == trade.venue_timestamp_us) {
+                const std::int64_t coveredUnits = std::min(shortfallUnits, credit.quantity.units);
+                shortfallUnits -= coveredUnits;
+                credit.quantity.units -= coveredUnits;
+                if (credit.quantity.units == 0) {
+                    fillLedger_.erase(ledgerIt);
+                }
+            } else {
+                if (credit.quantity.units > 0) {
+                    ++stats_.staleFillsDiscarded;
+                }
+                fillLedger_.erase(ledgerIt);
+            }
+        }
+
+        if (shortfallUnits == 0) {
+            continue;
+        }
+
         // Both trade IDs are checked independently. A known resting side gets one correction;
-        // a full fill removes it and a partial fill stores the resulting quantity.
-        if (trade.quantity.units >= info.quantity.units) {
+        // only the part not already reported by live_orders changes the shadow book.
+        if (shortfallUnits >= restingInfo.quantity.units) {
             corrections.push_back(OrderEvent{
                 .venue_timestamp_us = trade.venue_timestamp_us,
                 .order_id = id,
-                .price = info.price,
-                .quantity = info.quantity,
-                .side = info.side,
+                .price = restingInfo.price,
+                .quantity = restingInfo.quantity,
+                .side = restingInfo.side,
                 .kind = EventKind::remove,
             });
             resting_.erase(it);
         } else {
-            const Qty remaining{info.quantity.units - trade.quantity.units};
+            const Qty remaining{restingInfo.quantity.units - shortfallUnits};
             corrections.push_back(OrderEvent{
                 .venue_timestamp_us = trade.venue_timestamp_us,
                 .order_id = id,
-                .price = info.price,
+                .price = restingInfo.price,
                 .quantity = remaining,
-                .side = info.side,
+                .side = restingInfo.side,
                 .kind = EventKind::modify,
             });
             it->second.quantity = remaining;

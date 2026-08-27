@@ -22,7 +22,7 @@ Result<OrderBook, ApplyError> bootstrap(BookSnapshot book, TradeReconciler* reco
 
         // Seed the shadow only after the same order has successfully entered the real book.
         if (reconciler) {
-            reconciler->observe(orderEvent);
+            reconciler->observe(orderEvent, Qty{});
         }
     }
     orderBook.validate();

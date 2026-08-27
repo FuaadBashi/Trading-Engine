@@ -32,6 +32,11 @@ enum class JoinedCaptureError {
     checkpoint_parse_failure,
     order_decode_failure,
     trade_decode_failure,
+    fill_decode_failure
+};
+struct CapturedOrderEvent {
+    OrderEvent  event;
+    Qty  amountTraded;
 };
 
 struct JoinedCapture {
@@ -40,14 +45,15 @@ struct JoinedCapture {
     BookSnapshot checkpoint;
 
     // Payload/frame rows are joined and decoded; control frames are deliberately omitted.
-    std::vector<OrderEvent> jc_orderEvents;
+    std::vector<CapturedOrderEvent> jc_captureOrderEvents;
     std::vector<TradeEvent> jc_tradeEvents;
 };
+
 
 // Loads the first manifest segment and requires payload/frame-index files to end together.
 // It decodes files but does not verify hashes or chains; validate_joined_capture.py does that.
 // Current limitation: captureOrdinal and order amount_traded are not preserved yet (ADR 0013).
 Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
-    const std::filesystem::path& captureDirectory, InstrumentSpec spec);
+    const std::filesystem::path& captureDirectory, InstrumentSpec specs);
 
 }  // namespace te::bitstamp

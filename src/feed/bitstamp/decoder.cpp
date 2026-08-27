@@ -117,6 +117,33 @@ Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSp
     return Result<OrderEvent, DecoderError>::success(orderEvent);
 }
 
+Result<Qty, DecoderError> decodeFill(std::string_view text, InstrumentSpec spec){   
+    
+    simdjson::ondemand::parser parser;
+    simdjson::padded_string buffer = simdjson::padded_string(text);
+
+    simdjson::ondemand::document doc;
+    simdjson::error_code err = parser.iterate(buffer).get(doc);
+    if (err) {
+        return Result<Qty, DecoderError>::failure(DecoderError::malformed_json);
+        ;
+    }
+
+    std::string_view amount_traded_str;
+    err = doc["data"]["amount_traded"].get_string().get(amount_traded_str);
+    if (err) {
+        return Result<Qty, DecoderError>::failure(DecoderError::missing_field);
+    }
+
+    Result<std::int64_t, ParseError> amount_traded = parseDecimal(amount_traded_str, spec.quantity_decimals);
+    if(!amount_traded.hasValue()){  
+        return Result<Qty, DecoderError>::failure(DecoderError::missing_field);
+    }   
+    return Result<Qty, DecoderError>::success(Qty{ *amount_traded.valueIf() });
+
+};
+
+
 Result<ChainLink, DecoderError> decodeChain(std::string_view text) {
     simdjson::ondemand::parser parser;
     simdjson::padded_string buffer = simdjson::padded_string(text);

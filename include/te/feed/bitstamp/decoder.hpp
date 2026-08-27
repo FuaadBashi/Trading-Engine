@@ -22,6 +22,10 @@ enum class DecoderError {
 // order_type is the exception because Bitstamp supplies only the JSON integer (0 buy, 1 sell).
 Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSpec spec);
 
+// Decodes one live_orders payload, line by line and extract the amount_trade and return it, if theres no 
+// amount_trade return error.
+Result<Qty, DecoderError> decodeFill(std::string_view text, InstrumentSpec spec);
+
 constexpr std::size_t kChainIdLength = 36;
 
 // Transport continuity metadata stays outside OrderEvent. Arrays own their bytes after the

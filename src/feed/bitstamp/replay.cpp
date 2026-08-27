@@ -8,8 +8,16 @@
 namespace te::bitstamp {
 namespace {
 
-template <typename Event>
-bool isTimeOrdered(const std::vector<Event>& events) {
+
+bool isTimeOrderedOrder(const std::vector<CapturedOrderEvent>& events) {
+    for (std::size_t index = 1; index < events.size(); ++index) {
+        if (events.at(index).event.venue_timestamp_us < events.at(index - 1).event.venue_timestamp_us) {
+            return false;
+        }
+    }
+    return true;
+}
+bool isTimeOrderedtrade(const std::vector<TradeEvent>& events) {
     for (std::size_t index = 1; index < events.size(); ++index) {
         if (events.at(index).venue_timestamp_us < events.at(index - 1).venue_timestamp_us) {
             return false;
@@ -21,32 +29,32 @@ bool isTimeOrdered(const std::vector<Event>& events) {
 bool processOrder(OrderBook& orderBook, TradeReconciler& tradeReconciler,
                   EventClassifier& classifier, ReplayStats& replayStats,
                   std::unordered_map<OrderId, Side, OrderIdHash>& correctionRemovals,
-                  const OrderEvent& order) {
+                  const CapturedOrderEvent& order) {
     ++replayStats.orderEventsRead;
-    if (classifier.classify(order) != EventDisposition::apply_to_book) {
+    if (classifier.classify(order.event) != EventDisposition::apply_to_book) {
         return true;
     }
 
-    const auto result = orderBook.apply(order);
+    const auto result = orderBook.apply(order.event);
     if (!result.hasValue()) {
         // Tolerate only a later raw remove for an order this replay can prove a trade correction
         // already removed. Other unknown removes and every failed modify remain real errors.
-        const auto correction = correctionRemovals.find(order.order_id);
-        if (order.kind == EventKind::remove && result.errorIf() != nullptr &&
+        const auto correction = correctionRemovals.find(order.event.order_id);
+        if (order.event.kind == EventKind::remove && result.errorIf() != nullptr &&
             *result.errorIf() == ApplyError::unknown_order_id &&
-            correction != correctionRemovals.end() && correction->second == order.side) {
+            correction != correctionRemovals.end() && correction->second == order.event.side) {
             correctionRemovals.erase(correction);
             ++replayStats.redundantOrderRemovals;
             return true;
         }
         return false;
     }
-    if (order.kind == EventKind::add) {
+    if (order.event.kind == EventKind::add) {
         // Order IDs may be reused; a new lifecycle invalidates any old removal tombstone.
-        correctionRemovals.erase(order.order_id);
+        correctionRemovals.erase(order.event.order_id);
     }
     // Observe only successfully applied raw events so the shadow matches the real book.
-    tradeReconciler.observe(order);
+    tradeReconciler.observe(order.event, order.amountTraded);
     ++replayStats.orderEventsApplied;
     return true;
 }
@@ -75,15 +83,15 @@ bool processTrade(OrderBook& orderBook, TradeReconciler& tradeReconciler, Replay
 }  // namespace
 
 Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
-                                                 const std::vector<OrderEvent>& orderEvents,
+                                                 const std::vector<CapturedOrderEvent>& orderEvents,
                                                  const std::vector<TradeEvent>& tradeEvents,
                                                  std::uint64_t cutoffMicros) {
     // The two-pointer merge is valid only when each input is ordered independently.
-    if (!isTimeOrdered(orderEvents)) {
+    if (!isTimeOrderedOrder(orderEvents)) {
         return Result<ReplayResult, ReplayError>::failure(
             ReplayError::order_input_not_time_ordered);
     }
-    if (!isTimeOrdered(tradeEvents)) {
+    if (!isTimeOrderedtrade(tradeEvents)) {
         return Result<ReplayResult, ReplayError>::failure(
             ReplayError::trade_input_not_time_ordered);
     }
@@ -105,8 +113,8 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
     // Pre-seed orders still train the stateful classifier (notably price-zero lifecycles), but
     // never touch the seeded book. Pre-seed trades are already represented by the snapshot.
     while (orderPtr < orderEvents.size() &&
-           orderEvents.at(orderPtr).venue_timestamp_us <= seedTimestamp) {
-        classifier.classify(orderEvents.at(orderPtr));
+           orderEvents.at(orderPtr).event.venue_timestamp_us <= seedTimestamp) {
+        classifier.classify(orderEvents.at(orderPtr).event);
         ++orderPtr;
     }
     while (tradePtr < tradeEvents.size() &&
@@ -116,7 +124,7 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
 
     const auto orderInWindow = [&] {
         return orderPtr < orderEvents.size() &&
-               orderEvents.at(orderPtr).venue_timestamp_us <= cutoffMicros;
+               orderEvents.at(orderPtr).event.venue_timestamp_us <= cutoffMicros;
     };
     const auto tradeInWindow = [&] {
         return tradePtr < tradeEvents.size() &&
@@ -133,7 +141,7 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
                     ReplayError::unexpected_correction_apply_failure);
             }
             ++tradePtr;
-        } else if (!tradeInWindow() || orderEvents.at(orderPtr).venue_timestamp_us <=
+        } else if (!tradeInWindow() || orderEvents.at(orderPtr).event.venue_timestamp_us <=
                                            tradeEvents.at(tradePtr).venue_timestamp_us) {
             auto result = processOrder(orderBook, tradeReconciler, classifier, replayStats,
                                        correctionRemovals, orderEvents.at(orderPtr));

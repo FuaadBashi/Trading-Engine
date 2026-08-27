@@ -5,6 +5,7 @@
 #include <te/book/order_book.hpp>
 #include <te/core/result.hpp>
 #include <te/feed/bitstamp/snapshot.hpp>
+#include <te/feed/bitstamp/joined_capture.hpp>
 #include <te/feed/events.hpp>
 #include <te/feed/trade_event.hpp>
 #include <vector>
@@ -38,7 +39,7 @@ public:
     // Bootstraps internally, merges two individually time-ordered streams, and applies only
     // seedTimestamp < eventTimestamp <= cutoff. Exact ties process the order first.
     Result<ReplayResult, ReplayError> replay(BookSnapshot seed,
-                                             const std::vector<OrderEvent>& orderEvents,
+                                             const std::vector<CapturedOrderEvent>& orderEvents,
                                              const std::vector<TradeEvent>& tradeEvents,
                                              std::uint64_t cutoffMicros);
 };

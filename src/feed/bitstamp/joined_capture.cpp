@@ -19,6 +19,7 @@ namespace {
 
 Result<std::string, JoinedCaptureError> readTextFile(const std::filesystem::path& path,
                                                      JoinedCaptureError unreadableError) {
+
     std::ifstream file{path, std::ios::binary};
     if (!file) {
         return Result<std::string, JoinedCaptureError>::failure(unreadableError);
@@ -210,11 +211,22 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
         // The frame index selects the decoder; the raw payload line carries the actual event.
         if (streamKind == "order") {
             const auto decodedOrder = decodeOrder(payloadLine, spec);
+            const auto decodedFill = decodeFill(payloadLine, spec);
             if (!decodedOrder.hasValue()) {
                 return Result<JoinedCapture, JoinedCaptureError>::failure(
                     JoinedCaptureError::order_decode_failure);
             }
-            joinedCapture.jc_orderEvents.push_back(*decodedOrder.valueIf());
+            if (!decodedFill.hasValue()) {
+                return Result<JoinedCapture, JoinedCaptureError>::failure(
+                    JoinedCaptureError::fill_decode_failure);
+            }
+
+            CapturedOrderEvent captureOrderEvent {
+                *decodedOrder.valueIf(),
+                *decodedFill.valueIf()
+
+            };
+            joinedCapture.jc_captureOrderEvents.push_back(captureOrderEvent);
         } else if (streamKind == "trade") {
             const auto decodedTrade = decodeTrade(payloadLine, spec);
             if (!decodedTrade.hasValue()) {
