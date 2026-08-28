@@ -118,12 +118,16 @@ TEST(GoldenReplay, ReplayedBookMatchesIndependentVenueSnapshot) {
     // replay finds the same three ids) and confirmed exhaustively (present across the *entire*
     // capture window, not just up to this cutoff -- so this is not "the delete arrives later").
     //
-    // The hypothesis is now settled: each was fully filled rather than cancelled, and live_orders
-    // emits no delete for a fill. This is the case TradeReconciler exists for, and ADR 0013
-    // specifies how corrections for it are applied. These three cannot be resolved here, because
-    // this capture is order-only -- it has no live_trades stream, and the window is historical, so
-    // one cannot be captured after the fact. They are a permanent property of this fixture, not a
-    // gap awaiting a fix.
+    // These three remain UNEXPLAINED. The earlier hypothesis -- fully filled rather than
+    // cancelled, with live_orders emitting no delete for a fill -- now looks unlikely: across
+    // 1,059s of joined capture, 637 of 637 trades against a resting order had their fill reported
+    // by live_orders via amount_traded (ADR 0013, "The correction path has not been reached on real
+    // data"). If the venue reports every fill, a silent full fill is not the explanation.
+    //
+    // They cannot be diagnosed from this fixture either way: it is order-only, has no live_trades
+    // stream, and the window is historical, so one cannot be captured after the fact. Treat these
+    // as a permanent property of this capture, not a gap awaiting a fix. Candidate explanations
+    // still open: order_subtype semantics, liquidations, or a venue-side move between price levels.
     //
     // This test therefore remains the legacy single-stream gate. The current correctness gate is
     // BitstampJoinedCapture.RealCaptureReplaysToCheckpointWithNoResiduals, which replays a joined

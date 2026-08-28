@@ -44,6 +44,13 @@ MAX_FRAME_BYTES = 64 * 1024 * 1024
 RECONNECT_DELAY_SECONDS = 1.0
 SUBSCRIPTION_TIMEOUT_SECONDS = 30.0
 POST_CHECKPOINT_DRAIN_SECONDS = 5.0
+
+# A snapshot is only usable as a replay seed if the stream already covers the instant it
+# describes. Bitstamp's REST snapshot can carry a microtimestamp several hundred milliseconds
+# older than the moment it is served, so subscribing first is necessary but not sufficient --
+# the overlap has to be checked and the snapshot refetched when it is stale.
+SNAPSHOT_OVERLAP_ATTEMPTS = 5
+SNAPSHOT_RETRY_DELAY_SECONDS = 1.0
 ORDER_EVENTS = {"order_created", "order_changed", "order_deleted"}
 
 
@@ -189,6 +196,7 @@ async def capture_segment(
                     await websocket.send(build_subscription(channel))
 
                 subscriptions_ready = asyncio.Event()
+                first_order_seen = asyncio.Event()
 
                 async def drain() -> None:
                     async for message in websocket:
@@ -259,6 +267,7 @@ async def capture_segment(
                             state["first_order_microtimestamp"] = (
                                 state["first_order_microtimestamp"] or microtimestamp
                             )
+                            first_order_seen.set()
                             state["last_order_microtimestamp"] = microtimestamp
                         elif stream_kind == "trade":
                             state["trade_events"] += 1
@@ -350,16 +359,69 @@ async def capture_segment(
                         timeout=SUBSCRIPTION_TIMEOUT_SECONDS,
                         return_when=asyncio.FIRST_COMPLETED,
                     )
-                    if subscription_waiter in done and not reader.done():
-                        try:
-                            snapshot_metadata = await (
-                                asyncio.get_running_loop().run_in_executor(
-                                    None, fetch_snapshot, snapshot_path
+                    subscribed = subscription_waiter in done and not reader.done()
+                    seeded = subscribed
+
+                    if seeded:
+                        # Subscribing first is not enough on its own: the served snapshot can
+                        # describe the book as it was before this stream started, leaving a window
+                        # no source covers. Wait for one order event so there is something to
+                        # compare against.
+                        first_order_waiter = asyncio.create_task(first_order_seen.wait())
+                        await asyncio.wait(
+                            {reader, first_order_waiter},
+                            timeout=SUBSCRIPTION_TIMEOUT_SECONDS,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if not first_order_waiter.done():
+                            first_order_waiter.cancel()
+                            state["end_reason"] = "no_order_event_before_snapshot"
+                            seeded = False
+                        elif reader.done():
+                            seeded = False
+
+                    if seeded:
+                        # Refetch until the snapshot is at least as new as our first captured
+                        # order event. Without this the replay seed predates the stream and every
+                        # order created in the uncovered window looks unknown when its delete
+                        # arrives. Observed once in the wild: a reseed after a chain gap produced
+                        # a snapshot 378ms stale and seven unapplicable removes.
+                        snapshot_metadata = None
+                        for attempt in range(SNAPSHOT_OVERLAP_ATTEMPTS):
+                            try:
+                                candidate = await (
+                                    asyncio.get_running_loop().run_in_executor(
+                                        None, fetch_snapshot, snapshot_path
+                                    )
                                 )
+                            except Exception:
+                                state["end_reason"] = "snapshot_error"
+                                raise
+                            first_order = state["first_order_microtimestamp"]
+                            if first_order is None or int(candidate["microtimestamp"]) >= int(
+                                first_order
+                            ):
+                                candidate["overlap_attempts"] = attempt + 1
+                                snapshot_metadata = candidate
+                                break
+                            stale_micros = int(first_order) - int(candidate["microtimestamp"])
+                            print(
+                                f"snapshot predates stream by {stale_micros / 1e6:.3f}s "
+                                f"(attempt {attempt + 1}/{SNAPSHOT_OVERLAP_ATTEMPTS}); refetching",
+                                flush=True,
                             )
-                        except Exception:
-                            state["end_reason"] = "snapshot_error"
-                            raise
+                            if reader.done():
+                                break
+                            await asyncio.sleep(SNAPSHOT_RETRY_DELAY_SECONDS)
+
+                        if snapshot_metadata is None:
+                            # Every attempt left an uncovered window, so this segment has no valid
+                            # seed. Ending here is the honest outcome: a replay from a stale
+                            # snapshot silently produces a wrong book.
+                            state["end_reason"] = "snapshot_never_overlapped_stream"
+                            seeded = False
+
+                    if seeded:
                         segment["snapshot_metadata"] = snapshot_metadata
                         write_manifest(manifest_path, manifest)
 
@@ -414,6 +476,11 @@ async def capture_segment(
                                     await asyncio.gather(
                                         reader, return_exceptions=True
                                     )
+                    elif subscribed:
+                        # Subscriptions were fine; seeding failed and already recorded a specific
+                        # reason. Do not overwrite it with the generic subscription timeout.
+                        reader.cancel()
+                        await asyncio.gather(reader, return_exceptions=True)
                     elif reader in done:
                         await reader
                     else:
@@ -478,6 +545,16 @@ async def capture_segment(
         )
         if state["diagnostic"] is not None:
             segment["diagnostic"] = state["diagnostic"]
+
+        # Only name files that were actually written. A segment ending on a chain gap never
+        # reaches its terminal checkpoint, and a segment whose snapshot never overlapped the
+        # stream has no seed; advertising either path makes the manifest disagree with the disk
+        # and fails every reader that trusts it.
+        if "checkpoint_metadata" not in segment:
+            segment.pop("checkpoint", None)
+        if "snapshot_metadata" not in segment:
+            segment.pop("snapshot", None)
+
         checkpoint_metadata = segment.get("checkpoint_metadata")
         if isinstance(checkpoint_metadata, dict):
             checkpoint_metadata["capture_ordinal_after_drain"] = (

@@ -100,22 +100,29 @@ But it means the zero-residual result validates the **loader, bootstrap, classif
 and `OrderBook`**. It says nothing about corrections firing when they should. Only the unit tests in
 `test_trade_reconciler.cpp` and `test_bitstamp_replay.cpp` cover that path.
 
-**The case is real and does occur.** The three hardcoded adjustments in `test_golden_replay.cpp` are
-three individually traced orders that were fully filled with no `order_deleted` — exactly the case
-`TradeReconciler` exists for. They cannot be resolved there: that capture
-(`bitstamp-btcusd-20260819T205520Z`) is order-only, has no `live_trades` stream, and the window is
-historical. They are a permanent property of that fixture, not a gap awaiting a fix. That test is now
-the legacy single-stream gate; the joined-capture test above is the current one.
+**And it may not be reachable on this venue.** Across 1,059 seconds of joined capture and 753 trades,
+**637 of 637** trades against a resting order had their fill already reported by `live_orders` via
+`amount_traded`. Zero uncovered. A correction can only fire on an uncovered fill, so the path has
+never been reached on real Bitstamp data — see ADR 0013, "The correction path has not been reached on
+real data", for the per-segment numbers.
+
+Keep the reconciler: it is correct, cheap, unit-tested, and other venues do not all report post-fill
+quantities. But treat it as **insurance, not a validated path**, and do not go capturing indefinitely
+in the hope of catching one.
+
+That also unsettles the explanation for the three hardcoded adjustments in `test_golden_replay.cpp`.
+They were assumed to be orders fully filled with no `order_deleted`; if `live_orders` reports every
+fill, that is unlikely. They are now **unexplained**, and cannot be diagnosed from that fixture —
+it is order-only and the window is historical. Open candidates: `order_subtype` semantics,
+liquidations, a venue-side move between levels.
 
 ## Open work
 
 **Highest value first:**
 
-1. **A longer joined capture that exercises the reconciler.** The order-only Aug 19 run surfaced 3
-   fully-filled-no-delete orders; the 60-second Aug 22 joined run surfaced 0. Once a joined capture
-   contains one, extend the real-corpus test to assert `correctionsGenerated > 0` *and* zero
-   residuals. This is the single thing between "verified by unit tests" and "verified against the
-   venue."
+1. **`id` vs `id_str` mismatch rejection** (v4 §10). `decoder.cpp` still trusts `id_str` alone, and
+   ADR 0005 requires the two representations to agree. Small, self-contained, and closes a real
+   Stage 0 item.
 
 2. **`captureOrdinal` on the C++ side.** Plan v4 §6 declares the replay key as
    `(venueTimestampMicros, captureOrdinal)`. The Python capture layer emits it; nothing in C++ reads
@@ -126,14 +133,18 @@ the legacy single-stream gate; the joined-capture test above is the current one.
 3. **Stage 2 gate (v4 §12)** — "ten runs over the same fixture produce identical event and final-book
    hashes." No hashing exists yet.
 
-4. **Stage 0 cleanup (v4 §10)** — receipt-timestamp type/naming, `id` vs `id_str` mismatch rejection
-   (`decoder.cpp` still trusts `id_str` alone), structural-vs-decision-ready validation split, CI
-   guard activation, the mandatory small fixture. None started.
+4. **Rest of Stage 0 cleanup (v4 §10)** — receipt-timestamp type/naming, structural-vs-decision-ready
+   validation split, CI guard activation, the mandatory small fixture. None started.
 
-**Deliberately deferred, documented as such in ADR 0013:** gap/reconnect/reseed behaviour, the book
-health state machine (`unseeded → warming → valid → stale_or_gapped → resyncing → valid`), and any
-reorder window. After a gap a quantity decrease may reflect fills that were never observed, and no
-policy covers that. It needs its own decision and its own evidence — do not guess at it.
+**Deliberately deferred, documented as such in ADR 0013:** the book health state machine
+(`unseeded → warming → valid → stale_or_gapped → resyncing → valid`) and any reorder window. After a
+gap a quantity decrease may reflect fills that were never observed, and no policy covers that. It
+needs its own decision and its own evidence — do not guess at it.
+
+**Partly addressed since:** the *capture* side of gap/reseed handling now has a rule — a segment's
+seed snapshot must not predate its first captured event, enforced by refetch and by ending the
+segment as `snapshot_never_overlapped_stream` rather than emitting a holed seed. The *replay* side
+(what the engine should do when it meets a gap) is still undecided.
 
 ## Where to read more
 

@@ -168,16 +168,61 @@ Measured on `data/raw/bitstamp-btcusd-20260822T000512Z`, locked in by
   the resulting book quantity is the same. The tie-break is now a determinism rule, not a
   correctness dependency.
 - The replayed book reproduces the independent S1 snapshot exactly, with no hand-listed exceptions.
-  The three hardcoded adjustments in `test_golden_replay.cpp` are the older single-stream path and
-  should be revisited against this mechanism.
-- **This capture does not exercise the correction path.** `live_orders` reports every fill in these
-  60 seconds, so the credit covers all 82 trades and `correctionsGenerated` is 0. The zero-mismatch
-  result validates the loader, bootstrap, classifier, merge ordering and `OrderBook`; it says nothing
-  about corrections firing when they should. Only the unit tests cover that. A capture containing a
-  resting order consumed with no `order_deleted` is still wanted as evidence.
+- **This capture does not exercise the correction path** — and, on the evidence below, no Bitstamp
+  capture may. See "The correction path has not been reached on real data".
 - Cost, as predicted: the fill travels decoder → `JoinedCapture` → `Replay` → `TradeReconciler`,
   touching four components. `decodeFill` is a separate decode following the `decodeChain` precedent,
   so `OrderEvent`'s layout and Record v2 are unchanged.
+
+### The correction path has not been reached on real data
+
+`correctionsGenerated` is 0 on every joined capture taken so far. That is not an accident of a short
+sample. A correction fires only when a trade's quantity is **not** already covered by an
+`amount_traded` credit at the same `(orderId, venueTimestampMicros)`. Measured across three segments,
+1,059 seconds and 753 trades:
+
+| Segment | Span | Trades | Naming a resting order | Covered by a credit | Uncovered |
+|---|---|---|---|---|---|
+| `20260822T000512Z` seg 0 | 65s | 84 | 69 | 69 | **0** |
+| `20260827T235604Z` seg 0 | 856s | 582 | 530 | 530 | **0** |
+| `20260827T235604Z` seg 1 | 138s | 87 | 38 | 38 | **0** |
+| **total** | **1,059s** | **753** | **637** | **637** | **0** |
+
+**637 of 637.** Bitstamp's `live_orders` reported every fill against a resting order via
+`amount_traded`. Not usually — every one.
+
+This weakens a claim made earlier in this project. The three hardcoded adjustments in
+`test_golden_replay.cpp` were explained as orders "fully filled, and `live_orders` emits no delete for
+a fill." If `live_orders` reports every fill, that explanation is unlikely. That capture is order-only
+so the hypothesis cannot be tested directly against it, and those three remain unexplained.
+
+Consequences for the reconciler:
+
+- It is **insurance, not a load-bearing path**, on this venue's L3 feed as observed. Keep it: it is
+  correct, cheap, unit-tested, and other venues do not all report post-fill quantities. But do not
+  claim it is validated against live venue data, because it has never fired against any.
+- **Stop capturing in the hope of finding the case.** Three captures produced zero reachable
+  instances. Further captures should be justified by something other than this search.
+- A future venue whose feed omits fill reporting would exercise it immediately, and is the more
+  likely source of real evidence than a longer Bitstamp run.
+
+### A capture-side prerequisite this work uncovered
+
+Replaying the second capture failed with `unexpected_order_apply_failure` — seven removes for orders
+the book had never seen. Cause: after a chain-gap reseed, the served snapshot's microtimestamp
+(`1787875831682714`) **predated the segment's first captured event** (`1787875832061000`) by 378ms.
+Events in that window are covered by neither the snapshot nor the stream.
+
+Subscribing before fetching the snapshot — which the capture script already did — is necessary but
+not sufficient, because Bitstamp can serve a snapshot describing the book as it was several hundred
+milliseconds earlier. The capture script now refetches until
+`snapshot.microtimestamp >= first captured order event`, and ends the segment with
+`snapshot_never_overlapped_stream` rather than emitting a seed with a hole in it. This is the only
+provable coverage condition; anything weaker is a probabilistic bet on an empty window.
+
+Related: the manifest previously advertised a `checkpoint` path for segments that ended on a chain gap
+and never wrote one, which made `loadJoinedCapture` fail on the whole capture. File paths are now
+recorded only when the file exists.
 
 ### The health counter had to be redefined
 
