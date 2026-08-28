@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <te/book/price_level.hpp>
@@ -60,6 +61,23 @@ public:
     Qty qtyAt(Side side, Price price) const;
 
     std::size_t levelCount() const { return bids_.size() + asks_.size(); }
+
+    /**
+     * @brief  Order-independent fingerprint of the book's resting state.
+     *
+     * @return A digest of every non-empty level as (side, price, aggregate quantity).
+     *
+     * @note   Hashes semantic content in sorted price order, never memory layout, so two books
+     *         holding the same liquidity agree regardless of insertion order, allocator behaviour,
+     *         struct padding or compiler. That is the property that makes it usable to compare a
+     *         future optimized book against this reference one (plan v4 Stage 8).
+     *
+     * @note   Deliberately excludes order IDs and per-order queue position: this answers "is the
+     *         same liquidity resting at the same prices", which is what a checkpoint snapshot can
+     *         independently confirm. A snapshot cannot confirm queue order, so hashing it would
+     *         produce a digest nothing external could ever verify.
+     */
+    std::uint64_t digest() const;
 
 private:
     std::map<Price, PriceLevel> bids_{};

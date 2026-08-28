@@ -241,6 +241,40 @@ a fill the other never confirmed.
   Bitstamp is added whose feed does not report post-fill quantities; or gap/reseed handling (still
   unspecified, plan v4 §7) changes what the reconciler can assume across a discontinuity.
 
+### `captureOrdinal` is carried, but is deliberately NOT the tie-break
+
+Plan v4 §6 declares the deterministic replay key as `(venueTimestampMicros, captureOrdinal)`. The
+ordinal is now decoded and carried on `CapturedOrderEvent` and `CapturedTradeEvent`, but the merge
+still breaks exact timestamp ties in favour of the order event. Measured reason:
+
+| Capture segment | Timestamps carrying both an order and a trade | Ordinal puts the **trade** first |
+|---|---|---|
+| `20260822T000512Z` seg 0 | 61 | 58 |
+| `20260827T235604Z` seg 0 | 327 | 304 |
+| `20260827T235604Z` seg 1 | 26 | 20 |
+| `20260828T003754Z` seg 0 | 13 | 12 |
+| **total** | **427** | **394 (92%)** |
+
+Bitstamp's `live_trades` frame reaches the socket before the matching `live_orders` frame in 92% of
+ties. Ordering by ordinal therefore processes the trade first, and `reconcile` runs before `observe`
+has recorded the order — the D1 hazard this ADR's tie-break exists to prevent.
+
+Running both policies over the reference captures:
+
+| Policy | Final book digest | Checkpoint mismatches | Apply failures |
+|---|---|---|---|
+| order wins tie (current) | `1efdb47806f2763f` | 0 | **0** |
+| `(venue_ts, captureOrdinal)` | `1efdb47806f2763f` | 0 | **41** |
+
+The final books agree, because each spurious correction is cancelled by the raw order event that
+then fails as redundant. But those 41 failures are real: `Replay` returns
+`unexpected_order_apply_failure` on the first one, so the plan's declared key does not merely produce
+a different route to the same answer — it aborts the replay. Adopting it would require tolerating
+failures, which is the silent-corruption posture this project rejects.
+
+`captureOrdinal` is still worth carrying: it is local-arrival provenance, and the evidence above is
+only measurable because it is decoded. Plan v4 §6 should be amended rather than the code.
+
 ## Open, deliberately not decided here
 
 Gap, reconnect and reseed behaviour, the book-health state machine, and any reorder window are

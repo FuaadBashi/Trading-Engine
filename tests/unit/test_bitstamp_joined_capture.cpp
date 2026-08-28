@@ -186,7 +186,7 @@ TEST(BitstampJoinedCapture, AcceptsValidFrameJson) {
 
     writeCommonCaptureFiles(capture);
     writeTextFile(capture.path() / "payload.jsonl", "{}\n");
-    writeTextFile(capture.path() / "frames.jsonl", R"({"streamKind":"control"})"
+    writeTextFile(capture.path() / "frames.jsonl", R"({"captureOrdinal":1,"streamKind":"control"})"
                                                    "\n");
 
     const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
@@ -203,9 +203,9 @@ TEST(BitstampJoinedCapture, AppendsDecodedEventsToJcVectors) {
     writeCommonCaptureFiles(capture);
     writeTextFile(capture.path() / "payload.jsonl",
                   std::string{kOrderPayload} + "\n" + std::string{kTradePayload} + "\n");
-    writeTextFile(capture.path() / "frames.jsonl", R"({"streamKind":"order"})"
+    writeTextFile(capture.path() / "frames.jsonl", R"({"captureOrdinal":1,"streamKind":"order"})"
                                                    "\n"
-                                                   R"({"streamKind":"trade"})"
+                                                   R"({"captureOrdinal":2,"streamKind":"trade"})"
                                                    "\n");
 
     const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
@@ -217,7 +217,7 @@ TEST(BitstampJoinedCapture, AppendsDecodedEventsToJcVectors) {
     EXPECT_EQ(result.valueIf()->jc_captureOrderEvents.front().event.order_id,
               te::OrderId{2037493297635328ULL});
     EXPECT_EQ(result.valueIf()->jc_captureOrderEvents.front().amountTraded, te::Qty{});
-    EXPECT_EQ(result.valueIf()->jc_tradeEvents.front().buy_order_id,
+    EXPECT_EQ(result.valueIf()->jc_tradeEvents.front().event.buy_order_id,
               te::OrderId{2041200416022642ULL});
 }
 
@@ -229,7 +229,7 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
     constexpr std::string_view checkpoint =
         R"({"timestamp":"2","microtimestamp":"2500","bids":[["100.00","1.50000000","42"]],"asks":[["101.00","1.00000000","77"]]})";
     constexpr std::string_view orderPayload =
-        R"({"data":{"id_str":"77","order_type":1,"microtimestamp":"1500","price_str":"101.00","amount_str":"1.00000000","amount_traded":"0.00000000"},"event":"order_created"})";
+        R"({"data":{"id":77,"id_str":"77","order_type":1,"microtimestamp":"1500","price_str":"101.00","amount_str":"1.00000000","amount_traded":"0.00000000"},"event":"order_created"})";
     constexpr std::string_view tradePayload =
         R"({"data":{"microtimestamp":"2000","buy_order_id":42,"sell_order_id":999,"amount_str":"0.50000000"},"event":"trade"})";
 
@@ -238,9 +238,9 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
     writeTextFile(capture.path() / "checkpoint.snapshot", checkpoint);
     writeTextFile(capture.path() / "payload.jsonl",
                   std::string{orderPayload} + "\n" + std::string{tradePayload} + "\n");
-    writeTextFile(capture.path() / "frames.jsonl", R"({"streamKind":"order"})"
+    writeTextFile(capture.path() / "frames.jsonl", R"({"captureOrdinal":1,"streamKind":"order"})"
                                                    "\n"
-                                                   R"({"streamKind":"trade"})"
+                                                   R"({"captureOrdinal":2,"streamKind":"trade"})"
                                                    "\n");
 
     const auto loaded = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
@@ -306,6 +306,14 @@ TEST(BitstampJoinedCapture, RealCaptureReplaysToCheckpointWithNoResiduals) {
     // Both health counters clean: every reported fill was matched by a trade.
     EXPECT_EQ(result.stats.reconciler.ordersRemovedWithUnmatchedFill, 0U);
     EXPECT_EQ(result.stats.reconciler.staleFillsDiscarded, 0U);
+
+    // Plan v4 s12: every input accounted for exactly once. Without this a merge-loop bug that
+    // silently dropped events would leave no trace anywhere.
+    EXPECT_EQ(result.stats.orderEventsAccountedFor(),
+              joinedCapture.jc_captureOrderEvents.size());
+    EXPECT_EQ(result.stats.tradeEventsAccountedFor(), joinedCapture.jc_tradeEvents.size());
+    EXPECT_EQ(result.stats.orderEventsBeforeSeed, 1U);
+    EXPECT_EQ(result.stats.orderEventsAfterCutoff, 4207U);
 
     result.book.validate();
     expectBookMatchesSnapshot(result.book, joinedCapture.checkpoint);

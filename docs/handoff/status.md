@@ -1,7 +1,7 @@
 # Status handoff
 
 Written for whichever Claude session picks this project up next. Built by reading the repo at `HEAD`
-(`9cbefca`, 2026-08-27) and running the tests, not from memory of any conversation.
+(`b635e9c` + working tree, 2026-08-28) and running the tests, not from memory of any conversation.
 
 `docs/project-plan-v4.md` is the authoritative long-range plan. This file is the shorter "what is
 actually true right now" companion, because v4's own baseline table (§2) predates most of the work
@@ -11,7 +11,7 @@ Verify before trusting: re-run the commands at the bottom.
 
 ## Build state
 
-Clean build from scratch, **189/189 CTest cases pass** (Apple Clang, default toolchain). The CI
+Clean build from scratch, **194/194 CTest cases pass**, plus 8 Python tests (Apple Clang, default toolchain). The CI
 dual GCC/Clang + ASan/UBSan matrix has not been re-verified in this pass.
 
 ## The most recent piece of work: ADR 0013
@@ -50,6 +50,9 @@ idempotent, so processing order no longer changes the resulting book.
 | Cold start | `bitstamp/bootstrap.cpp` | seeds `OrderBook` and, given a `TradeReconciler*`, seeds its records too |
 | Fill correction | `feed/trade_reconciler.cpp` | fill ledger, shortfall corrections, two health counters |
 | Merge controller | `bitstamp/replay.cpp` | two-pointer merge by venue time, order-wins-tie, `ReplayStats` |
+| Input accounting | `bitstamp/replay.cpp` | `beforeSeed + read + afterCutoff == input size`, asserted on the real capture |
+| Determinism fingerprints | `OrderBook::digest()`, `ReplayStats::appliedEventDigest` | FNV-1a over semantic fields; ten-run identical-digest test |
+| ID cross-check | `bitstamp/decoder.cpp` | ADR 0005: `id` vs `id_str`, `DecoderError::id_mismatch` |
 | Joined capture loading | `bitstamp/joined_capture.cpp` | manifest + payload/frames join, decodes into `CapturedOrderEvent` |
 | Joined capture tooling (Python) | `scripts/dump_raw_ws_bitstamp.py`, `scripts/validate_joined_capture.py` | implements the v4 §6 frame contract; own pytest file |
 
@@ -63,8 +66,8 @@ bump as a side effect of a bug fix.
 ```cpp
 Result<ReplayResult, ReplayError> Replay::replay(
     BookSnapshot seed,
-    const std::vector<CapturedOrderEvent>& orderEvents,   // event + its amountTraded
-    const std::vector<TradeEvent>& tradeEvents,
+    const std::vector<CapturedOrderEvent>& orderEvents,   // event + amountTraded + captureOrdinal
+    const std::vector<CapturedTradeEvent>& tradeEvents,   // event + captureOrdinal
     std::uint64_t cutoffMicros);
 ```
 
@@ -120,20 +123,18 @@ liquidations, a venue-side move between levels.
 
 **Highest value first:**
 
-1. **`id` vs `id_str` mismatch rejection** (v4 §10). `decoder.cpp` still trusts `id_str` alone, and
-   ADR 0005 requires the two representations to agree. Small, self-contained, and closes a real
-   Stage 0 item.
+1. **A capture that reaches the correction path.** Still the largest evidence gap — see above.
+   Not worth hunting on Bitstamp; a venue that omits fill reporting would exercise it immediately.
 
-2. **`captureOrdinal` on the C++ side.** Plan v4 §6 declares the replay key as
-   `(venueTimestampMicros, captureOrdinal)`. The Python capture layer emits it; nothing in C++ reads
-   it (`joined_capture.hpp:55` says so). `Replay` still falls back to the fixed order-wins-tie
-   policy. Since ADR 0013 that policy is no longer load-bearing for correctness, but it is still not
-   what the plan specifies for determinism.
+2. **Amend plan v4 §6.** It declares the replay key as `(venueTimestampMicros, captureOrdinal)`.
+   The ordinal is now decoded and carried, and measurement says the plan is wrong for this venue:
+   Bitstamp's trade frame arrives before its matching order frame in **394 of 427** shared
+   timestamps, so ordering by ordinal runs `reconcile` before `observe` and produces 41 apply
+   failures on the reference capture. The code keeps order-wins-tie deliberately; the plan is what
+   needs changing. See ADR 0013, "`captureOrdinal` is carried, but is deliberately NOT the
+   tie-break".
 
-3. **Stage 2 gate (v4 §12)** — "ten runs over the same fixture produce identical event and final-book
-   hashes." No hashing exists yet.
-
-4. **Rest of Stage 0 cleanup (v4 §10)** — receipt-timestamp type/naming, structural-vs-decision-ready
+3. **Rest of Stage 0 cleanup (v4 §10)** — receipt-timestamp type/naming, structural-vs-decision-ready
    validation split, CI guard activation, the mandatory small fixture. None started.
 
 **Deliberately deferred, documented as such in ADR 0013:** the book health state machine

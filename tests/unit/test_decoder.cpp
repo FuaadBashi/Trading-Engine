@@ -87,3 +87,49 @@ TEST(BitstampDecoder, InvalidAmountTradedIsAnInvalidField) {
     ASSERT_NE(result.errorIf(), nullptr);
     EXPECT_EQ(*result.errorIf(), te::bitstamp::DecoderError::invalid_field);
 }
+
+// ADR 0005 requires the two ID representations to agree. They have never disagreed across 619,803
+// captured order events; this is a tripwire for the day one of them stops being trustworthy --
+// most plausibly when IDs cross 2^53 and the JSON number starts losing precision while the string
+// does not. Current IDs sit near 2.0e15 against that 9.0e15 ceiling.
+TEST(BitstampDecoder, RejectsDisagreeingIdAndIdStr) {
+    const te::InstrumentSpec btcUsd{
+        .venue_id = te::VenueId::bitstamp,
+        .instrument_id = te::InstrumentId::btc_usd,
+        .price_decimals = 2,
+        .quantity_decimals = 8,
+    };
+
+    std::string_view line{
+        R"({"data":{"id":2037493297635328,"id_str":"2037493297635329","order_type":0,)"
+        R"("microtimestamp":"1786269861947000","amount_str":"0.00171371",)"
+        R"("price_str":"58356.10"},"event":"order_deleted"})"};
+
+    const auto result = te::bitstamp::decodeOrder(line, btcUsd);
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::bitstamp::DecoderError::id_mismatch);
+}
+
+// The numeric form is not optional: a line carrying only id_str cannot be cross-checked, and
+// silently trusting it would defeat the tripwire above.
+TEST(BitstampDecoder, RejectsOrderMissingNumericId) {
+    const te::InstrumentSpec btcUsd{
+        .venue_id = te::VenueId::bitstamp,
+        .instrument_id = te::InstrumentId::btc_usd,
+        .price_decimals = 2,
+        .quantity_decimals = 8,
+    };
+
+    std::string_view line{
+        R"({"data":{"id_str":"2037493297635328","order_type":0,)"
+        R"("microtimestamp":"1786269861947000","amount_str":"0.00171371",)"
+        R"("price_str":"58356.10"},"event":"order_deleted"})"};
+
+    const auto result = te::bitstamp::decodeOrder(line, btcUsd);
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::bitstamp::DecoderError::missing_field);
+}

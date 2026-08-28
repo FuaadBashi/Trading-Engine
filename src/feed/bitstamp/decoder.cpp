@@ -47,14 +47,24 @@ Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSp
         return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
     } else {
         // Keep Result alive while using valueIf(); calling it on a temporary would dangle.
-        // ADR 0005 also requires a future cross-check against the numeric "id" field.
         const Result<uint64_t, ParseError> id_result = parseInteger(id_str);
         const uint64_t* decoded_id = id_result.valueIf();
         if (decoded_id == nullptr) {
             return Result<OrderEvent, DecoderError>::failure(DecoderError::invalid_field);
-        } else {
-            orderEvent.order_id = OrderId{*decoded_id};
         }
+
+        // ADR 0005: the duplicate representations must agree. Bitstamp order IDs are around
+        // 2.0e15 today against a 9.0e15 ceiling (2^53), above which the JSON number silently
+        // loses precision while id_str stays exact. This is the tripwire for that day; it has
+        // never fired across 619,803 captured order events.
+        std::uint64_t numeric_id{};
+        if (doc["data"]["id"].get_uint64().get(numeric_id)) {
+            return Result<OrderEvent, DecoderError>::failure(DecoderError::missing_field);
+        }
+        if (numeric_id != *decoded_id) {
+            return Result<OrderEvent, DecoderError>::failure(DecoderError::id_mismatch);
+        }
+        orderEvent.order_id = OrderId{*decoded_id};
     }
     std::string_view str_time;
     err = doc["data"]["microtimestamp"].get_string().get(str_time);

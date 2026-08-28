@@ -208,6 +208,11 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::frame_malformed);
         }
+        std::uint64_t captureOrdinal{};
+        if (frameDocument["captureOrdinal"].get_uint64().get(captureOrdinal)) {
+            return Result<JoinedCapture, JoinedCaptureError>::failure(
+                JoinedCaptureError::frame_malformed);
+        }
         // The frame index selects the decoder; the raw payload line carries the actual event.
         if (streamKind == "order") {
             const auto decodedOrder = decodeOrder(payloadLine, spec);
@@ -221,19 +226,21 @@ Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
                     JoinedCaptureError::fill_decode_failure);
             }
 
-            CapturedOrderEvent captureOrderEvent {
+            joinedCapture.jc_captureOrderEvents.push_back(CapturedOrderEvent{
                 *decodedOrder.valueIf(),
-                *decodedFill.valueIf()
-
-            };
-            joinedCapture.jc_captureOrderEvents.push_back(captureOrderEvent);
+                *decodedFill.valueIf(),
+                captureOrdinal,
+            });
         } else if (streamKind == "trade") {
             const auto decodedTrade = decodeTrade(payloadLine, spec);
             if (!decodedTrade.hasValue()) {
                 return Result<JoinedCapture, JoinedCaptureError>::failure(
                     JoinedCaptureError::trade_decode_failure);
             }
-            joinedCapture.jc_tradeEvents.push_back(*decodedTrade.valueIf());
+            joinedCapture.jc_tradeEvents.push_back(CapturedTradeEvent{
+                *decodedTrade.valueIf(),
+                captureOrdinal,
+            });
         } else if (streamKind == "control") {
             // Subscription confirmations carry no book state.
         } else {

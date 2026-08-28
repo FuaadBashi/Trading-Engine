@@ -16,6 +16,12 @@ enum class DecoderError {
     not_order_event,
     missing_field,
     invalid_field,
+
+    // ADR 0005: "id" and "id_str" carry the same value twice and must agree. They disagree only
+    // if the venue changed format or an ID crossed 2^53, where the JSON number loses precision
+    // and the string does not. Rejecting is right: the two representations no longer name one
+    // order, and guessing which is real would corrupt every later lookup on that ID.
+    id_mismatch,
 };
 
 // Decodes one live_orders payload. Numeric strings are parsed directly to exact integers;

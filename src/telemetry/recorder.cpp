@@ -59,6 +59,9 @@ Result<RecorderStats, RecorderError> runRecorder(std::istream& input, Sink& sink
                 case bitstamp::DecoderError::malformed_json:
                 case bitstamp::DecoderError::missing_field:
                 case bitstamp::DecoderError::invalid_field:
+                // An id/id_str disagreement is a decode failure like any other here: the line
+                // named one order two ways and they differed, so there is no order to record.
+                case bitstamp::DecoderError::id_mismatch:
                     ++stats.failed;
                     break;
             }

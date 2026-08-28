@@ -68,13 +68,16 @@ te::bitstamp::CapturedOrderEvent capture(te::OrderEvent event,
     };
 }
 
-te::TradeEvent makeTrade(std::uint64_t timestamp, std::uint64_t buyId, std::uint64_t sellId,
-                         std::int64_t quantity) {
-    return te::TradeEvent{
-        .venue_timestamp_us = timestamp,
-        .buy_order_id = te::OrderId{buyId},
-        .sell_order_id = te::OrderId{sellId},
-        .quantity = te::Qty{quantity},
+te::bitstamp::CapturedTradeEvent makeTrade(std::uint64_t timestamp, std::uint64_t buyId,
+                                           std::uint64_t sellId, std::int64_t quantity) {
+    return te::bitstamp::CapturedTradeEvent{
+        .event =
+            te::TradeEvent{
+                .venue_timestamp_us = timestamp,
+                .buy_order_id = te::OrderId{buyId},
+                .sell_order_id = te::OrderId{sellId},
+                .quantity = te::Qty{quantity},
+            },
     };
 }
 
@@ -277,4 +280,91 @@ TEST(BitstampReplay, SameTimestampDeleteAfterFillIsNotCountedAsUnmatched) {
     const auto& replayed = *result.valueIf();
     EXPECT_EQ(replayed.book.levelCount(), 0U);
     EXPECT_EQ(replayed.stats.reconciler.ordersRemovedWithUnmatchedFill, 0U);
+}
+
+// Plan v4 s12 requires every input to be reported exactly once as applied, skipped, corrected or
+// failed. Events outside the seed..cutoff window used to vanish from the counters entirely --
+// 14.3% of the reference capture -- so a merge loop that silently skipped events looked healthy.
+TEST(BitstampReplay, AccountsForEveryInputEventExactlyOnce) {
+    te::bitstamp::Replay replay;
+    const auto result = replay.replay(
+        makeSnapshot({}, 100),
+        {
+            capture(makeAdd(50, 1, 100, 1, te::Side::buy)),   // before the seed
+            capture(makeAdd(150, 2, 101, 2, te::Side::buy)),  // in the window
+            capture(makeAdd(250, 3, 102, 3, te::Side::buy)),  // after the cutoff
+        },
+        {makeTrade(60, 9, 8, 1), makeTrade(150, 7, 6, 1), makeTrade(250, 5, 4, 1)}, 200);
+
+    ASSERT_TRUE(result.hasValue());
+    const auto& stats = result.valueIf()->stats;
+
+    EXPECT_EQ(stats.orderEventsBeforeSeed, 1U);
+    EXPECT_EQ(stats.orderEventsRead, 1U);
+    EXPECT_EQ(stats.orderEventsAfterCutoff, 1U);
+    EXPECT_EQ(stats.orderEventsAccountedFor(), 3U);
+
+    EXPECT_EQ(stats.tradeEventsBeforeSeed, 1U);
+    EXPECT_EQ(stats.tradeEventsRead, 1U);
+    EXPECT_EQ(stats.tradeEventsAfterCutoff, 1U);
+    EXPECT_EQ(stats.tradeEventsAccountedFor(), 3U);
+}
+
+// The digest exists so a future optimized book can be proven equivalent to this reference one
+// (plan v4 Stage 8), which requires it to depend on resting liquidity and nothing else.
+TEST(BitstampReplay, BookDigestIgnoresArrivalOrderButTracksQuantity) {
+    te::bitstamp::Replay replay;
+
+    const auto ascending = replay.replay(
+        makeSnapshot({}, 100),
+        {
+            capture(makeAdd(110, 1, 100, 5, te::Side::buy)),
+            capture(makeAdd(120, 2, 200, 7, te::Side::sell)),
+        },
+        {}, 300);
+    const auto descending = replay.replay(
+        makeSnapshot({}, 100),
+        {
+            capture(makeAdd(110, 2, 200, 7, te::Side::sell)),
+            capture(makeAdd(120, 1, 100, 5, te::Side::buy)),
+        },
+        {}, 300);
+    const auto different = replay.replay(
+        makeSnapshot({}, 100),
+        {
+            capture(makeAdd(110, 1, 100, 5, te::Side::buy)),
+            capture(makeAdd(120, 2, 200, 8, te::Side::sell)),  // one unit more
+        },
+        {}, 300);
+
+    ASSERT_TRUE(ascending.hasValue());
+    ASSERT_TRUE(descending.hasValue());
+    ASSERT_TRUE(different.hasValue());
+
+    // Same liquidity reached by a different route hashes the same...
+    EXPECT_EQ(ascending.valueIf()->book.digest(), descending.valueIf()->book.digest());
+    // ...but one unit of difference does not.
+    EXPECT_NE(ascending.valueIf()->book.digest(), different.valueIf()->book.digest());
+}
+
+// Determinism is what makes the digest usable as a fixture fingerprint at all.
+TEST(BitstampReplay, RepeatedRunsProduceIdenticalDigests) {
+    te::bitstamp::Replay replay;
+    std::uint64_t bookDigest{};
+    std::uint64_t eventDigest{};
+
+    for (int run = 0; run < 10; ++run) {
+        const auto result = replay.replay(
+            makeSnapshot({makeSnapshotOrder(42, 100, 10, te::Side::buy)}, 100),
+            {capture(makeModify(150, 42, 100, 6, te::Side::buy), 4)},
+            {makeTrade(150, 42, 99, 4)}, 200);
+        ASSERT_TRUE(result.hasValue());
+        if (run == 0) {
+            bookDigest = result.valueIf()->book.digest();
+            eventDigest = result.valueIf()->stats.appliedEventDigest;
+            continue;
+        }
+        EXPECT_EQ(result.valueIf()->book.digest(), bookDigest) << "run " << run;
+        EXPECT_EQ(result.valueIf()->stats.appliedEventDigest, eventDigest) << "run " << run;
+    }
 }

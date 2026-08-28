@@ -185,4 +185,35 @@ Qty OrderBook::qtyAt(Side side, Price price) const {
     return levelIt->second.totalQuantity();
 }
 
+std::uint64_t OrderBook::digest() const {
+    // FNV-1a. std::map iterates in ascending price order, so the walk is already canonical and
+    // does not depend on the order events arrived in.
+    constexpr std::uint64_t kOffsetBasis = 1469598103934665603ULL;
+    constexpr std::uint64_t kPrime = 1099511628211ULL;
+
+    const auto mix = [](std::uint64_t digest, std::uint64_t value) {
+        for (int byte = 0; byte < 8; ++byte) {
+            digest ^= (value >> (byte * 8)) & 0xFFULL;
+            digest *= kPrime;
+        }
+        return digest;
+    };
+
+    std::uint64_t digest = kOffsetBasis;
+    for (const auto& [side, levels] :
+         {std::pair{Side::buy, &bids_}, std::pair{Side::sell, &asks_}}) {
+        for (const auto& [price, level] : *levels) {
+            // An empty level is indistinguishable from an absent one for qtyAt, so it must not
+            // change the digest either.
+            if (level.totalQuantity().units == 0) {
+                continue;
+            }
+            digest = mix(digest, static_cast<std::uint64_t>(side));
+            digest = mix(digest, static_cast<std::uint64_t>(price.ticks));
+            digest = mix(digest, static_cast<std::uint64_t>(level.totalQuantity().units));
+        }
+    }
+    return digest;
+}
+
 }  // namespace te

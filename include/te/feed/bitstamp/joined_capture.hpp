@@ -34,9 +34,18 @@ enum class JoinedCaptureError {
     trade_decode_failure,
     fill_decode_failure
 };
+// captureOrdinal is the one increasing integer this capture process assigned across BOTH streams
+// as frames arrived (plan v4 §6). It answers "which frame did our capture observe first", and is
+// explicitly NOT a claim about the venue's internal matching order.
 struct CapturedOrderEvent {
     OrderEvent  event;
     Qty  amountTraded;
+    std::uint64_t captureOrdinal{};
+};
+
+struct CapturedTradeEvent {
+    TradeEvent event;
+    std::uint64_t captureOrdinal{};
 };
 
 struct JoinedCapture {
@@ -46,7 +55,7 @@ struct JoinedCapture {
 
     // Payload/frame rows are joined and decoded; control frames are deliberately omitted.
     std::vector<CapturedOrderEvent> jc_captureOrderEvents;
-    std::vector<TradeEvent> jc_tradeEvents;
+    std::vector<CapturedTradeEvent> jc_tradeEvents;
 };
 
 
