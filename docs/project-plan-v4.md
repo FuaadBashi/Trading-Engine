@@ -1,7 +1,7 @@
 # Trading Engine Project Plan v4
 
 **Owner:** Fuaad Bashi  
-**Revised:** 2026-08-20  
+**Revised:** 2026-08-28  
 **Primary career target:** Quant developer, with credible C++ market-data and performance-engineering evidence  
 **Status:** Current source of truth
 
@@ -42,8 +42,11 @@ The target interview story is:
 
 ## 2. Current verified baseline
 
-The status below reflects the repository on 2026-08-20. A local clean build discovers and passes
-158 CTest cases.
+The status below reflects the repository on **2026-08-28**. A clean build passes **194 CTest cases**
+plus 8 Python tests. Six C++ tests skip when private capture data is absent -- see the fixture gap
+below, which is why a green run on a fresh checkout does not yet mean much.
+
+`docs/handoff/status.md` is the short companion to this table and is refreshed more often.
 
 ### Implemented and tested
 
@@ -61,23 +64,38 @@ The status below reflects the repository on 2026-08-20. A local clean build disc
 | Reference book | `PriceLevel`, move-only `OrderBook`, add/modify/remove, locators and invariants | Focused book tests |
 | Bootstrap | Seed a fresh `OrderBook` from a parsed venue snapshot | Bootstrap tests |
 | Venue checkpoint | Replay order events from one snapshot to a later independent snapshot | Real golden replay test |
-| Fill correction | `TradeEvent`, trade decoder and `TradeReconciler` shadow state | Partial/full fill lifecycle tests |
+| Fill correction | `TradeEvent`, trade decoder, `TradeReconciler` fill ledger keyed by `(orderId, venueTimestamp)` | Partial/full fill lifecycle tests; ADR 0013 |
+| Joined capture loading | `loadJoinedCapture`: manifest + payload/frame positional join, decodes `amount_traded` and `captureOrdinal` | Synthetic fixture tests plus one real 29k-event capture |
+| Merge controller | `te::bitstamp::Replay`: two-pointer merge by venue time, order-wins-tie, full input accounting | 16 unit tests plus a real-corpus zero-residual test |
+| Determinism fingerprints | `OrderBook::digest()`, `ReplayStats::appliedEventDigest` | Route-independence and ten-run identical-digest tests |
 | Documentation | ADRs, learning notes and generated PDF deep dives | Repository documentation |
 
 ### Important work that is not complete
 
 | Gap | Why it matters |
 |---|---|
-| One joined order/trade capture contract | Separate captures do not provide one local arrival order or one shared run manifest. |
-| Production merge/reconciliation controller | Existing decoders, classifier, reconciler and book are not yet one deterministic pipeline. |
-| Hermetic end-to-end golden fixture | The strongest real-corpus test currently skips when private local data is absent. |
-| Zero unexplained checkpoint residuals | The current golden replay contains three explicit manual adjustments from the pre-reconciler investigation. |
+| **Hermetic end-to-end golden fixture** | **The blocker.** A fresh checkout reports 194/194 green while silently skipping every real-corpus test, including the correctness gate. Closing this is what makes all later Stage 3 evidence worth anything. |
+| Correction path unreached on real data | 637 of 637 fills against a resting order were already reported by `live_orders`, so `TradeReconciler` has never fired on a real capture. Insurance, not a validated path -- ADR 0013. |
+| Three unexplained golden-replay orders | Previously assumed to be silent full fills. That explanation is now unlikely; they remain unexplained and cannot be diagnosed from an order-only historical capture. |
+| Book health states | `unseeded -> warming -> valid -> stale_or_gapped -> resyncing -> valid` does not exist. No strategy gating. |
+| Replay-side gap/reseed policy | The *capture* side now refuses a seed that predates its stream. What replay should do on meeting a gap is still undecided (ADR 0013, deliberately deferred). |
+| Multi-segment capture loading | `loadJoinedCapture` reads only the first segment, so a capture that reconnected is partly unreachable from C++. |
 | Durable v3 binary corpus | Current v2 records write host object layout and are not the portable ADR 0011 format. |
 | Timestamp type contract | Receipt timestamp naming and nanosecond storage disagree; venue/local clock subtraction is not network latency. |
-| `id` and `id_str` agreement | ADR 0005 requires the duplicate representations to agree; the decoder currently trusts `id_str`. |
 | Two invariant modes | Structural invariants and stable decision-ready book checks must not be treated as identical. |
-| Same-venue L2/checkpoint suite | One later L3 snapshot is valuable evidence but not yet a broad checkpoint suite. |
+| Same-venue L2/checkpoint suite | Replay compares one final checkpoint; captures carry a checkpoint per segment. |
 | Replay, strategy, ledger, risk and venue interfaces | Slice 3 and later production components are still placeholders. |
+
+### Closed since this table was written
+
+| Was a gap | Closed by |
+|---|---|
+| One joined order/trade capture contract | `dump_raw_ws_bitstamp.py` + `validate_joined_capture.py`; seed must now cover stream start |
+| Production merge/reconciliation controller | `te::bitstamp::Replay`, ADR 0013 accepted |
+| Zero unexplained checkpoint residuals | Joined replay matches its S1 snapshot exactly: 0 of 4,533 levels, no hand-listed exceptions |
+| `id` and `id_str` agreement | `DecoderError::id_mismatch`, ADR 0005 satisfied |
+| Every input accounted for | `beforeSeed + read + afterCutoff == input size`, asserted on the real capture |
+| Deterministic digests | `OrderBook::digest()` and `ReplayStats::appliedEventDigest`; ten-run identical test |
 
 ## 3. Role alignment
 
@@ -161,19 +179,34 @@ Every accepted raw frame receives:
 The deterministic replay key is:
 
 ```text
-(venueTimestampMicros, captureOrdinal)
+(venueTimestampMicros, order events before trade events)
 ```
 
-`captureOrdinal` is a replay tie-breaker and evidence of local observation order. It is not claimed
-to be the matching engine's internal processing order.
+**Amended 2026-08-28 on measurement.** This section originally specified
+`(venueTimestampMicros, captureOrdinal)`. That is wrong for this venue. Bitstamp's `live_trades`
+frame reaches the socket *before* its matching `live_orders` frame in **394 of 427** shared
+timestamps across four capture segments, so ordering by ordinal runs `TradeReconciler::reconcile`
+before `observe` has recorded the order — the reconciler is then asked about an order it has never
+seen. Replaying the reference capture under the ordinal key produces 41 `OrderBook::apply` failures
+where the current rule produces none. See ADR 0013, "`captureOrdinal` is carried, but is
+deliberately NOT the tie-break".
+
+`captureOrdinal` is still captured, decoded and carried on every event. It is provenance — evidence
+of local observation order, and the only reason the measurement above was possible. It is not the
+tie-breaker, and it was never a claim about the matching engine's internal processing order.
 
 An order-chain break invalidates the affected replay segment. A new segment requires a new
 snapshot. Replay never crosses a gap or transport boundary while pretending the book remains valid.
 
 ## 7. Deterministic merge and reconciliation contract
 
-The missing controller is the next major C++ component. It owns stream ordering, classification,
-book application, trade correction, health and reason counters.
+**Built 2026-08-27** as `te::bitstamp::Replay` (`src/feed/bitstamp/replay.cpp`). It owns stream
+ordering, classification, book application, trade correction and reason counters. Health states are
+not implemented; see the deferred list at the end of this section.
+
+The ADR this section required is `docs/decisions/0013-merge-ordering-and-fill-double-counting.md`,
+accepted. It settles tie-breaking and specifies how corrections avoid double-counting a fill the
+venue already reported. Read it before changing this contract.
 
 ### Real order event
 

@@ -61,7 +61,8 @@ struct JoinedCapture {
 
 // Loads the first manifest segment and requires payload/frame-index files to end together.
 // It decodes files but does not verify hashes or chains; validate_joined_capture.py does that.
-// Current limitation: captureOrdinal is not preserved yet.
+// Current limitation: only the first segment is read. A capture that reconnected has later
+// segments, each with its own seed, and reaching them needs a segment selector.
 Result<JoinedCapture, JoinedCaptureError> loadJoinedCapture(
     const std::filesystem::path& captureDirectory, InstrumentSpec specs);
 

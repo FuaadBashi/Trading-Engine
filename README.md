@@ -16,7 +16,7 @@ observation and local paper-order experiments. See the current
 |---|---|---|
 | 0 Foundations | 0 | complete |
 | 1 Data contract + recorder | 1 to 3 | substantially implemented; durable v3 and two contract fixes remain |
-| 2 L3 book + reconciliation | 3 to 5 | in progress; reference book, bootstrap, checkpoint replay and reconciler implemented |
+| 2 L3 book + reconciliation | 3 to 5 | merge controller built and its gate met; joined replay reproduces the venue checkpoint exactly (0 of 4,533 levels differ) |
 | 3 Deterministic replay + accounting | after joined replay | not started |
 | 4 Queue labels + execution model | after replay core | not started |
 | 5 Held-out corpus validation | after label-quality gate | not started |
@@ -81,13 +81,20 @@ cannot exactly verify a Bitstamp book.
 Never do these in parallel. Full detail and exit gates are in
 [Project Plan v4](docs/project-plan-v4.md).
 
-1. Correct the timestamp-unit and `id`/`id_str` contracts and activate truthful CI guards.
-2. Capture orders and trades under one run/manifest with one shared `captureOrdinal`.
-3. Specify and test the deterministic merge/reconciliation controller.
-4. Replace manual checkpoint adjustments with joined trade evidence and zero silent apply errors.
-5. Make a small end-to-end golden fixture mandatory on a clean checkout.
-6. Implement portable v3 encoding after the joined schema and timing fields are stable.
-7. Only then begin the general replay/strategy/accounting engine.
+1. **Make a small end-to-end golden fixture mandatory on a clean checkout.** Today a fresh
+   checkout reports 194/194 green while silently skipping every real-corpus test, including the
+   correctness gate, so green does not yet mean much.
+2. Correct the timestamp-unit contract and activate truthful CI guards.
+3. Define replay-side gap/reseed behaviour and book health states, then gate strategy delivery on
+   them. Deliberately deferred by ADR 0013 until there is evidence to design against.
+4. Implement portable v3 encoding after the joined schema and timing fields are stable.
+5. Only then begin the general replay/strategy/accounting engine.
+
+Done since this list was written: joined order/trade capture under one manifest and ordinal; the
+deterministic merge/reconciliation controller (ADR 0013); `id`/`id_str` agreement; and manual
+checkpoint adjustments replaced by joined trade evidence with no silent apply errors. The three
+remaining adjustments live only in the legacy order-only golden test, which has no trade stream to
+reconcile against.
 
 Each Bitstamp run creates `data/raw/bitstamp-btcusd-<UTC timestamp>/` containing an
 atomic `manifest.json` plus one `.snapshot` and payload-only `.jsonl` file per continuous

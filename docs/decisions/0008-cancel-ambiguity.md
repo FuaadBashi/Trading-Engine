@@ -17,9 +17,29 @@ and must not be applied blindly to the L3 path.
 
 Uncertainty has not disappeared. It moved to classifying deletion versus execution, replacement
 and priority semantics, tied timestamps, hidden liquidity, capture gaps and the counterfactual
-assumption that inserting our order would not alter later behavior. The current order-only corpus
-does not yet prove all of those semantics; a joined `live_orders` + `live_trades` sample is required
-before this ADR can be accepted.
+assumption that inserting our order would not alter later behavior.
+
+### What joined capture has now settled (2026-08-28)
+
+Joined `live_orders` + `live_trades` samples exist, and part of the question above is answered.
+
+**Deletion versus execution is directly observable, not inferred.** Every order event carries
+`amount_traded`, the fill for that single event, and it is non-zero exactly when the event was
+caused by a trade. Across 1,059 seconds of joined capture, **637 of 637** trades against a resting
+order had their fill reported this way, and **83 of 83** quantity decreases were fill-driven. A
+delete with `amount_traded == 0` is a genuine cancel; one with a non-zero value is the final fill.
+No allocation assumption is needed to tell them apart.
+
+Two things this does **not** settle, and they are the reasons this ADR is still `proposed`:
+
+- **Tied timestamps.** Order and trade messages share a venue microsecond routinely, and 10 orders
+  in one capture carried more than one fill in the same microsecond. Within a microsecond the
+  ordering of fills against a level is not recoverable from the feed.
+- **The counterfactual itself.** Observability of *other* orders' cancels says nothing about
+  whether inserting our own order would have changed later behaviour. That is a modelling
+  assumption, and no capture can discharge it.
+
+See ADR 0013 for the fill-accounting mechanism and the measurements above.
 
 ## Options considered
 

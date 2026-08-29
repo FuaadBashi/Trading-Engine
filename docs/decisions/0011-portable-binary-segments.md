@@ -130,10 +130,16 @@ its orders actually traded. Until then:
 - `OrderEvent` stays unchanged, so the legacy 56-byte `Record` does not get to dictate the
   permanent domain model by accident, and no format bump is spent on an unvalidated field.
 - Venue-specific classification that *can* be justified from the data today lives in
-  `BitstampEventClassifier` (see `feed/bitstamp_classifier.hpp`), between the decoder and the
+  `te::bitstamp::EventClassifier` (`feed/bitstamp/classifier.hpp`), between the decoder and the
   book, rather than being pushed into `OrderEvent` or `OrderBook`.
 - When the joined-data investigation resolves what subtype means, adding it is a v3 schema
   decision recorded here, not a silent widening of the in-memory event.
+
+**Confirmed 2026-08-28.** Joined capture arrived and this reasoning held. `amount_traded` is
+exactly the kind of venue field this ADR anticipated: it was needed for fill accounting, so it is
+decoded by a separate `decodeFill` and carried on `CapturedOrderEvent` rather than added to
+`OrderEvent`. `OrderEvent` is still 40 bytes and `Record` still 56, so no format bump was spent.
+See ADR 0013. `order_subtype` itself remains unresolved.
 
 ## Consequences
 
