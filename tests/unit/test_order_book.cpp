@@ -236,3 +236,86 @@ TEST(OrderBook, RemovedOrderIdCanBeAddedAgain) {
     EXPECT_EQ(book.qtyAt(te::Side::buy, te::Price{100}), te::Qty{0});
     EXPECT_EQ(book.qtyAt(te::Side::buy, te::Price{101}), te::Qty{7});
 }
+
+// OrderBook is moved twice on every replay: out of bootstrap's Result, then into ReplayResult.
+// Nothing tested that a POPULATED book survives it. The static_asserts in order_book.hpp only
+// prove copy is deleted and move exists -- not that move is correct. It matters here because
+// orderIndex_ stores OrderLocators holding list iterators into this book's own PriceLevels, so a
+// move that relocated the nodes would leave every locator dangling. That would be silent until
+// some later modify or remove followed a stale iterator, i.e. mid-replay, on real data.
+TEST(OrderBook, MoveConstructionKeepsLocatorsUsableOnAPopulatedBook) {
+    te::OrderBook source;
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 2, 100, 3, te::Side::buy)).hasValue());
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 3, 200, 7, te::Side::sell)).hasValue());
+
+    const te::OrderBook moved = std::move(source);
+
+    moved.validate();
+    EXPECT_EQ(moved.levelCount(), 2U);
+    EXPECT_EQ(moved.qtyAt(te::Side::buy, te::Price{100}), te::Qty{8});
+    EXPECT_EQ(moved.qtyAt(te::Side::sell, te::Price{200}), te::Qty{7});
+}
+
+// The dangerous half: locators must still resolve for MUTATION, not just for reads. A read-only
+// check would pass even if every iterator were dangling, because qtyAt goes through the price
+// maps and never touches orderIndex_.
+TEST(OrderBook, MovedBookCanStillModifyAndRemoveOrdersItInherited) {
+    te::OrderBook source;
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 2, 100, 3, te::Side::buy)).hasValue());
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 3, 200, 7, te::Side::sell)).hasValue());
+
+    te::OrderBook moved = std::move(source);
+
+    // Follow an inherited locator to shrink an order in place.
+    ASSERT_TRUE(moved.apply(makeEvent(te::EventKind::modify, 1, 100, 2, te::Side::buy)).hasValue());
+    EXPECT_EQ(moved.qtyAt(te::Side::buy, te::Price{100}), te::Qty{5});
+
+    // Follow another to erase a node the moved-from book allocated.
+    ASSERT_TRUE(moved.apply(makeEvent(te::EventKind::remove, 2, 100, 3, te::Side::buy)).hasValue());
+    EXPECT_EQ(moved.qtyAt(te::Side::buy, te::Price{100}), te::Qty{2});
+
+    // Emptying a level must still remove the level itself.
+    ASSERT_TRUE(moved.apply(makeEvent(te::EventKind::remove, 1, 100, 2, te::Side::buy)).hasValue());
+    EXPECT_EQ(moved.levelCount(), 1U);
+    moved.validate();
+}
+
+TEST(OrderBook, MoveAssignmentKeepsLocatorsUsableAndDiscardsTheOldBook) {
+    te::OrderBook source;
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+    ASSERT_TRUE(source.apply(makeEvent(te::EventKind::add, 2, 200, 4, te::Side::sell)).hasValue());
+
+    // The target already owns state, so assignment must release it rather than merge it.
+    te::OrderBook target;
+    ASSERT_TRUE(target.apply(makeEvent(te::EventKind::add, 9, 300, 1, te::Side::buy)).hasValue());
+
+    target = std::move(source);
+
+    target.validate();
+    EXPECT_EQ(target.levelCount(), 2U);
+    EXPECT_EQ(target.qtyAt(te::Side::buy, te::Price{300}), te::Qty{});
+    ASSERT_TRUE(target.apply(makeEvent(te::EventKind::remove, 1, 100, 5, te::Side::buy)).hasValue());
+    EXPECT_EQ(target.levelCount(), 1U);
+}
+
+// Two moves is what a real replay does, so prove the book survives a chain of them.
+TEST(OrderBook, SurvivesTheDoubleMoveAReplayPerforms) {
+    te::OrderBook first;
+    ASSERT_TRUE(first.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+    ASSERT_TRUE(first.apply(makeEvent(te::EventKind::add, 2, 100, 3, te::Side::buy)).hasValue());
+
+    te::OrderBook second = std::move(first);
+    te::OrderBook third = std::move(second);
+
+    third.validate();
+    ASSERT_TRUE(third.apply(makeEvent(te::EventKind::modify, 2, 100, 1, te::Side::buy)).hasValue());
+    EXPECT_EQ(third.qtyAt(te::Side::buy, te::Price{100}), te::Qty{6});
+    EXPECT_EQ(third.digest(), [] {
+        te::OrderBook direct;
+        direct.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy));
+        direct.apply(makeEvent(te::EventKind::add, 2, 100, 1, te::Side::buy));
+        return direct.digest();
+    }()) << "a moved book must hash identically to one built in place";
+}
