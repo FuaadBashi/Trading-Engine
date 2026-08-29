@@ -1,7 +1,7 @@
 # Status handoff
 
 Written for whichever Claude session picks this project up next. Built by reading the repo at `HEAD`
-(`b635e9c` + working tree, 2026-08-28) and running the tests, not from memory of any conversation.
+(`ad6e9dc`, 2026-08-28) and running the tests, not from memory of any conversation.
 
 `docs/project-plan-v4.md` is the authoritative long-range plan. This file is the shorter "what is
 actually true right now" companion, because v4's own baseline table (§2) predates most of the work
@@ -11,8 +11,14 @@ Verify before trusting: re-run the commands at the bottom.
 
 ## Build state
 
-Clean build from scratch, **194/194 CTest cases pass**, plus 8 Python tests (Apple Clang, default toolchain). The CI
-dual GCC/Clang + ASan/UBSan matrix has not been re-verified in this pass.
+Clean build from scratch, **201/201 CTest cases pass**, plus 8 Python tests (Apple Clang, default
+toolchain). The CI dual GCC/Clang + ASan/UBSan matrix has not been re-verified in this pass.
+
+**A fresh checkout is now meaningful.** It used to report every test green while silently skipping
+the entire real pipeline. `BitstampJoinedCapture.GoldenFixtureReplaysToHandWrittenCheckpoint` runs
+from a committed 2.9 KB fixture and never skips, so plan v4 §10's gate — "a fresh checkout runs
+every mandatory test without private local files" — is met. Tests that still need private captures
+now say what evidence is missing instead of just naming a path.
 
 ## The most recent piece of work: ADR 0013
 
@@ -53,6 +59,9 @@ idempotent, so processing order no longer changes the resulting book.
 | Input accounting | `bitstamp/replay.cpp` | `beforeSeed + read + afterCutoff == input size`, asserted on the real capture |
 | Determinism fingerprints | `OrderBook::digest()`, `ReplayStats::appliedEventDigest` | FNV-1a over semantic fields; ten-run identical-digest test |
 | ID cross-check | `bitstamp/decoder.cpp` | ADR 0005: `id` vs `id_str`, `DecoderError::id_mismatch` |
+| Mandatory golden fixture | `tests/fixtures/joined-capture-golden/`, built by `scripts/make_golden_fixture.py` | runs on any checkout; covers the correction path real data never reaches |
+| Populated-book move safety | `test_order_book.cpp` | move-construct, move-assign and double-move a populated book, then mutate through inherited locators |
+| Independent book oracle | `test_book_oracle.cpp` | 28,000 generated events compared against a separately written model |
 | Joined capture loading | `bitstamp/joined_capture.cpp` | manifest + payload/frames join, decodes into `CapturedOrderEvent` |
 | Joined capture tooling (Python) | `scripts/dump_raw_ws_bitstamp.py`, `scripts/validate_joined_capture.py` | implements the v4 §6 frame contract; own pytest file |
 
@@ -100,8 +109,12 @@ over-suppressed — over-suppression would leave excess quantity resting and sho
 there are none.
 
 But it means the zero-residual result validates the **loader, bootstrap, classifier, merge ordering
-and `OrderBook`**. It says nothing about corrections firing when they should. Only the unit tests in
-`test_trade_reconciler.cpp` and `test_bitstamp_replay.cpp` cover that path.
+and `OrderBook`**. It says nothing about corrections firing when they should.
+
+That path is now covered end to end by the committed golden fixture, which contains a resting order
+consumed by a trade `live_orders` never reports, and asserts exactly one correction is manufactured.
+That is synthetic evidence through the real loader and merge loop — stronger than unit tests alone,
+weaker than seeing it on the wire.
 
 **And it may not be reachable on this venue.** Across 1,059 seconds of joined capture and 753 trades,
 **637 of 637** trades against a resting order had their fill already reported by `live_orders` via
@@ -109,9 +122,9 @@ and `OrderBook`**. It says nothing about corrections firing when they should. On
 never been reached on real Bitstamp data — see ADR 0013, "The correction path has not been reached on
 real data", for the per-segment numbers.
 
-Keep the reconciler: it is correct, cheap, unit-tested, and other venues do not all report post-fill
-quantities. But treat it as **insurance, not a validated path**, and do not go capturing indefinitely
-in the hope of catching one.
+Keep the reconciler: it is correct, exercised end to end by the golden fixture, and other venues do
+not all report post-fill quantities. But it has never fired on real venue data, so do not claim it
+is validated *against Bitstamp*, and do not go capturing indefinitely in the hope of catching one.
 
 That also unsettles the explanation for the three hardcoded adjustments in `test_golden_replay.cpp`.
 They were assumed to be orders fully filled with no `order_deleted`; if `live_orders` reports every
@@ -123,8 +136,10 @@ liquidations, a venue-side move between levels.
 
 **Highest value first:**
 
-1. **A capture that reaches the correction path.** Still the largest evidence gap — see above.
-   Not worth hunting on Bitstamp; a venue that omits fill reporting would exercise it immediately.
+1. **Multi-segment capture loading.** `loadJoinedCapture` reads only segment 0, so a capture that
+   reconnected is partly unreachable: the Aug 27 run has 133k events stranded in segment 0 with only
+   18k reachable. Fixing it also unlocks plan v4 §13's "compare several intermediate checkpoints,
+   not only one final state", since every segment carries its own checkpoint. Two items, one change.
 
 2. **Amend plan v4 §6.** It declares the replay key as `(venueTimestampMicros, captureOrdinal)`.
    The ordinal is now decoded and carried, and measurement says the plan is wrong for this venue:
@@ -148,6 +163,10 @@ segment as `snapshot_never_overlapped_stream` rather than emitting a holed seed.
 (what the engine should do when it meets a gap) is still undecided.
 
 ## Where to read more
+
+- `docs/handoff/2026-08-session-log.md` — how this state was reached, including the wrong turns and
+  the measurements that overturned them. Read it before revisiting any decision below; several were
+  reached by being wrong first.
 
 - `docs/decisions/0013-merge-ordering-and-fill-double-counting.md` — accepted. Read the
   counter-example section before touching the fill ledger.
