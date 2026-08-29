@@ -9,9 +9,9 @@
 // Every generated event is applied to both and their answers compared: the exact ApplyError on
 // rejection, and on success every level quantity, the level count, best bid and best ask.
 //
-// Measured coverage of the 40-seed sweep: 2,468 of 8,000 events are accepted mutations, the book
-// holds up to 8 simultaneous levels, and five ApplyError kinds are provoked -- duplicate_order_id
-// 2,693, side_mismatch 1,578, unknown_order_id 1,127, invalid_quantity 69, invalid_price 65.
+// Measured coverage of the 40-seed sweep: 2,439 of 8,000 events are accepted mutations, the book
+// holds up to 4 simultaneous levels, and five ApplyError kinds are provoked -- duplicate_order_id
+// 2,719, side_mismatch 1,571, unknown_order_id 1,155, invalid_quantity 65, invalid_price 51.
 //
 // NOT covered: level_quantity_overflow. Reaching it needs quantities near the int64 ceiling, and
 // this oracle sums quantities in a plain int64, so at those magnitudes the oracle would overflow
@@ -162,7 +162,20 @@ te::OrderEvent generate(Rng& rng) {
     if (rng.below(50) == 0) {
         quantity = 0;
     }
-    std::int64_t price = static_cast<std::int64_t>(rng.below(4) + 1);
+
+    // Side is decided before price, and price ranges never overlap across sides: buys live in
+    // {1,2}, asks in {3,4}. OrderBook::apply is a passive index -- it applies exactly what it is
+    // told and has no matching engine, so nothing stops a generator from resting a buy above a
+    // resting ask. validate()'s non-crossed assertion assumes an honest venue would never emit
+    // that combination; a generator free to pick price independently of side can, and did --
+    // this is what BookOracle originally caught (CI runs 33255903750 / 33256059656, both
+    // compilers, "Assertion `!bestBid()... || *bestBid() < *bestAsk()' failed"). Disjoint ranges
+    // make a crossed book structurally unreachable while still exercising two price levels per
+    // side, multiple orders per level, and every EventKind against them.
+    const te::Side side = (rng.below(2) == 0) ? te::Side::buy : te::Side::sell;
+    std::int64_t price =
+        (side == te::Side::buy) ? static_cast<std::int64_t>(rng.below(2) + 1)
+                                : static_cast<std::int64_t>(rng.below(2) + 3);
     if (rng.below(50) == 0) {
         price = 0;
     }
@@ -172,7 +185,7 @@ te::OrderEvent generate(Rng& rng) {
         .order_id = te::OrderId{rng.below(8) + 1},
         .price = te::Price{price},
         .quantity = te::Qty{quantity},
-        .side = (rng.below(2) == 0) ? te::Side::buy : te::Side::sell,
+        .side = side,
         .kind = kind,
     };
 }
