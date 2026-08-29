@@ -86,7 +86,7 @@ TEST(GoldenReplay, ReplayedBookMatchesIndependentVenueSnapshot) {
 
     if (!std::filesystem::exists(jsonlPath) || !std::filesystem::exists(seedPath) ||
         !std::filesystem::exists(targetPath)) {
-        GTEST_SKIP() << "live capture not present: " << capture;
+        GTEST_SKIP() << "OPTIONAL EVIDENCE NOT RUN: legacy order-only checkpoint replay is\n                        unverified. Superseded as a gate by the joined-capture tests.\n                        Missing: " << capture;
     }
 
     const auto seedResult = te::bitstamp::parseSnapshot(readWholeFile(seedPath), btcUsd());

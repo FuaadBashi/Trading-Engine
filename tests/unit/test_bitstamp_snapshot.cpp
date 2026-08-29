@@ -282,7 +282,7 @@ TEST(BitstampSnapshot, ParsesTheRealCaptureSnapshot) {
     const std::string path = std::string(TE_PROJECT_ROOT_DIR) +
                              "/data/raw/bitstamp-btcusd-20260809T100421Z/segment-0000.snapshot";
     if (!std::filesystem::exists(path)) {
-        GTEST_SKIP() << "capture not present: " << path;
+        GTEST_SKIP() << "OPTIONAL EVIDENCE NOT RUN: the parser is unverified against a real\n                        venue snapshot; synthetic snapshot tests still ran. Missing: " << path;
     }
     std::ifstream in(path);
     ASSERT_TRUE(in.is_open());

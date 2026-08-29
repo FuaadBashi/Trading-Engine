@@ -275,7 +275,7 @@ TEST(Recorder, GoldenCaptureRoundTripsByteExact) {
         "/data/raw/bitstamp-btcusd-20260809T100421Z/segment-0000.jsonl";
 
     if (!std::filesystem::exists(fixture)) {
-        GTEST_SKIP() << "capture not present: " << fixture;
+        GTEST_SKIP() << "OPTIONAL EVIDENCE NOT RUN: the recorder is unverified against a real\n                        capture file; synthetic recorder tests still ran. Missing: " << fixture;
     }
 
     const TempFile out("te_recorder_golden.bin");

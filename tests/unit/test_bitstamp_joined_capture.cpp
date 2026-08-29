@@ -263,6 +263,61 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
     expectBookMatchesSnapshot(replayed.valueIf()->book, joinedCapture.checkpoint);
 }
 
+// MANDATORY. Unlike every other real-data test in this file, this one never skips: the fixture is
+// committed, so a clean checkout on any machine exercises loader -> bootstrap -> merge ->
+// reconciler -> book end to end. Before it existed a fresh checkout reported every test green while
+// silently skipping the entire real pipeline.
+//
+// The checkpoint in the fixture is hand-written from what the venue would report, never produced by
+// replaying this code. A fixture whose expected state came from the book under test would only
+// prove the book agrees with itself.
+//
+// It also covers a path no real Bitstamp capture has ever reached: order 102 is consumed by a trade
+// that live_orders never reports, so TradeReconciler must manufacture the removal. Across 1,059
+// seconds of real joined capture that case occurred zero times (ADR 0013).
+TEST(BitstampJoinedCapture, GoldenFixtureReplaysToHandWrittenCheckpoint) {
+    const std::filesystem::path capture =
+        std::filesystem::path(TE_TEST_DATA_DIR) / "joined-capture-golden";
+    ASSERT_TRUE(std::filesystem::exists(capture / "manifest.json"))
+        << "committed fixture missing -- it is mandatory, not optional: " << capture;
+
+    const auto loaded = te::bitstamp::loadJoinedCapture(capture, btcUsd());
+    ASSERT_TRUE(loaded.hasValue());
+    const te::bitstamp::JoinedCapture& joinedCapture = *loaded.valueIf();
+    EXPECT_EQ(joinedCapture.jc_captureOrderEvents.size(), 5U);
+    EXPECT_EQ(joinedCapture.jc_tradeEvents.size(), 2U);
+
+    // captureOrdinal is carried through the loader even though it is not the tie-break.
+    EXPECT_EQ(joinedCapture.jc_captureOrderEvents.front().captureOrdinal, 1U);
+
+    te::bitstamp::Replay replay;
+    const auto replayed =
+        replay.replay(joinedCapture.seed, joinedCapture.jc_captureOrderEvents,
+                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint.microtimestamp);
+    ASSERT_TRUE(replayed.hasValue())
+        << "replay failed with error " << (replayed.errorIf() ? int(*replayed.errorIf()) : -1);
+    const te::bitstamp::ReplayResult& result = *replayed.valueIf();
+
+    // One event before the seed, one after the checkpoint, three in the window.
+    EXPECT_EQ(result.stats.orderEventsBeforeSeed, 1U);
+    EXPECT_EQ(result.stats.orderEventsRead, 3U);
+    EXPECT_EQ(result.stats.orderEventsAfterCutoff, 1U);
+    EXPECT_EQ(result.stats.orderEventsAccountedFor(),
+              joinedCapture.jc_captureOrderEvents.size());
+    EXPECT_EQ(result.stats.tradeEventsAccountedFor(), joinedCapture.jc_tradeEvents.size());
+
+    // The 1200000 fill is reported by both streams, so its credit absorbs the trade. The 1300000
+    // fill is reported only by live_trades, so exactly one correction is manufactured.
+    EXPECT_EQ(result.stats.tradeEventsRead, 2U);
+    EXPECT_EQ(result.stats.correctionsGenerated, 1U);
+    EXPECT_EQ(result.stats.correctionsApplied, 1U);
+    EXPECT_EQ(result.stats.reconciler.ordersRemovedWithUnmatchedFill, 0U);
+    EXPECT_EQ(result.stats.reconciler.staleFillsDiscarded, 0U);
+
+    result.book.validate();
+    expectBookMatchesSnapshot(result.book, joinedCapture.checkpoint);
+}
+
 // The real-corpus gate: a full joined capture replayed from its own S0 seed must reproduce the
 // independently fetched S1 snapshot exactly, with no hand-listed exceptions. The synthetic test
 // above proves the wiring; only this one proves the merge, classifier and fill accounting against
@@ -271,7 +326,7 @@ TEST(BitstampJoinedCapture, RealCaptureReplaysToCheckpointWithNoResiduals) {
     const std::filesystem::path capture =
         std::filesystem::path(TE_PROJECT_ROOT_DIR) / "data/raw/bitstamp-btcusd-20260822T000512Z";
     if (!std::filesystem::exists(capture / "manifest.json")) {
-        GTEST_SKIP() << "joined capture not present: " << capture;
+        GTEST_SKIP() << "OPTIONAL EVIDENCE NOT RUN: venue agreement over a 29k-event joined\n                        capture is unverified on this machine. The committed golden fixture\n                        still proves the pipeline. Missing: " << capture;
     }
 
     const auto loaded = te::bitstamp::loadJoinedCapture(capture, btcUsd());

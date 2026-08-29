@@ -1,0 +1,15 @@
+{
+  "format_version": 2,
+  "venue": "bitstamp",
+  "instrument": "btcusd",
+  "runId": "golden-fixture",
+  "segments": [
+    {
+      "index": 0,
+      "payload": "segment-0000.jsonl",
+      "frame_index": "segment-0000.frames.jsonl",
+      "snapshot": "segment-0000.snapshot",
+      "checkpoint": "checkpoint-0000.snapshot"
+    }
+  ]
+}

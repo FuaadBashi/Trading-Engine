@@ -1,0 +1,7 @@
+{"captureOrdinal":1,"streamKind":"order","venueTimestampMicros":900000,"runId":"golden-fixture","segmentId":0,"payloadLine":1}
+{"captureOrdinal":2,"streamKind":"order","venueTimestampMicros":1100000,"runId":"golden-fixture","segmentId":0,"payloadLine":2}
+{"captureOrdinal":3,"streamKind":"order","venueTimestampMicros":1200000,"runId":"golden-fixture","segmentId":0,"payloadLine":3}
+{"captureOrdinal":4,"streamKind":"trade","venueTimestampMicros":1200000,"runId":"golden-fixture","segmentId":0,"payloadLine":4}
+{"captureOrdinal":5,"streamKind":"trade","venueTimestampMicros":1300000,"runId":"golden-fixture","segmentId":0,"payloadLine":5}
+{"captureOrdinal":6,"streamKind":"order","venueTimestampMicros":1400000,"runId":"golden-fixture","segmentId":0,"payloadLine":6}
+{"captureOrdinal":7,"streamKind":"order","venueTimestampMicros":1600000,"runId":"golden-fixture","segmentId":0,"payloadLine":7}
