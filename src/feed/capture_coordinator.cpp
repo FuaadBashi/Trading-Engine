@@ -125,6 +125,7 @@ Result<CaptureReplayReport, CaptureCoordinatorError> captureCoordinator(const st
         segmentReport.cutoffMicros = cutoff;
         segmentReport.replayStats = replayed.stats;
         segmentReport.segmentIndex = segment.index;
+        segmentReport.finalBookDigest = replayed.book.digest();
         captureReplayReport.segments.push_back(segmentReport);
         
     };

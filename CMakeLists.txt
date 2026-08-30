@@ -50,6 +50,7 @@ target_sources(te_core PRIVATE
     # Slice 2
     src/book/order_book.cpp
     src/book/price_level.cpp
+    src/book/book_health.cpp
     src/feed/bitstamp/snapshot.cpp
     src/feed/bitstamp/classifier.cpp
     src/feed/bitstamp/bootstrap.cpp

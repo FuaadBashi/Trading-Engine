@@ -233,4 +233,39 @@ TEST(CaptureCoordinator, RejectsManifestAndSpecMismatch) {
     EXPECT_EQ(*result.errorIf(), te::CaptureCoordinatorError::manifest_spec_mismatch);
 }
 
+TEST(CaptureCoordinator, GoldenCaptureMatchesIndependentCheckpoint) {
+    const std::filesystem::path capture =
+        std::filesystem::path{TE_TEST_DATA_DIR} / "joined-capture-golden";
+    ASSERT_TRUE(std::filesystem::exists(capture / "manifest.json"));
+
+    const auto result = te::captureCoordinator(capture, btcUsd());
+
+    ASSERT_TRUE(result.hasValue());
+    ASSERT_NE(result.valueIf(), nullptr);
+    ASSERT_EQ(result.valueIf()->segments.size(), 1U);
+    const te::SegmentReplayReport& report = result.valueIf()->segments.front();
+    ASSERT_TRUE(report.checkpointComparison.has_value());
+    EXPECT_TRUE(report.checkpointComparison->matched);
+    EXPECT_EQ(report.checkpointComparison->mismatchedExpectedLevels, 0U);
+    EXPECT_EQ(report.checkpointComparison->unexpectedActualLevels, 0U);
+}
+
+TEST(CaptureCoordinator, GoldenCaptureProducesIdenticalDigestsAcrossRepeatedRuns) {
+    const std::filesystem::path capture =
+        std::filesystem::path{TE_TEST_DATA_DIR} / "joined-capture-golden";
+
+    const auto first = te::captureCoordinator(capture, btcUsd());
+    const auto second = te::captureCoordinator(capture, btcUsd());
+
+    ASSERT_TRUE(first.hasValue());
+    ASSERT_TRUE(second.hasValue());
+    ASSERT_EQ(first.valueIf()->segments.size(), 1U);
+    ASSERT_EQ(second.valueIf()->segments.size(), 1U);
+    const te::SegmentReplayReport& firstReport = first.valueIf()->segments.front();
+    const te::SegmentReplayReport& secondReport = second.valueIf()->segments.front();
+    EXPECT_EQ(firstReport.finalBookDigest, secondReport.finalBookDigest);
+    EXPECT_EQ(firstReport.replayStats.appliedEventDigest,
+              secondReport.replayStats.appliedEventDigest);
+}
+
 }  // namespace

@@ -32,6 +32,7 @@ struct SegmentReplayReport {
     std::uint64_t cutoffMicros{};
     bitstamp::ReplayStats replayStats;
     std::optional<CheckpointComparison> checkpointComparison;
+    std::uint64_t finalBookDigest{};
 };
 
 struct CaptureReplayReport {
