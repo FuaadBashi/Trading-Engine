@@ -124,4 +124,18 @@ te::Result<std::uint64_t, ParseError> parseInteger(std::string_view id_str) {
 
     return Result<std::uint64_t, te::ParseError>::success(parsed_int);
 }
+
+Result<VenueId, VenueParseError> parseVenueId(std::string_view text) {
+    if (text == "bitstamp") return Result<VenueId, VenueParseError>::success(VenueId::bitstamp);
+    if (text == "coinbase") return Result<VenueId, VenueParseError>::success(VenueId::coinbase);
+    return Result<VenueId, VenueParseError>::failure(VenueParseError::unknown_venue);
+}
+
+Result<InstrumentId, InstrumentParseError> parseInstrumentId(std::string_view text) {
+    if (text == "btcusd") return Result<InstrumentId, InstrumentParseError>::success(InstrumentId::btc_usd);
+    if (text == "btcgbp") return Result<InstrumentId, InstrumentParseError>::success(InstrumentId::btc_gbp);
+    if (text == "btceur") return Result<InstrumentId, InstrumentParseError>::success(InstrumentId::btc_eur);
+    return Result<InstrumentId, InstrumentParseError>::failure(InstrumentParseError::unknown_instrument);
+}
+
 }  // namespace te

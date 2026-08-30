@@ -30,6 +30,11 @@ struct Price {
 
     friend constexpr auto operator<=>(const Price&, const Price&) = default;
 };
+struct PriceHash {
+    std::size_t operator()(Price price) const noexcept {
+        return std::hash<std::int64_t>{}(price.ticks);
+    }
+};
 
 static_assert(std::is_trivially_copyable_v<Price>,
               "Price must remain a trivial value type for predictable, allocation-free use "

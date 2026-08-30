@@ -6,8 +6,9 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <te/feed/bitstamp/joined_capture.hpp>
 #include <te/feed/bitstamp/replay.hpp>
+#include <te/feed/manifest_reader.hpp>
+#include <te/feed/segment_loader.hpp>
 
 namespace {
 
@@ -50,8 +51,12 @@ void writeTextFile(const std::filesystem::path& path, std::string_view contents)
 }
 
 constexpr std::string_view kManifest = R"({
+  "format_version": 2,
+  "venue": "bitstamp",
+  "instrument": "btcusd",
   "segments": [
     {
+      "index": 0,
       "payload": "payload.jsonl",
       "frame_index": "frames.jsonl",
       "snapshot": "seed.snapshot",
@@ -76,6 +81,20 @@ void writeCommonCaptureFiles(const TempCaptureDirectory& capture) {
     writeTextFile(capture.path() / "manifest.json", kManifest);
     writeTextFile(capture.path() / "seed.snapshot", kSeed);
     writeTextFile(capture.path() / "checkpoint.snapshot", kCheckpoint);
+}
+
+te::SegmentDescription segmentDescription(const std::filesystem::path& capture,
+                                          bool withCheckpoint = true) {
+    return te::SegmentDescription{
+        .index = 0,
+        .payloadPath = capture / "payload.jsonl",
+        .frameIndexPath = capture / "frames.jsonl",
+        .seedPath = capture / "seed.snapshot",
+        .checkpointPath = withCheckpoint
+                              ? std::optional<std::filesystem::path>{capture /
+                                                                     "checkpoint.snapshot"}
+                              : std::nullopt,
+    };
 }
 
 void expectBookMatchesSnapshot(const te::OrderBook& book,
@@ -103,11 +122,11 @@ TEST(BitstampJoinedCapture, MissingPayloadFileReturnsPayloadUnreadable) {
     writeCommonCaptureFiles(capture);
     writeTextFile(capture.path() / "frames.jsonl", "");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
-    EXPECT_EQ(*result.errorIf(), te::bitstamp::JoinedCaptureError::payload_unreadable);
+    EXPECT_EQ(*result.errorIf(), te::JoinedCaptureError::payload_unreadable);
 }
 
 TEST(BitstampJoinedCapture, MissingFrameIndexFileReturnsFrameIndexUnreadable) {
@@ -115,11 +134,11 @@ TEST(BitstampJoinedCapture, MissingFrameIndexFileReturnsFrameIndexUnreadable) {
     writeCommonCaptureFiles(capture);
     writeTextFile(capture.path() / "payload.jsonl", "");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
-    EXPECT_EQ(*result.errorIf(), te::bitstamp::JoinedCaptureError::frame_index_unreadable);
+    EXPECT_EQ(*result.errorIf(), te::JoinedCaptureError::frame_index_unreadable);
 }
 
 TEST(BitstampJoinedCapture, RejectsFrameIndexEndingEarly) {
@@ -129,11 +148,11 @@ TEST(BitstampJoinedCapture, RejectsFrameIndexEndingEarly) {
     writeTextFile(capture.path() / "payload.jsonl", "{}\n");
     writeTextFile(capture.path() / "frames.jsonl", "");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
-    EXPECT_EQ(*result.errorIf(), te::bitstamp::JoinedCaptureError::frame_index_ended_early);
+    EXPECT_EQ(*result.errorIf(), te::JoinedCaptureError::frame_index_ended_early);
 }
 
 TEST(BitstampJoinedCapture, RejectsPayloadEndingEarly) {
@@ -143,11 +162,11 @@ TEST(BitstampJoinedCapture, RejectsPayloadEndingEarly) {
     writeTextFile(capture.path() / "payload.jsonl", "");
     writeTextFile(capture.path() / "frames.jsonl", "{}\n");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
-    EXPECT_EQ(*result.errorIf(), te::bitstamp::JoinedCaptureError::payload_ended_early);
+    EXPECT_EQ(*result.errorIf(), te::JoinedCaptureError::payload_ended_early);
 }
 
 TEST(BitstampJoinedCapture, AcceptsBothStreamsEndingTogether) {
@@ -157,12 +176,13 @@ TEST(BitstampJoinedCapture, AcceptsBothStreamsEndingTogether) {
     writeTextFile(capture.path() / "payload.jsonl", "");
     writeTextFile(capture.path() / "frames.jsonl", "");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_TRUE(result.hasValue());
     ASSERT_NE(result.valueIf(), nullptr);
     EXPECT_EQ(result.valueIf()->seed.microtimestamp, 1000U);
-    EXPECT_EQ(result.valueIf()->checkpoint.microtimestamp, 2000U);
+    ASSERT_TRUE(result.valueIf()->checkpoint.has_value());
+    EXPECT_EQ(result.valueIf()->checkpoint->microtimestamp, 2000U);
     EXPECT_TRUE(result.valueIf()->jc_captureOrderEvents.empty());
     EXPECT_TRUE(result.valueIf()->jc_tradeEvents.empty());
 }
@@ -174,11 +194,11 @@ TEST(BitstampJoinedCapture, RejectsMalformedFrameJson) {
     writeTextFile(capture.path() / "payload.jsonl", "{}\n");
     writeTextFile(capture.path() / "frames.jsonl", "\n");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
-    EXPECT_EQ(*result.errorIf(), te::bitstamp::JoinedCaptureError::frame_malformed);
+    EXPECT_EQ(*result.errorIf(), te::JoinedCaptureError::frame_malformed);
 }
 
 TEST(BitstampJoinedCapture, AcceptsValidFrameJson) {
@@ -189,7 +209,7 @@ TEST(BitstampJoinedCapture, AcceptsValidFrameJson) {
     writeTextFile(capture.path() / "frames.jsonl", R"({"captureOrdinal":1,"streamKind":"control"})"
                                                    "\n");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_TRUE(result.hasValue());
     ASSERT_NE(result.valueIf(), nullptr);
@@ -208,7 +228,7 @@ TEST(BitstampJoinedCapture, AppendsDecodedEventsToJcVectors) {
                                                    R"({"captureOrdinal":2,"streamKind":"trade"})"
                                                    "\n");
 
-    const auto result = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto result = te::loadSegment(segmentDescription(capture.path()), btcUsd());
 
     ASSERT_TRUE(result.hasValue());
     ASSERT_NE(result.valueIf(), nullptr);
@@ -243,15 +263,15 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
                                                    R"({"captureOrdinal":2,"streamKind":"trade"})"
                                                    "\n");
 
-    const auto loaded = te::bitstamp::loadJoinedCapture(capture.path(), btcUsd());
+    const auto loaded = te::loadSegment(segmentDescription(capture.path()), btcUsd());
     ASSERT_TRUE(loaded.hasValue());
     ASSERT_NE(loaded.valueIf(), nullptr);
-    const te::bitstamp::JoinedCapture& joinedCapture = *loaded.valueIf();
+    const te::JoinedCapture& joinedCapture = *loaded.valueIf();
 
     te::bitstamp::Replay replay;
     const auto replayed =
         replay.replay(joinedCapture.seed, joinedCapture.jc_captureOrderEvents,
-                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint.microtimestamp);
+                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint->microtimestamp);
 
     ASSERT_TRUE(replayed.hasValue());
     ASSERT_NE(replayed.valueIf(), nullptr);
@@ -260,7 +280,7 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
     EXPECT_EQ(replayed.valueIf()->stats.correctionsApplied, 1U);
 
     replayed.valueIf()->book.validate();
-    expectBookMatchesSnapshot(replayed.valueIf()->book, joinedCapture.checkpoint);
+    expectBookMatchesSnapshot(replayed.valueIf()->book, *joinedCapture.checkpoint);
 }
 
 // MANDATORY. Unlike every other real-data test in this file, this one never skips: the fixture is
@@ -281,9 +301,13 @@ TEST(BitstampJoinedCapture, GoldenFixtureReplaysToHandWrittenCheckpoint) {
     ASSERT_TRUE(std::filesystem::exists(capture / "manifest.json"))
         << "committed fixture missing -- it is mandatory, not optional: " << capture;
 
-    const auto loaded = te::bitstamp::loadJoinedCapture(capture, btcUsd());
+    const auto manifest = te::manifestReader(capture);
+    ASSERT_TRUE(manifest.hasValue());
+    ASSERT_FALSE(manifest.valueIf()->segments.empty());
+    const auto loaded = te::loadSegment(manifest.valueIf()->segments.front(), btcUsd());
     ASSERT_TRUE(loaded.hasValue());
-    const te::bitstamp::JoinedCapture& joinedCapture = *loaded.valueIf();
+    const te::JoinedCapture& joinedCapture = *loaded.valueIf();
+    ASSERT_TRUE(joinedCapture.checkpoint.has_value());
     EXPECT_EQ(joinedCapture.jc_captureOrderEvents.size(), 5U);
     EXPECT_EQ(joinedCapture.jc_tradeEvents.size(), 2U);
 
@@ -293,7 +317,7 @@ TEST(BitstampJoinedCapture, GoldenFixtureReplaysToHandWrittenCheckpoint) {
     te::bitstamp::Replay replay;
     const auto replayed =
         replay.replay(joinedCapture.seed, joinedCapture.jc_captureOrderEvents,
-                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint.microtimestamp);
+                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint->microtimestamp);
     ASSERT_TRUE(replayed.hasValue())
         << "replay failed with error " << (replayed.errorIf() ? int(*replayed.errorIf()) : -1);
     const te::bitstamp::ReplayResult& result = *replayed.valueIf();
@@ -315,7 +339,7 @@ TEST(BitstampJoinedCapture, GoldenFixtureReplaysToHandWrittenCheckpoint) {
     EXPECT_EQ(result.stats.reconciler.staleFillsDiscarded, 0U);
 
     result.book.validate();
-    expectBookMatchesSnapshot(result.book, joinedCapture.checkpoint);
+    expectBookMatchesSnapshot(result.book, *joinedCapture.checkpoint);
 }
 
 // The real-corpus gate: a full joined capture replayed from its own S0 seed must reproduce the
@@ -329,16 +353,20 @@ TEST(BitstampJoinedCapture, RealCaptureReplaysToCheckpointWithNoResiduals) {
         GTEST_SKIP() << "OPTIONAL EVIDENCE NOT RUN: venue agreement over a 29k-event joined\n                        capture is unverified on this machine. The committed golden fixture\n                        still proves the pipeline. Missing: " << capture;
     }
 
-    const auto loaded = te::bitstamp::loadJoinedCapture(capture, btcUsd());
+    const auto manifest = te::manifestReader(capture);
+    ASSERT_TRUE(manifest.hasValue());
+    ASSERT_FALSE(manifest.valueIf()->segments.empty());
+    const auto loaded = te::loadSegment(manifest.valueIf()->segments.front(), btcUsd());
     ASSERT_TRUE(loaded.hasValue());
-    const te::bitstamp::JoinedCapture& joinedCapture = *loaded.valueIf();
+    const te::JoinedCapture& joinedCapture = *loaded.valueIf();
+    ASSERT_TRUE(joinedCapture.checkpoint.has_value());
     EXPECT_EQ(joinedCapture.jc_captureOrderEvents.size(), 29404U);
     EXPECT_EQ(joinedCapture.jc_tradeEvents.size(), 84U);
 
     te::bitstamp::Replay replay;
     const auto replayed =
         replay.replay(joinedCapture.seed, joinedCapture.jc_captureOrderEvents,
-                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint.microtimestamp);
+                      joinedCapture.jc_tradeEvents, joinedCapture.checkpoint->microtimestamp);
 
     // Before ADR 0013 this returned unexpected_order_apply_failure: nine live orders were deleted
     // by corrections that double-counted a fill live_orders had already reported.
@@ -371,7 +399,7 @@ TEST(BitstampJoinedCapture, RealCaptureReplaysToCheckpointWithNoResiduals) {
     EXPECT_EQ(result.stats.orderEventsAfterCutoff, 4207U);
 
     result.book.validate();
-    expectBookMatchesSnapshot(result.book, joinedCapture.checkpoint);
+    expectBookMatchesSnapshot(result.book, *joinedCapture.checkpoint);
 }
 
 }  // namespace

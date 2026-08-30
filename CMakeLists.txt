@@ -57,7 +57,9 @@ target_sources(te_core PRIVATE
     src/feed/bitstamp/trade_decoder.cpp
     src/feed/trade_reconciler.cpp
     src/util/intrusive_list.cpp
-    src/feed/bitstamp/joined_capture.cpp
+    src/feed/manifest_reader.cpp
+    src/feed/segment_loader.cpp
+    src/feed/capture_coordinator.cpp
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
     #
     # Slice 3
