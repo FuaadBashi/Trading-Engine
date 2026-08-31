@@ -92,3 +92,70 @@ TEST(ByteBuffer, U64WriteDoesNotTouchAdjacentBytes) {
     EXPECT_EQ(storage[9], std::byte{0xFF});
     EXPECT_EQ(storage[18], std::byte{0xFF});
 }
+
+TEST(ByteBuffer, U16LittleEndianHasExactBytesAndRoundTrips) {
+    std::vector<std::byte> storage(2, std::byte{0});
+
+    ASSERT_TRUE(te::writeU16LE(storage, 0, 0x1234U));
+    EXPECT_EQ(storage[0], std::byte{0x34});
+    EXPECT_EQ(storage[1], std::byte{0x12});
+
+    std::uint16_t out{};
+    ASSERT_TRUE(te::readU16LE(storage, 0, out));
+    EXPECT_EQ(out, 0x1234U);
+}
+
+TEST(ByteBuffer, U32LittleEndianHasExactBytesAndRoundTrips) {
+    std::vector<std::byte> storage(4, std::byte{0});
+
+    ASSERT_TRUE(te::writeU32LE(storage, 0, 0x12345678U));
+    EXPECT_EQ(storage[0], std::byte{0x78});
+    EXPECT_EQ(storage[1], std::byte{0x56});
+    EXPECT_EQ(storage[2], std::byte{0x34});
+    EXPECT_EQ(storage[3], std::byte{0x12});
+
+    std::uint32_t out{};
+    ASSERT_TRUE(te::readU32LE(storage, 0, out));
+    EXPECT_EQ(out, 0x12345678U);
+}
+
+TEST(ByteBuffer, U64LittleEndianHasExactBytesAndRoundTrips) {
+    std::vector<std::byte> storage(8, std::byte{0});
+    constexpr std::uint64_t value = 0x0102030405060708ULL;
+
+    ASSERT_TRUE(te::writeU64LE(storage, 0, value));
+    EXPECT_EQ(storage[0], std::byte{0x08});
+    EXPECT_EQ(storage[1], std::byte{0x07});
+    EXPECT_EQ(storage[2], std::byte{0x06});
+    EXPECT_EQ(storage[3], std::byte{0x05});
+    EXPECT_EQ(storage[4], std::byte{0x04});
+    EXPECT_EQ(storage[5], std::byte{0x03});
+    EXPECT_EQ(storage[6], std::byte{0x02});
+    EXPECT_EQ(storage[7], std::byte{0x01});
+
+    std::uint64_t out{};
+    ASSERT_TRUE(te::readU64LE(storage, 0, out));
+    EXPECT_EQ(out, value);
+}
+
+TEST(ByteBuffer, SignedI64LittleEndianPreservesNegativeValue) {
+    std::vector<std::byte> storage(8, std::byte{0});
+    constexpr std::int64_t value = -123456789;
+
+    ASSERT_TRUE(te::writeI64LE(storage, 0, value));
+    std::int64_t out{};
+    ASSERT_TRUE(te::readI64LE(storage, 0, out));
+    EXPECT_EQ(out, value);
+}
+
+TEST(ByteBuffer, FailedLittleEndianOperationsLeaveOutputsUnchanged) {
+    std::vector<std::byte> storage(7, std::byte{0xA5});
+    const std::vector<std::byte> original = storage;
+
+    EXPECT_FALSE(te::writeU64LE(storage, 0, 42U));
+    EXPECT_EQ(storage, original);
+
+    std::uint64_t out = 99U;
+    EXPECT_FALSE(te::readU64LE(storage, 0, out));
+    EXPECT_EQ(out, 99U);
+}

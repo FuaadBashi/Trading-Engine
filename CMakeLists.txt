@@ -43,6 +43,7 @@ target_sources(te_core PRIVATE
     src/util/byte_buffer.cpp
     # src/core/types.cpp
     src/telemetry/record.cpp
+    src/telemetry/segment_format.cpp
     src/telemetry/recorder.cpp
     src/telemetry/sink.cpp
     src/feed/bitstamp/decoder.cpp
