@@ -1,15 +1,13 @@
 #pragma once
 
-#include <cstdint>
 #include <optional>
 #include <vector>
 
+#include "te/capture/manifest_reader.hpp"
 #include "te/core/instrument.hpp"
 #include "te/core/result.hpp"
 #include "te/feed/bitstamp/snapshot.hpp"
-#include "te/feed/events.hpp"
-#include "te/feed/manifest_reader.hpp"
-#include "te/feed/trade_event.hpp"
+#include "te/feed/captured_events.hpp"
 
 namespace te {
 
@@ -29,17 +27,6 @@ enum class JoinedCaptureError {
     fill_decode_failure
 };
 
-struct CapturedOrderEvent {
-    OrderEvent event;
-    Qty amountTraded;
-    std::uint64_t captureOrdinal{};
-};
-
-struct CapturedTradeEvent {
-    TradeEvent event;
-    std::uint64_t captureOrdinal{};
-};
-
 struct JoinedCapture {
     bitstamp::BookSnapshot seed;
     std::optional<bitstamp::BookSnapshot> checkpoint;
@@ -52,11 +39,3 @@ Result<JoinedCapture, JoinedCaptureError> loadSegment(
     const SegmentDescription& segment, InstrumentSpec spec);
 
 }  // namespace te
-
-namespace te::bitstamp {
-
-using ::te::CapturedOrderEvent;
-using ::te::CapturedTradeEvent;
-
-
-}  // namespace te::bitstamp

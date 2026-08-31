@@ -37,35 +37,41 @@ add_library(te_core)
 
 target_include_directories(te_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_sources(te_core PRIVATE
-    # Slice 1
+    # Core and utilities
     src/core/text_to_int.cpp
     src/core/time.cpp
     src/util/byte_buffer.cpp
-    # src/core/types.cpp
-    src/telemetry/record.cpp
-    src/telemetry/event_record_format.cpp
-    src/telemetry/segment_format.cpp
-    src/telemetry/recorder.cpp
-    src/telemetry/sink.cpp
-    src/feed/bitstamp/decoder.cpp
-    #
-    # Slice 2
+    src/util/intrusive_list.cpp
+
+    # Order book
     src/book/order_book.cpp
     src/book/price_level.cpp
     src/book/book_health.cpp
+
+    # Normalized feed logic and Bitstamp adapter
+    src/feed/trade_reconciler.cpp
+    src/feed/bitstamp/decoder.cpp
     src/feed/bitstamp/snapshot.cpp
     src/feed/bitstamp/classifier.cpp
     src/feed/bitstamp/bootstrap.cpp
     src/feed/bitstamp/replay.cpp
     src/feed/bitstamp/trade_decoder.cpp
-    src/feed/trade_reconciler.cpp
-    src/util/intrusive_list.cpp
-    src/feed/manifest_reader.cpp
-    src/feed/segment_loader.cpp
-    src/feed/capture_coordinator.cpp
+
+    # Persisted capture discovery, loading, and replay coordination
+    src/capture/manifest_reader.cpp
+    src/capture/segment_loader.cpp
+    src/capture/capture_coordinator.cpp
+
+    # Portable telemetry and binary capture
+    src/telemetry/record.cpp
+    src/telemetry/event_record_format.cpp
+    src/telemetry/event_segment_writer.cpp
+    src/telemetry/segment_format.cpp
+    src/telemetry/recorder.cpp
+    src/telemetry/sink.cpp
+
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
-    #
-    # Slice 3
+    # Future slices:
     # src/engine/engine.cpp
     # src/engine/portfolio.cpp
     # src/feed/replay_feed.cpp

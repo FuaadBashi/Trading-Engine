@@ -60,17 +60,17 @@ te::OrderEvent makeRemove(std::uint64_t timestamp, std::uint64_t id, std::int64_
     };
 }
 
-te::bitstamp::CapturedOrderEvent capture(te::OrderEvent event,
+te::CapturedOrderEvent capture(te::OrderEvent event,
                                          std::int64_t amountTraded = 0) {
-    return te::bitstamp::CapturedOrderEvent{
+    return te::CapturedOrderEvent{
         .event = event,
         .amountTraded = te::Qty{amountTraded},
     };
 }
 
-te::bitstamp::CapturedTradeEvent makeTrade(std::uint64_t timestamp, std::uint64_t buyId,
+te::CapturedTradeEvent makeTrade(std::uint64_t timestamp, std::uint64_t buyId,
                                            std::uint64_t sellId, std::int64_t quantity) {
-    return te::bitstamp::CapturedTradeEvent{
+    return te::CapturedTradeEvent{
         .event =
             te::TradeEvent{
                 .venue_timestamp_us = timestamp,

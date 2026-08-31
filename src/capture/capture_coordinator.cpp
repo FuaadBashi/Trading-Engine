@@ -1,6 +1,7 @@
 
-#include "te/feed/capture_coordinator.hpp"
-#include "te/feed/segment_loader.hpp"
+#include "te/capture/capture_coordinator.hpp"
+#include "te/capture/manifest_reader.hpp"
+#include "te/capture/segment_loader.hpp"
 #include <te/feed/bitstamp/replay.hpp>
 #include <algorithm>
 #include <unordered_map>

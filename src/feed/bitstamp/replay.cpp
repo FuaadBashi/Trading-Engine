@@ -4,7 +4,6 @@
 #include <te/feed/trade_reconciler.hpp>
 #include <unordered_map>
 #include <utility>
-#include "te/feed/segment_loader.hpp"
 
 namespace te::bitstamp {
 namespace {

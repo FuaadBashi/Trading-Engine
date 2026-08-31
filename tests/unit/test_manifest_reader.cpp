@@ -6,7 +6,7 @@
 #include <string_view>
 #include <system_error>
 
-#include "te/feed/manifest_reader.hpp"
+#include "te/capture/manifest_reader.hpp"
 
 namespace {
 

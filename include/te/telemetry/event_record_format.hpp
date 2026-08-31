@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <variant>
 
 #include "te/core/result.hpp"
 #include "te/feed/events.hpp"
@@ -19,11 +20,18 @@ enum class EventRecordType : std::uint8_t {
 
 enum class EventRecordFormatError {
     buffer_too_small,
+    unexpected_record_type,
     invalid_side,
     invalid_event_kind,
-    trade_order_dont_match,
-    trade_qty_dont_match,
+    nonzero_reserved_bytes,
 };
+
+struct DecodedOrderRecord {
+    OrderEvent event;
+    Qty amountTraded;
+};
+
+using DecodedEventRecord = std::variant<DecodedOrderRecord, TradeEvent>;
 
 namespace event_record_layout {
 
@@ -70,11 +78,20 @@ static_assert(trade::reserved + trade::reservedSize == size);
 
 }  // namespace event_record_layout
 
-Result<std::size_t, EventRecordFormatError> encodeOrderRecord(
-    const OrderEvent& event, Qty amountTraded, std::span<std::byte> output);
+Result<std::size_t, EventRecordFormatError> encodeOrderRecord(const OrderEvent& event, Qty amountTraded, std::span<std::byte> output);
 
-Result<std::size_t, EventRecordFormatError> encodeTradeRecord(
-    const TradeEvent& trade, Qty amountTraded, OrderId buyOrderId, OrderId sellOrderId, std::span<std::byte> output);
+Result<std::size_t, EventRecordFormatError> encodeTradeRecord(const TradeEvent& trade, std::span<std::byte> output);
 
+Result<std::size_t, EventRecordFormatError> encodeEventRecord(
+    const DecodedEventRecord& record, std::span<std::byte> output);
+
+Result<DecodedOrderRecord, EventRecordFormatError> decodeOrderRecord(
+    std::span<const std::byte> input);
+
+Result<TradeEvent, EventRecordFormatError> decodeTradeRecord(
+    std::span<const std::byte> input);
+
+Result<DecodedEventRecord, EventRecordFormatError> decodeEventRecord(
+    std::span<const std::byte> input);
 
 }  // namespace te

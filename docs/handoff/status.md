@@ -62,7 +62,8 @@ idempotent, so processing order no longer changes the resulting book.
 | Mandatory golden fixture | `tests/fixtures/joined-capture-golden/`, built by `scripts/make_golden_fixture.py` | runs on any checkout; covers the correction path real data never reaches |
 | Populated-book move safety | `test_order_book.cpp` | move-construct, move-assign and double-move a populated book, then mutate through inherited locators |
 | Independent book oracle | `test_book_oracle.cpp` | 28,000 generated events compared against a separately written model |
-| Joined capture loading | `bitstamp/joined_capture.cpp` | manifest + payload/frames join, decodes into `CapturedOrderEvent` |
+| Capture discovery and loading | `capture/manifest_reader.cpp`, `capture/segment_loader.cpp` | manifest paths stay separate from payload/frame joining; the loader decodes into `CapturedOrderEvent` |
+| Capture replay coordination | `capture/capture_coordinator.cpp` | loads each described segment, replays it, and compares against an optional checkpoint |
 | Joined capture tooling (Python) | `scripts/dump_raw_ws_bitstamp.py`, `scripts/validate_joined_capture.py` | implements the v4 §6 frame contract; own pytest file |
 
 `decodeFill` is a **separate decode** on the same line, following the `decodeChain` precedent, so

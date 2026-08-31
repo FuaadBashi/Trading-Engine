@@ -7,7 +7,7 @@
 #include <string_view>
 #include <system_error>
 
-#include "te/feed/segment_loader.hpp"
+#include "te/capture/segment_loader.hpp"
 
 namespace {
 

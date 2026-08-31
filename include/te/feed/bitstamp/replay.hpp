@@ -5,7 +5,7 @@
 #include <te/book/order_book.hpp>
 #include <te/core/result.hpp>
 #include <te/feed/bitstamp/snapshot.hpp>
-#include <te/feed/segment_loader.hpp>
+#include <te/feed/captured_events.hpp>
 #include <te/feed/events.hpp>
 #include <te/feed/trade_event.hpp>
 #include <vector>

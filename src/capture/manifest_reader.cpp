@@ -1,4 +1,4 @@
-#include "te/feed/manifest_reader.hpp"
+#include "te/capture/manifest_reader.hpp"
 
 #include <fstream>
 #include <sstream>

@@ -6,7 +6,7 @@
 #include <string_view>
 #include <system_error>
 
-#include "te/feed/capture_coordinator.hpp"
+#include "te/capture/capture_coordinator.hpp"
 
 namespace {
 

@@ -7,8 +7,8 @@
 #include <string_view>
 #include <system_error>
 #include <te/feed/bitstamp/replay.hpp>
-#include <te/feed/manifest_reader.hpp>
-#include <te/feed/segment_loader.hpp>
+#include <te/capture/manifest_reader.hpp>
+#include <te/capture/segment_loader.hpp>
 
 namespace {
 
