@@ -65,6 +65,7 @@ target_sources(te_core PRIVATE
     # Portable telemetry and binary capture
     src/telemetry/record.cpp
     src/telemetry/event_record_format.cpp
+    src/telemetry/event_segment_reader.cpp
     src/telemetry/event_segment_writer.cpp
     src/telemetry/segment_format.cpp
     src/telemetry/recorder.cpp
