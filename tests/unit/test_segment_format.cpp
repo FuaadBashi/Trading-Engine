@@ -101,13 +101,59 @@ TEST(SegmentFormat, DecodeRejectsBadMagic) {
 TEST(SegmentFormat, DecodeRejectsNonzeroReservedBytes) {
     std::array<std::byte, te::kSegmentHeaderSize> bytes{};
     ASSERT_TRUE(te::encodeSegmentHeader(makeHeader(), bytes).hasValue());
-    bytes[58] = std::byte{0x01};
+    bytes[60] = std::byte{0x01};
 
     const auto decoded = te::decodeSegmentHeader(bytes);
 
     ASSERT_FALSE(decoded.hasValue());
     ASSERT_NE(decoded.errorIf(), nullptr);
     EXPECT_EQ(*decoded.errorIf(), te::SegmentFormatError::nonzero_reserved_bytes);
+}
+
+TEST(SegmentFormat, OrderingPolicyRoundTrips) {
+    te::SegmentHeader header = makeHeader();
+    header.orderingPolicyVersion = te::kOrderingPolicyOrderWinsTie;
+    std::array<std::byte, te::kSegmentHeaderSize> bytes{};
+    ASSERT_TRUE(te::encodeSegmentHeader(header, bytes).hasValue());
+
+    const auto decoded = te::decodeSegmentHeader(bytes);
+
+    ASSERT_TRUE(decoded.hasValue());
+    EXPECT_EQ(decoded.valueIf()->orderingPolicyVersion, te::kOrderingPolicyOrderWinsTie);
+}
+
+TEST(SegmentFormat, DefaultHeaderClaimsNoOrderingPolicy) {
+    std::array<std::byte, te::kSegmentHeaderSize> bytes{};
+    ASSERT_TRUE(te::encodeSegmentHeader(makeHeader(), bytes).hasValue());
+
+    const auto decoded = te::decodeSegmentHeader(bytes);
+
+    ASSERT_TRUE(decoded.hasValue());
+    EXPECT_EQ(decoded.valueIf()->orderingPolicyVersion, te::kOrderingPolicyNone);
+}
+
+TEST(SegmentFormat, DecodeRejectsUnknownOrderingPolicy) {
+    std::array<std::byte, te::kSegmentHeaderSize> bytes{};
+    ASSERT_TRUE(te::encodeSegmentHeader(makeHeader(), bytes).hasValue());
+    bytes[58] = std::byte{0xFF};
+
+    const auto decoded = te::decodeSegmentHeader(bytes);
+
+    ASSERT_FALSE(decoded.hasValue());
+    ASSERT_NE(decoded.errorIf(), nullptr);
+    EXPECT_EQ(*decoded.errorIf(), te::SegmentFormatError::unsupported_ordering_policy);
+}
+
+TEST(SegmentFormat, EncodeRejectsUnknownOrderingPolicy) {
+    te::SegmentHeader header = makeHeader();
+    header.orderingPolicyVersion = 999;
+    std::array<std::byte, te::kSegmentHeaderSize> bytes{};
+
+    const auto encoded = te::encodeSegmentHeader(header, bytes);
+
+    ASSERT_FALSE(encoded.hasValue());
+    ASSERT_NE(encoded.errorIf(), nullptr);
+    EXPECT_EQ(*encoded.errorIf(), te::SegmentFormatError::unsupported_ordering_policy);
 }
 
 TEST(EventRecordFormat, DefinesOrderAndTradeLayoutsWithinSixtyFourBytes) {

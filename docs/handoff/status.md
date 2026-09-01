@@ -133,6 +133,38 @@ fill, that is unlikely. They are now **unexplained**, and cannot be diagnosed fr
 it is order-only and the window is historical. Open candidates: `order_subtype` semantics,
 liquidations, a venue-side move between levels.
 
+## v3 tape segments — state as of 2026-09-01
+
+v3 is a **derived accelerator**, not the archive: raw captures are archival truth and must not be
+deleted. Decision in ADR 0011; bytes in `docs/specs/v3-segment-format.md`, which is authoritative and
+replaced the drifted layout tables that used to live in the ADR.
+
+Built and tested: the header codec (now stamping an ordering-policy version), the event record
+codec, `EventSegmentWriter`/`EventSegmentReader`, `MergeCursor`, and `writeEventTape`, which turns a
+`JoinedCapture` into an L1 tape. `te::bitstamp::Replay` now drives `MergeCursor` too, so ADR 0013's
+tie-break exists in exactly one place; the real 29k-event corpus test still passes with zero
+residuals after that refactor.
+
+**Nothing replays *from* a tape yet.** `EventSegmentReader` decodes records; no path feeds them into
+an `OrderBook`. Until that exists the tape is write-only, and these remain open:
+
+1. **Classifier warm-up blocks equivalence.** A tape holds only `(seed, cutoff]`, but `Replay` warms
+   a stateful classifier on pre-seed orders. A tape therefore cannot yet claim to replay identically
+   to its raw capture — the property Stage 8 needs. Four options, cheapest first, in the spec under
+   "Known gap: classifier warm-up". Start with measuring whether classifier state actually crosses
+   the seed boundary; if it does not, this closes with evidence and no code.
+2. **Lineage is unbound.** `CaptureManifest` carries `formatVersion`, venue, instrument and paths —
+   no hashes, no `runId`. A derived artifact that cannot name its source is not provenance-bound.
+   Plan v4 §8 already specifies the fields.
+3. **Snapshot rows unimplemented.** The 32-byte record size is accepted by the header codec but no
+   codec exists.
+4. **Deferred structural cleanups, both agreed 2026-09-01, neither done.** Split `telemetry/` by
+   format generation so legacy v2 (`record`, `sink`, `recorder`) is clearly separated from v3, as
+   ADR 0011 requires. Label the empty placeholder headers under `include/te/engine/` and
+   `include/te/venue/` with the plan section that owns them. Both were kept out of the tape work
+   deliberately: mixing a structural move into a behavioural change destroys the ability to review
+   or revert either one.
+
 ## Open work
 
 **Highest value first:**

@@ -42,7 +42,7 @@ The target interview story is:
 
 ## 2. Current verified baseline
 
-The status below reflects the repository on **2026-08-28**. A clean build passes **194 CTest cases**
+The status below reflects the repository on **2026-08-28**. A clean build passes **273 CTest cases**
 plus 8 Python tests. Six C++ tests skip when private capture data is absent -- see the fixture gap
 below, which is why a green run on a fresh checkout does not yet mean much.
 
@@ -74,13 +74,13 @@ below, which is why a green run on a fresh checkout does not yet mean much.
 
 | Gap | Why it matters |
 |---|---|
-| **Hermetic end-to-end golden fixture** | **The blocker.** A fresh checkout reports 194/194 green while silently skipping every real-corpus test, including the correctness gate. Closing this is what makes all later Stage 3 evidence worth anything. |
+| **Hermetic end-to-end golden fixture** | **The blocker.** A fresh checkout reports every test green while silently skipping every real-corpus test, including the correctness gate. Closing this is what makes all later Stage 3 evidence worth anything. |
 | Correction path unreached on real data | 637 of 637 fills against a resting order were already reported by `live_orders`, so `TradeReconciler` has never fired on a real capture. Insurance, not a validated path -- ADR 0013. |
 | Three unexplained golden-replay orders | Previously assumed to be silent full fills. That explanation is now unlikely; they remain unexplained and cannot be diagnosed from an order-only historical capture. |
 | Book health states | `unseeded -> warming -> valid -> stale_or_gapped -> resyncing -> valid` does not exist. No strategy gating. |
 | Replay-side gap/reseed policy | The *capture* side now refuses a seed that predates its stream. What replay should do on meeting a gap is still undecided (ADR 0013, deliberately deferred). |
 | Multi-segment capture loading | `loadJoinedCapture` reads only the first segment, so a capture that reconnected is partly unreachable from C++. |
-| Durable v3 binary corpus | Current v2 records write host object layout and are not the portable ADR 0011 format. |
+| v3 tape segments unwired | The portable format, writer and reader exist and are tested, but nothing converts a joined capture into a segment yet. v3 is a derived accelerator over the raw capture, not the archive — ADR 0011, decided 2026-09-01. |
 | Timestamp type contract | Receipt timestamp naming and nanosecond storage disagree; venue/local clock subtraction is not network latency. |
 | Two invariant modes | Structural invariants and stable decision-ready book checks must not be treated as identical. |
 | Same-venue L2/checkpoint suite | Replay compares one final checkpoint; captures carry a checkpoint per segment. |
@@ -386,9 +386,16 @@ Every run reports:
 The target is zero unexplained residuals. If venue behavior prevents that, report a measured residual
 rate and the precise known limitations instead of hiding it with a broad tolerance.
 
-## 14. Stage 4 - portable v3 corpus
+## 14. Stage 4 - portable v3 tape segments
 
 Implement ADR 0011 after the joined event schema and timing fields are stable.
+
+**Reframed 2026-09-01.** v3 is a *derived accelerator*, not the durable corpus. Raw captures are the
+archival truth and are kept permanently; a v3 segment is a regenerable, pre-merged projection of one
+of them, and deliberately carries no `captureOrdinal`, local timestamps, `runId` or `segmentId`.
+Provenance questions are answered from the raw capture. Because segments are regenerable, the merge
+policy is baked into the bytes and stamped in the header. See ADR 0011 and
+`docs/specs/v3-segment-format.md`.
 
 ### Format requirements
 

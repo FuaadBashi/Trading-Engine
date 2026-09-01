@@ -1,6 +1,7 @@
 #include <te/feed/bitstamp/bootstrap.hpp>
 #include <te/feed/bitstamp/classifier.hpp>
 #include <te/feed/bitstamp/replay.hpp>
+#include <te/feed/merge_cursor.hpp>
 #include <te/feed/trade_reconciler.hpp>
 #include <unordered_map>
 #include <utility>
@@ -134,66 +135,39 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
     replayStats.appliedEventDigest = kFnvOffsetBasis;
     EventClassifier classifier;
     std::unordered_map<OrderId, Side, OrderIdHash> correctionRemovals;
-    std::size_t orderPtr{};
-    std::size_t tradePtr{};
+    // The merge order itself lives in MergeCursor so the tape writer applies the same tie-break
+    // instead of reimplementing it. What stays here is what the cursor deliberately does not know
+    // about: the classifier, the book and the reconciler.
+    MergeCursor cursor{orderEvents, tradeEvents, seedTimestamp, cutoffMicros};
 
     // Pre-seed orders still train the stateful classifier (notably price-zero lifecycles), but
     // never touch the seeded book. Pre-seed trades are already represented by the snapshot.
-    while (orderPtr < orderEvents.size() &&
-           orderEvents.at(orderPtr).event.venue_timestamp_us <= seedTimestamp) {
-        classifier.classify(orderEvents.at(orderPtr).event);
+    for (std::size_t index = 0; index < cursor.ordersBeforeSeed(); ++index) {
+        classifier.classify(orderEvents.at(index).event);
         ++replayStats.orderEventsBeforeSeed;
-        ++orderPtr;
     }
-    while (tradePtr < tradeEvents.size() &&
-           tradeEvents.at(tradePtr).event.venue_timestamp_us <= seedTimestamp) {
-        ++replayStats.tradeEventsBeforeSeed;
-        ++tradePtr;
-    }
+    replayStats.tradeEventsBeforeSeed = cursor.tradesBeforeSeed();
 
-    const auto orderInWindow = [&] {
-        return orderPtr < orderEvents.size() &&
-               orderEvents.at(orderPtr).event.venue_timestamp_us <= cutoffMicros;
-    };
-    const auto tradeInWindow = [&] {
-        return tradePtr < tradeEvents.size() &&
-               tradeEvents.at(tradePtr).event.venue_timestamp_us <= cutoffMicros;
-    };
-    // Merge by venue time until the cutoff. Exact timestamp ties deliberately process orders
-    // first so a newly resting order is visible to a trade at the same timestamp.
-    while (orderInWindow() || tradeInWindow()) {
-        if (!orderInWindow()) {
-            auto result = processTrade(orderBook, tradeReconciler, replayStats, correctionRemovals,
-                                       tradeEvents.at(tradePtr));
-            if (!result) {
-                return Result<ReplayResult, ReplayError>::failure(
-                    ReplayError::unexpected_correction_apply_failure);
-            }
-            ++tradePtr;
-        } else if (!tradeInWindow() || orderEvents.at(orderPtr).event.venue_timestamp_us <=
-                                           tradeEvents.at(tradePtr).event.venue_timestamp_us) {
-            auto result = processOrder(orderBook, tradeReconciler, classifier, replayStats,
-                                       correctionRemovals, orderEvents.at(orderPtr));
-            if (!result) {
+    while (const auto pick = cursor.next()) {
+        if (pick->stream == MergedStream::order) {
+            if (!processOrder(orderBook, tradeReconciler, classifier, replayStats,
+                              correctionRemovals, orderEvents.at(pick->index))) {
                 return Result<ReplayResult, ReplayError>::failure(
                     ReplayError::unexpected_order_apply_failure);
             }
-            ++orderPtr;
         } else {
-            auto result = processTrade(orderBook, tradeReconciler, replayStats, correctionRemovals,
-                                       tradeEvents.at(tradePtr));
-            if (!result) {
+            if (!processTrade(orderBook, tradeReconciler, replayStats, correctionRemovals,
+                              tradeEvents.at(pick->index))) {
                 return Result<ReplayResult, ReplayError>::failure(
                     ReplayError::unexpected_correction_apply_failure);
             }
-            ++tradePtr;
         }
     }
 
     // Whatever the merge left behind is past the cutoff. Counting it here is what makes
     // beforeSeed + read + afterCutoff == input size, so a silently skipped event is visible.
-    replayStats.orderEventsAfterCutoff = orderEvents.size() - orderPtr;
-    replayStats.tradeEventsAfterCutoff = tradeEvents.size() - tradePtr;
+    replayStats.orderEventsAfterCutoff = cursor.ordersAfterCutoff();
+    replayStats.tradeEventsAfterCutoff = cursor.tradesAfterCutoff();
 
     orderBook.validate();
     replayStats.reconciler = tradeReconciler.stats();

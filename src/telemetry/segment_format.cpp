@@ -21,8 +21,9 @@ constexpr std::size_t kInstrumentOffset = 40;
 constexpr std::size_t kIdentifierSize = 16;
 constexpr std::size_t kPriceDecimalsOffset = 56;
 constexpr std::size_t kQuantityDecimalsOffset = 57;
-constexpr std::size_t kFirstReservedOffset = 58;
-constexpr std::size_t kFirstReservedSize = 6;
+constexpr std::size_t kOrderingPolicyOffset = 58;
+constexpr std::size_t kFirstReservedOffset = 60;
+constexpr std::size_t kFirstReservedSize = 4;
 constexpr std::size_t kSeedTimestampOffset = 64;
 constexpr std::size_t kCreationTimestampOffset = 72;
 constexpr std::size_t kSnapshotHashOffset = 80;
@@ -124,6 +125,10 @@ Result<std::size_t, SegmentFormatError> encodeSegmentHeader(
         return Result<std::size_t, SegmentFormatError>::failure(
             SegmentFormatError::invalid_scale);
     }
+    if (header.orderingPolicyVersion > kHighestKnownOrderingPolicy) {
+        return Result<std::size_t, SegmentFormatError>::failure(
+            SegmentFormatError::unsupported_ordering_policy);
+    }
 
     std::array<std::byte, kSegmentHeaderSize> encoded{};
     std::copy(kSegmentMagic.begin(), kSegmentMagic.end(), encoded.begin() + kMagicOffset);
@@ -137,6 +142,7 @@ Result<std::size_t, SegmentFormatError> encodeSegmentHeader(
         writeU32LE(encoded, kFlagsOffset, header.flags) &&
         writeU8(encoded, kPriceDecimalsOffset, header.instrumentSpec.price_decimals) &&
         writeU8(encoded, kQuantityDecimalsOffset, header.instrumentSpec.quantity_decimals) &&
+        writeU16LE(encoded, kOrderingPolicyOffset, header.orderingPolicyVersion) &&
         writeU64LE(encoded, kSeedTimestampOffset, header.seedTimestampMicros) &&
         writeU64LE(encoded, kCreationTimestampOffset, header.creationTimestampMicros);
     if (!wroteFields) {
@@ -174,6 +180,7 @@ Result<SegmentHeader, SegmentFormatError> decodeSegmentHeader(
         !readU32LE(input, kFlagsOffset, header.flags) ||
         !readU8(input, kPriceDecimalsOffset, header.instrumentSpec.price_decimals) ||
         !readU8(input, kQuantityDecimalsOffset, header.instrumentSpec.quantity_decimals) ||
+        !readU16LE(input, kOrderingPolicyOffset, header.orderingPolicyVersion) ||
         !readU64LE(input, kSeedTimestampOffset, header.seedTimestampMicros) ||
         !readU64LE(input, kCreationTimestampOffset, header.creationTimestampMicros)) {
         return Result<SegmentHeader, SegmentFormatError>::failure(
@@ -225,6 +232,11 @@ Result<SegmentHeader, SegmentFormatError> decodeSegmentHeader(
         header.instrumentSpec.quantity_decimals > kMaximumDecimalScale) {
         return Result<SegmentHeader, SegmentFormatError>::failure(
             SegmentFormatError::invalid_scale);
+    }
+    // Fail closed: a reader that cannot reproduce the ordering must not pretend the tape is valid.
+    if (header.orderingPolicyVersion > kHighestKnownOrderingPolicy) {
+        return Result<SegmentHeader, SegmentFormatError>::failure(
+            SegmentFormatError::unsupported_ordering_policy);
     }
     if (!allZero(input, kFirstReservedOffset, kFirstReservedSize) ||
         !allZero(input, kFinalReservedOffset, kFinalReservedSize)) {

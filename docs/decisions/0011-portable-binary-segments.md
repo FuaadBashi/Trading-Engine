@@ -61,38 +61,20 @@ encoded header containing:
 - the SHA-256 of the source snapshot;
 - reserved space for compatible additions.
 
-The v3 order-event record is exactly 64 bytes:
+Event records are a fixed 64 bytes beginning with a common block that identifies the record kind, so
+a reader never interprets one record kind as another.
 
-| Offset | Bytes | Meaning |
-|---:|---:|---|
-| 0 | 1 | record kind |
-| 1 | 1 | record schema version |
-| 2 | 1 | side |
-| 3 | 1 | event kind |
-| 4 | 4 | flags, initially zero |
-| 8 | 8 | venue timestamp in microseconds |
-| 16 | 8 | local receipt timestamp in microseconds |
-| 24 | 8 | order ID |
-| 32 | 8 | signed price ticks |
-| 40 | 8 | signed quantity units |
-| 48 | 16 | reserved, all zero in v3 |
-
-Future trade records use another record kind with a separately documented 64-byte payload. A
-reader never interprets one record kind as another.
+**The byte layout is not specified here.** See `docs/specs/v3-segment-format.md`, which is
+authoritative and is verified against the code. A layout table inside an accepted decision record
+rots silently — this one did, and the implemented record differs from the table originally published
+here. What is above is the decision; the bytes are a specification, and the two have different
+lifetimes.
 
 ### Binary snapshot file
 
 The starting snapshot is encoded separately and bound to the event segment through the manifest
-and hashes. It uses the same 128-byte header principles and fixed 32-byte order rows:
-
-| Offset | Bytes | Meaning |
-|---:|---:|---|
-| 0 | 8 | order ID |
-| 8 | 8 | signed price ticks |
-| 16 | 8 | signed quantity units |
-| 24 | 1 | side |
-| 25 | 1 | priority provenance: unknown or observed |
-| 26 | 6 | reserved, all zero |
+and hashes. It uses the same 128-byte header principles and fixed 32-byte order rows; the row
+layout belongs in `docs/specs/v3-segment-format.md` and is not yet implemented.
 
 The snapshot timestamp belongs in the header, not repeated in every order. Snapshot row order is
 preserved for deterministic replay but the provenance byte prevents it being mistaken for proven
@@ -107,6 +89,21 @@ closed.
 
 No v3 file may be labelled complete unless its byte size matches its declared record count and all
 record/header/hash checks pass.
+
+### v3 is a derived accelerator, not the archive
+
+**Decided 2026-09-01.** Raw captures are the archival truth and are kept permanently. A v3 segment is
+a normalized, regenerable projection of a raw capture, optimized for fast deterministic replay. It is
+not a replacement for the capture it came from.
+
+- Raw captures must not be deleted once segments are derived from them. This is an operational rule
+  now, not a preference.
+- v3 therefore drops `captureOrdinal`, local wall/steady timestamps, `runId` and `segmentId`.
+  Provenance questions are answered from the raw capture, not from the segment.
+- The raw-to-v3 conversion must be deterministic, and its output bound to its source in the run
+  manifest (plan v4 §8), so a derived file can always name the capture it came from.
+- Regenerating segments is cheap and expected. Decisions may therefore be baked into segment bytes
+  that would be unsafe to bake into an archive.
 
 ### Open: whether v3 records carry `order_subtype`
 

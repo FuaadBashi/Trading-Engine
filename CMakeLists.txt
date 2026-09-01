@@ -49,6 +49,7 @@ target_sources(te_core PRIVATE
     src/book/book_health.cpp
 
     # Normalized feed logic and Bitstamp adapter
+    src/feed/merge_cursor.cpp
     src/feed/trade_reconciler.cpp
     src/feed/bitstamp/decoder.cpp
     src/feed/bitstamp/snapshot.cpp
@@ -58,6 +59,7 @@ target_sources(te_core PRIVATE
     src/feed/bitstamp/trade_decoder.cpp
 
     # Persisted capture discovery, loading, and replay coordination
+    src/capture/event_tape_writer.cpp
     src/capture/manifest_reader.cpp
     src/capture/segment_loader.cpp
     src/capture/capture_coordinator.cpp
