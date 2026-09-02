@@ -1,5 +1,6 @@
 #pragma once
 
-// Slice 3 TODO: test-first ExecutionVenue interface for submit and cancel.
+// Reserved for plan v4 §15 (Stage 5). Not implemented. Test-first ExecutionVenue interface for
+// submit and cancel.
 
 namespace te {}  // namespace te

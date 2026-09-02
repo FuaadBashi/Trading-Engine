@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <te/telemetry/record.hpp>
+#include <te/telemetry/legacy/record.hpp>
 
 // Real captured values, same event used throughout the decoder/text_to_int tests.
 TEST(Record, BuildRecordStampsFieldsFromEventAndClock) {
@@ -14,14 +14,14 @@ TEST(Record, BuildRecordStampsFieldsFromEventAndClock) {
     };
 
     // A fake clock, same trick as Clock.FakeClockReturnsControlledValue: no real time involved,
-    // so the expected receipt_timestamp_us is an exact value, not "some plausible number."
+    // so the expected receipt_timestamp_ns is an exact value, not "some plausible number."
     te::Clock fakeClock;
     fakeClock.now = []() { return te::Nanos{42}; };
 
     const te::Record record = te::buildRecord(event, fakeClock);
 
     EXPECT_EQ(record.version, te::kCurrentRecordVersion);
-    EXPECT_EQ(record.receipt_timestamp_us, te::Nanos{42});
+    EXPECT_EQ(record.receipt_timestamp_ns, te::Nanos{42});
     EXPECT_EQ(record.orderEvent.order_id, te::OrderId{2037493297635328ULL});
     EXPECT_EQ(record.orderEvent.price, te::Price{5835610});
     EXPECT_EQ(record.orderEvent.quantity, te::Qty{171371});

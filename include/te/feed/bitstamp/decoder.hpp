@@ -28,9 +28,32 @@ enum class DecoderError {
 // order_type is the exception because Bitstamp supplies only the JSON integer (0 buy, 1 sell).
 Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSpec spec);
 
-// Decodes one live_orders payload, line by line and extract the amount_trade and return it, if theres no 
+// Decodes one live_orders payload, line by line and extract the amount_trade and return it, if theres no
 // amount_trade return error.
 Result<Qty, DecoderError> decodeFill(std::string_view text, InstrumentSpec spec);
+
+// Everything decodeOrder and decodeFill together extract from one payload line.
+struct DecodedCapturedOrder {
+    OrderEvent event;
+    Qty amountTraded;
+};
+
+// NOT YET IMPLEMENTED -- decoder.cpp's body is a placeholder that always fails. This exists so
+// TestDecoder.CapturedOrderMatchesSeparateDecodesOnARealLine can compile and run red.
+//
+// Intent: decodeOrder and decodeFill currently parse the same payload line twice (segment_loader.cpp
+// calls both on every "order" frame). One simdjson document, two independent walks of it. This
+// should become one parse producing both pieces of data, with byte-identical results to what the
+// two-call pair produces today -- same field extraction, same rejections, same error conditions.
+// Not in scope: order_subtype (ADR 0011, still unresolved) stays exactly as unresolved as it is now.
+//
+// Open question left for the implementation, not decided here: decodeOrder and decodeFill can each
+// fail independently today (segment_loader.cpp checks order_decode_failure before
+// fill_decode_failure). One parse means one failure path -- decide whether the existing DecoderError
+// values are enough or whether the merged failure needs to say which half of the data was the
+// problem.
+Result<DecodedCapturedOrder, DecoderError> decodeCapturedOrder(std::string_view text,
+                                                                InstrumentSpec spec);
 
 constexpr std::size_t kChainIdLength = 36;
 

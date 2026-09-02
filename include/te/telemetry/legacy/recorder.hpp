@@ -5,7 +5,7 @@
 #include <te/core/instrument.hpp>
 #include <te/core/result.hpp>
 #include <te/core/time.hpp>
-#include <te/telemetry/sink.hpp>
+#include <te/telemetry/legacy/sink.hpp>
 
 namespace te {
 

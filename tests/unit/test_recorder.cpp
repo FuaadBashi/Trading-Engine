@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
-#include <te/telemetry/record.hpp>
-#include <te/telemetry/recorder.hpp>
-#include <te/telemetry/sink.hpp>
+#include <te/telemetry/legacy/record.hpp>
+#include <te/telemetry/legacy/recorder.hpp>
+#include <te/telemetry/legacy/sink.hpp>
 
 namespace {
 
@@ -196,7 +196,7 @@ TEST(Recorder, DetectsBrokenChainAndWritesGapMarker) {
     // A gap marker carries no event data, only its position and detection time.
     EXPECT_EQ(records[1].orderEvent.order_id, te::OrderId{0});
     EXPECT_EQ(records[1].orderEvent.price, te::Price{0});
-    EXPECT_EQ(records[1].receipt_timestamp_us, te::Nanos{5});
+    EXPECT_EQ(records[1].receipt_timestamp_ns, te::Nanos{5});
     EXPECT_EQ(records[1].version, te::kCurrentRecordVersion);
 }
 

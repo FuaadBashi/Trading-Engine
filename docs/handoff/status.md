@@ -145,8 +145,16 @@ codec, `EventSegmentWriter`/`EventSegmentReader`, `MergeCursor`, and `writeEvent
 tie-break exists in exactly one place; the real 29k-event corpus test still passes with zero
 residuals after that refactor.
 
-**Nothing replays *from* a tape yet.** `EventSegmentReader` decodes records; no path feeds them into
-an `OrderBook`. Until that exists the tape is write-only, and these remain open:
+**Nothing replays *from* a tape yet, and closing that loop is deliberately deferred (2026-09-02).**
+Raw replay already works, so a faster path buys nothing measurable today. Pick this back up when one
+of these triggers fires:
+
+- replay time over the corpus becomes an actual bottleneck you have measured, not assumed;
+- Stage 8 begins, and reference-versus-optimized comparison needs a fixed event tape as its input;
+- a capture grows large enough that re-decoding JSON on every run is the slow part.
+
+`EventSegmentReader` decodes records; no path feeds them into an `OrderBook`. Until that exists the
+tape is write-only, and these remain open:
 
 1. **Classifier warm-up blocks equivalence.** A tape holds only `(seed, cutoff]`, but `Replay` warms
    a stateful classifier on pre-seed orders. A tape therefore cannot yet claim to replay identically

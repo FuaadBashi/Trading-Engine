@@ -8,8 +8,8 @@
 #include <string>
 #include <te/core/instrument.hpp>
 #include <te/core/time.hpp>
-#include <te/telemetry/recorder.hpp>
-#include <te/telemetry/sink.hpp>
+#include <te/telemetry/legacy/recorder.hpp>
+#include <te/telemetry/legacy/sink.hpp>
 
 int main(int argc, char** argv) {
     if (argc != 3) {

@@ -154,6 +154,14 @@ Result<Qty, DecoderError> decodeFill(std::string_view text, InstrumentSpec spec)
 };
 
 
+// Placeholder. Always fails so the merge is visibly unimplemented rather than silently wrong;
+// replace the body, not just the failure it returns. See decoder.hpp for scope and the open
+// question on error granularity.
+Result<DecodedCapturedOrder, DecoderError> decodeCapturedOrder(std::string_view /*text*/,
+                                                                InstrumentSpec /*spec*/) {
+    return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::malformed_json);
+}
+
 Result<ChainLink, DecoderError> decodeChain(std::string_view text) {
     simdjson::ondemand::parser parser;
     simdjson::padded_string buffer = simdjson::padded_string(text);

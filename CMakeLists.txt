@@ -64,14 +64,17 @@ target_sources(te_core PRIVATE
     src/capture/segment_loader.cpp
     src/capture/capture_coordinator.cpp
 
-    # Portable telemetry and binary capture
-    src/telemetry/record.cpp
+    # v3 portable tape format (ADR 0011). Current; not legacy.
     src/telemetry/event_record_format.cpp
     src/telemetry/event_segment_reader.cpp
     src/telemetry/event_segment_writer.cpp
     src/telemetry/segment_format.cpp
-    src/telemetry/recorder.cpp
-    src/telemetry/sink.cpp
+
+    # v2 host-object-layout format. Superseded by v3; kept for old fixtures and recorder_main
+    # (ADR 0011 "legacy local format"). Do not build new capture paths on this.
+    src/telemetry/legacy/record.cpp
+    src/telemetry/legacy/recorder.cpp
+    src/telemetry/legacy/sink.cpp
 
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
     # Future slices:

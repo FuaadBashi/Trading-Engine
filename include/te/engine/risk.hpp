@@ -1,5 +1,6 @@
 #pragma once
 
-// Slice 5 TODO: test-first limits, drawdown halt, and rate limits shared by both paths.
+// Reserved for plan v4 §19 (Stage 9). Not implemented. Test-first limits, drawdown halt, and
+// rate limits shared by replay and live paths.
 
 namespace te {}  // namespace te

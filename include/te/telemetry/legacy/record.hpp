@@ -25,8 +25,11 @@ struct Record {
     std::uint8_t version;
     RecordKind kind;
 
-    // Local receipt/detection time; distinct from the venue timestamp inside OrderEvent.
-    Nanos receipt_timestamp_us;
+    // Local receipt/detection time; distinct from the venue timestamp inside OrderEvent. Nanos
+    // (std::chrono::nanoseconds), matching what Clock::now() returns -- the field used to be
+    // named receipt_timestamp_us while holding nanoseconds, a landmine for anyone who called
+    // .count() expecting microseconds.
+    Nanos receipt_timestamp_ns;
 };
 
 static_assert(

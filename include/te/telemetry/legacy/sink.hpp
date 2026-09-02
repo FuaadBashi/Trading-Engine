@@ -3,7 +3,7 @@
 #include <fstream>
 #include <string>
 #include <te/core/result.hpp>
-#include <te/telemetry/record.hpp>
+#include <te/telemetry/legacy/record.hpp>
 
 namespace te {
 

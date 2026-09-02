@@ -6,8 +6,8 @@
 #include <string>
 #include <vector>
 
-#include <te/telemetry/record.hpp>
-#include <te/telemetry/sink.hpp>
+#include <te/telemetry/legacy/record.hpp>
+#include <te/telemetry/legacy/sink.hpp>
 
 namespace {
 
@@ -62,7 +62,7 @@ std::vector<te::Record> readAllRecords(const std::string& path) {
 
 void expectSameRecord(const te::Record& actual, const te::Record& expected) {
     EXPECT_EQ(actual.version, expected.version);
-    EXPECT_EQ(actual.receipt_timestamp_us, expected.receipt_timestamp_us);
+    EXPECT_EQ(actual.receipt_timestamp_ns, expected.receipt_timestamp_ns);
     EXPECT_EQ(actual.orderEvent.venue_timestamp_us, expected.orderEvent.venue_timestamp_us);
     EXPECT_EQ(actual.orderEvent.order_id, expected.orderEvent.order_id);
     EXPECT_EQ(actual.orderEvent.price, expected.orderEvent.price);

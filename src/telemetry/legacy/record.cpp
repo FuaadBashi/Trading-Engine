@@ -1,6 +1,6 @@
 
 #include <cstring>
-#include <te/telemetry/record.hpp>
+#include <te/telemetry/legacy/record.hpp>
 
 namespace te {
 
@@ -13,7 +13,7 @@ Record buildRecord(const OrderEvent& orderEvent, const Clock& clock) {
     record.orderEvent = orderEvent;
     record.version = kCurrentRecordVersion;
     record.kind = RecordKind::order_event;
-    record.receipt_timestamp_us = clock.now();
+    record.receipt_timestamp_ns = clock.now();
 
     return record;
 };
@@ -24,7 +24,7 @@ Record buildGapRecord(const Clock& clock) {
     std::memset(static_cast<void*>(&record), 0, sizeof(record));
     record.version = kCurrentRecordVersion;
     record.kind = RecordKind::gap;
-    record.receipt_timestamp_us = clock.now();
+    record.receipt_timestamp_ns = clock.now();
 
     return record;
 }

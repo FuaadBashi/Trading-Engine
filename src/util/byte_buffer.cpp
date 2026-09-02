@@ -54,9 +54,12 @@ bool writeU16LE(std::span<std::byte> buffer, std::size_t offset, std::uint16_t v
         return false;
     }
 
+    // uint16_t promotes to int before shifting, so the arithmetic is done in unsigned int and
+    // narrowed back explicitly. Without this GCC's -Wsign-conversion rejects the implicit round
+    // trip; the 32- and 64-bit helpers below are unaffected because their rank already matches int.
     for (std::size_t byte = 0; byte < width; ++byte) {
         buffer[offset + byte] =
-            static_cast<std::byte>((value >> (byte * 8U)) & 0xFFU);
+            static_cast<std::byte>((static_cast<unsigned int>(value) >> (byte * 8U)) & 0xFFU);
     }
     return true;
 }
@@ -67,13 +70,13 @@ bool readU16LE(std::span<const std::byte> buffer, std::size_t offset, std::uint1
         return false;
     }
 
-    std::uint16_t value{};
+    unsigned int value{};
     for (std::size_t byte = 0; byte < width; ++byte) {
-        value |= static_cast<std::uint16_t>(
+        value |= static_cast<unsigned int>(
                      std::to_integer<std::uint8_t>(buffer[offset + byte]))
                  << (byte * 8U);
     }
-    out = value;
+    out = static_cast<std::uint16_t>(value);
     return true;
 }
 

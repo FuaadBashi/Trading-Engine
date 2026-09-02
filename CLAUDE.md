@@ -35,6 +35,15 @@ to become:
 
 Older plans (`project-plan-v2.md`, `coding-plan-v3.md`, `slice-1-plan.md`) are historical.
 
+## Keeping the docs honest
+
+Refresh `docs/` after any major change — files added, project logic changed, or a decision that now
+disagrees with what another doc says — and do it **before** starting the next session, not after.
+
+These documents rot fast and have been wrong about their own top priorities. Verify a claim against
+the code before acting on it, and prefer claims that a test can enforce. Ranked opinions ("highest
+value next") are opinions with a date, not facts.
+
 ## Build and test
 
 ```bash
