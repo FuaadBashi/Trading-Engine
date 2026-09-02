@@ -80,7 +80,7 @@ below, which is why a green run on a fresh checkout does not yet mean much.
 | Book health states | `unseeded -> warming -> valid -> stale_or_gapped -> resyncing -> valid` does not exist. No strategy gating. |
 | Replay-side gap/reseed policy | The *capture* side now refuses a seed that predates its stream. What replay should do on meeting a gap is still undecided (ADR 0013, deliberately deferred). |
 | Multi-segment capture loading | `loadJoinedCapture` reads only the first segment, so a capture that reconnected is partly unreachable from C++. |
-| v3 tape segments unwired | The portable format, writer and reader exist and are tested, but nothing converts a joined capture into a segment yet. v3 is a derived accelerator over the raw capture, not the archive — ADR 0011, decided 2026-09-01. |
+| Nothing replays *from* a v3 tape | `writeEventTape` converts a joined capture into a segment (L1: merge order baked in, classification/book/reconciliation still run on read) — built 2026-09-02. `EventSegmentReader` decodes records but nothing feeds them into an `OrderBook`. Blocked on proving tape/raw replay equivalence: `Replay` warms a stateful classifier on pre-seed orders that a tape does not carry. See `docs/specs/v3-segment-format.md`, "Known gap: classifier warm-up". v3 is a derived accelerator over the raw capture, not the archive — ADR 0011, decided 2026-09-01. |
 | Timestamp type contract | Receipt timestamp naming and nanosecond storage disagree; venue/local clock subtraction is not network latency. |
 | Two invariant modes | Structural invariants and stable decision-ready book checks must not be treated as identical. |
 | Same-venue L2/checkpoint suite | Replay compares one final checkpoint; captures carry a checkpoint per segment. |

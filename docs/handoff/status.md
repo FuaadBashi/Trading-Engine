@@ -177,12 +177,7 @@ tape is write-only, and these remain open:
 
 **Highest value first:**
 
-1. **Multi-segment capture loading.** `loadJoinedCapture` reads only segment 0, so a capture that
-   reconnected is partly unreachable: the Aug 27 run has 133k events stranded in segment 0 with only
-   18k reachable. Fixing it also unlocks plan v4 §13's "compare several intermediate checkpoints,
-   not only one final state", since every segment carries its own checkpoint. Two items, one change.
-
-2. **Amend plan v4 §6.** It declares the replay key as `(venueTimestampMicros, captureOrdinal)`.
+1. **Amend plan v4 §6.** It declares the replay key as `(venueTimestampMicros, captureOrdinal)`.
    The ordinal is now decoded and carried, and measurement says the plan is wrong for this venue:
    Bitstamp's trade frame arrives before its matching order frame in **394 of 427** shared
    timestamps, so ordering by ordinal runs `reconcile` before `observe` and produces 41 apply
@@ -190,8 +185,11 @@ tape is write-only, and these remain open:
    needs changing. See ADR 0013, "`captureOrdinal` is carried, but is deliberately NOT the
    tie-break".
 
-3. **Rest of Stage 0 cleanup (v4 §10)** — receipt-timestamp type/naming, structural-vs-decision-ready
-   validation split, CI guard activation, the mandatory small fixture. None started.
+2. **Rest of Stage 0 cleanup (v4 §10)** — structural-vs-decision-ready validation split, CI guard
+   activation. Closed since this was last written: the legacy `receipt_timestamp_us` naming bug
+   (was `Nanos` typed, named like microseconds; renamed to `receipt_timestamp_ns`, 2026-09-02) and
+   the mandatory small fixture (`tests/fixtures/joined-capture-golden/`, committed and asserted
+   mandatory by `BitstampJoinedCapture.GoldenFixtureReplaysToHandWrittenCheckpoint`).
 
 **Deliberately deferred, documented as such in ADR 0013:** the book health state machine
 (`unseeded → warming → valid → stale_or_gapped → resyncing → valid`) and any reorder window. After a
