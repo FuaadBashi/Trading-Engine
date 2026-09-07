@@ -128,40 +128,6 @@ Result<ApplyOutcome, ApplyError> OrderBook::apply(const OrderEvent& orderEvent) 
 
     return Result<ApplyOutcome, ApplyError>::failure(ApplyError::side_mismatch);
 }
-void OrderBook::validate() const {
-    // A valid resting book is not crossed.
-    assert(!bestBid().has_value() || !bestAsk().has_value() || *bestBid() < *bestAsk());
-
-    // Every index entry must point into the level and order it claims to locate.
-    for (const auto& [id, locator] : orderIndex_) {
-        [[maybe_unused]] auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
-
-        assert(levels.find(locator.price) != levels.end());
-        assert(locator.order_pos->id == id);
-    }
-
-    // Every level is non-empty, indexed, and has an exact aggregate quantity.
-    for (const auto& [price, level] : bids_) {
-        assert(level.isEmpty() == false);
-
-        Qty current_qty = {0};
-        for (const auto& order : level) {
-            assert(orderIndex_.contains(order.id));
-            current_qty.units += order.qty.units;
-        }
-        assert(level.totalQuantity() == current_qty);
-    }
-    for (const auto& [price, level] : asks_) {
-        assert(level.isEmpty() == false);
-        Qty current_qty = {0};
-        for (const auto& order : level) {
-            assert(orderIndex_.contains(order.id));
-            current_qty.units += order.qty.units;
-        }
-        assert(level.totalQuantity() == current_qty);
-    }
-}
-
 std::optional<Price> OrderBook::bestBid() const {
     if (bids_.empty()) {
         return std::nullopt;
@@ -185,6 +151,53 @@ Qty OrderBook::qtyAt(Side side, Price price) const {
     return levelIt->second.totalQuantity();
 }
 
+void OrderBook::validateStructure() const {
+    // Every index entry names an existing level and points to the order with its key's ID.
+    for (const auto& [orderId, locator] : orderIndex_) {
+        [[maybe_unused]] const auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
+        assert(levels.find(locator.price) != levels.end());
+        assert(locator.order_pos->id == orderId);
+    }
+
+    // Every level is non-empty, every resting order is indexed, and its cached total is exact.
+    for (const auto& [price, level] : bids_) {
+        assert(!level.isEmpty());
+
+        Qty currentQty{0};
+        for (const auto& order : level) {
+            assert(orderIndex_.contains(order.id));
+            currentQty.units += order.qty.units;
+        }
+        assert(level.totalQuantity() == currentQty);
+    }
+    for (const auto& [price, level] : asks_) {
+        assert(!level.isEmpty());
+        Qty currentQty{0};
+        for (const auto& order : level) {
+            assert(orderIndex_.contains(order.id));
+            currentQty.units += order.qty.units;
+        }
+        assert(level.totalQuantity() == currentQty);
+    }
+}
+
+// returns true only when:{
+// - a best bid exists;
+// - a best ask exists;
+// - the bid is strictly below the ask.}
+// It returns false when:{
+// - the book is empty;
+// - only buyers or only sellers exist;
+// - bid equals ask, called a locked book;
+// - bid is above ask, called a crossed book.}
+
+bool OrderBook::hasUsableBidAsk() const {
+    if (!bestBid().has_value() || !bestAsk().has_value()) {
+        return false;
+    }
+
+    return bestBid() < bestAsk();
+}
 std::uint64_t OrderBook::digest() const {
     // FNV-1a. std::map iterates in ascending price order, so the walk is already canonical and
     // does not depend on the order events arrived in.

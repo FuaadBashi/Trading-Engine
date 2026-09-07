@@ -25,7 +25,7 @@ Result<OrderBook, ApplyError> bootstrap(BookSnapshot book, TradeReconciler* reco
             reconciler->observe(orderEvent, Qty{});
         }
     }
-    orderBook.validate();
+    orderBook.validateStructure();
 
     return Result<OrderBook, ApplyError>::success(std::move(orderBook));
 };

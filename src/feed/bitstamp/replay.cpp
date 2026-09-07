@@ -169,7 +169,7 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
     replayStats.orderEventsAfterCutoff = cursor.ordersAfterCutoff();
     replayStats.tradeEventsAfterCutoff = cursor.tradesAfterCutoff();
 
-    orderBook.validate();
+    orderBook.validateStructure();
     replayStats.reconciler = tradeReconciler.stats();
     return Result<ReplayResult, ReplayError>::success(
         ReplayResult{.book = std::move(orderBook), .stats = replayStats});

@@ -99,7 +99,7 @@ TEST(GoldenReplay, ReplayedBookMatchesIndependentVenueSnapshot) {
 
     const te::OrderBook book =
         replayFromSeedTo(seed, readWholeFile(jsonlPath), snapshot.microtimestamp, btcUsd());
-    book.validate();
+    book.validateStructure();
 
     // Aggregate the snapshot's flat order list into per-side totals at each price -- the ground
     // truth the replayed book's qtyAt() must independently agree with.

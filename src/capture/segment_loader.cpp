@@ -130,18 +130,17 @@ Result<JoinedCapture, JoinedCaptureError> loadSegment(
         }
 
         if (streamKind == "order") {
-            const auto decodedOrder = bitstamp::decodeOrder(payloadLine, spec);
-            const auto decodedFill = bitstamp::decodeFill(payloadLine, spec);
-            if (!decodedOrder.hasValue()) {
+            const auto decodedEvent = bitstamp::decodeCapturedOrder(payloadLine, spec);
+
+            if (!decodedEvent.hasValue()) {
                 return Result<JoinedCapture, JoinedCaptureError>::failure(
                     JoinedCaptureError::order_decode_failure);
             }
-            if (!decodedFill.hasValue()) {
-                return Result<JoinedCapture, JoinedCaptureError>::failure(
-                    JoinedCaptureError::fill_decode_failure);
-            }
+
+            const auto decodedOrder = decodedEvent.valueIf()->event;
+            const auto decodedFill = decodedEvent.valueIf()->amountTraded;
             joinedCapture.jc_captureOrderEvents.push_back(CapturedOrderEvent{
-                *decodedOrder.valueIf(), *decodedFill.valueIf(), captureOrdinal});
+                decodedOrder, decodedFill, captureOrdinal});
         } else if (streamKind == "trade") {
             const auto decodedTrade = bitstamp::decodeTrade(payloadLine, spec);
             if (!decodedTrade.hasValue()) {

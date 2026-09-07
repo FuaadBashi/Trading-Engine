@@ -127,39 +127,138 @@ Result<OrderEvent, DecoderError> decodeOrder(std::string_view text, InstrumentSp
     return Result<OrderEvent, DecoderError>::success(orderEvent);
 }
 
-Result<Qty, DecoderError> decodeFill(std::string_view text, InstrumentSpec spec){   
-    
+Result<DecodedCapturedOrder, DecoderError> decodeCapturedOrder(std::string_view text, InstrumentSpec spec)
+{
+    DecodedCapturedOrder decodeCaptureOrder;
     simdjson::ondemand::parser parser;
     simdjson::padded_string buffer = simdjson::padded_string(text);
 
     simdjson::ondemand::document doc;
     simdjson::error_code err = parser.iterate(buffer).get(doc);
     if (err) {
-        return Result<Qty, DecoderError>::failure(DecoderError::malformed_json);
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::malformed_json);
         ;
     }
 
-    std::string_view amount_traded_str;
+    std::string_view event;
+    err = doc["event"].get_string().get(event);
+    if (err) {
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
+    }
+
+    if (event == "order_created") {
+        decodeCaptureOrder.event.kind = EventKind::add;
+
+    } else if (event == "order_changed") {
+        decodeCaptureOrder.event.kind = EventKind::modify;
+
+    } else if (event == "order_deleted") {
+        decodeCaptureOrder.event.kind = EventKind::remove;
+
+    } else {
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::not_order_event);
+    }
+    std::string_view id_str;
+    err = doc["data"]["id_str"].get_string().get(id_str);
+    if (err) {
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::missing_field);
+    } else {
+        // Keep Result alive while using valueIf(); calling it on a temporary would dangle.
+        const Result<uint64_t, ParseError> id_result = parseInteger(id_str);
+        const uint64_t* decoded_id = id_result.valueIf();
+        if (decoded_id == nullptr) {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
+        }
+
+        // ADR 0005: the duplicate representations must agree. Bitstamp order IDs are around
+        // 2.0e15 today against a 9.0e15 ceiling (2^53), above which the JSON number silently
+        // loses precision while id_str stays exact. This is the tripwire for that day; it has
+        // never fired across 619,803 captured order events.
+        std::uint64_t numeric_id{};
+        if (doc["data"]["id"].get_uint64().get(numeric_id)) {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::missing_field);
+        }
+        if (numeric_id != *decoded_id) {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::id_mismatch);
+        }
+        decodeCaptureOrder.event.order_id = OrderId{*decoded_id};
+    }
+    std::string_view str_time;
+    err = doc["data"]["microtimestamp"].get_string().get(str_time);
+    if (err) {
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::missing_field);
+    } else {
+        Result<uint64_t, ParseError> result = parseInteger(str_time);
+        const uint64_t* decoded_time = result.valueIf();
+        if (decoded_time == nullptr) {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
+        } else {
+            decodeCaptureOrder.event.venue_timestamp_us = *decoded_time;
+        }
+    }
+
+    std::uint64_t side_code;
+    err = doc["data"]["order_type"].get_uint64().get(side_code);
+    if (err) {
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::missing_field);
+    } else {
+        if (side_code == 0) {
+            decodeCaptureOrder.event.side = Side::buy;
+
+        } else if (side_code == 1) {
+            decodeCaptureOrder.event.side = Side::sell;
+        } else {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
+        }
+    }
+
+    std::string_view str_price;
+    err = doc["data"]["price_str"].get_string().get(str_price);
+    if (err) {
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::missing_field);
+    } else {
+        Result<int64_t, ParseError> result = parseDecimal(str_price, spec.price_decimals);
+        const int64_t* decoded_price = result.valueIf();
+
+        if (decoded_price != nullptr) {
+            decodeCaptureOrder.event.price = Price{*decoded_price};
+        } else {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
+        }
+    }
+
+        std::string_view amount_traded_str;
     err = doc["data"]["amount_traded"].get_string().get(amount_traded_str);
     if (err) {
-        return Result<Qty, DecoderError>::failure(DecoderError::missing_field);
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::missing_field);
     }
 
     Result<std::int64_t, ParseError> amount_traded = parseDecimal(amount_traded_str, spec.quantity_decimals);
     if (!amount_traded.hasValue()) {
-        return Result<Qty, DecoderError>::failure(DecoderError::invalid_field);
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
     }
-    return Result<Qty, DecoderError>::success(Qty{ *amount_traded.valueIf() });
+    const auto* decoded_amount_traded = amount_traded.valueIf();
+    if (decoded_amount_traded != nullptr) {
+            decodeCaptureOrder.amountTraded = Qty{*decoded_amount_traded};
+        } else {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
+        }
 
-};
+    std::string_view str_qty;
+    err = doc["data"]["amount_str"].get_string().get(str_qty);
+    if (err) {
+        return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::missing_field);
+    } else {
+        Result<int64_t, ParseError> result = parseDecimal(str_qty, spec.quantity_decimals);
+        const int64_t* decoded_qty = result.valueIf();
+        if (decoded_qty != nullptr) {
+            decodeCaptureOrder.event.quantity = Qty{*decoded_qty};
+        } else {
+            return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::invalid_field);
+        }
+    }
 
-
-// Placeholder. Always fails so the merge is visibly unimplemented rather than silently wrong;
-// replace the body, not just the failure it returns. See decoder.hpp for scope and the open
-// question on error granularity.
-Result<DecodedCapturedOrder, DecoderError> decodeCapturedOrder(std::string_view /*text*/,
-                                                                InstrumentSpec /*spec*/) {
-    return Result<DecodedCapturedOrder, DecoderError>::failure(DecoderError::malformed_json);
+    return Result<DecodedCapturedOrder, DecoderError>::success(decodeCaptureOrder);
 }
 
 Result<ChainLink, DecoderError> decodeChain(std::string_view text) {

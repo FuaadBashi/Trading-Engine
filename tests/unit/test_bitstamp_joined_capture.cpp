@@ -279,7 +279,7 @@ TEST(BitstampJoinedCapture, LoadedCaptureReplaysToCheckpoint) {
     EXPECT_EQ(replayed.valueIf()->stats.tradeEventsRead, 1U);
     EXPECT_EQ(replayed.valueIf()->stats.correctionsApplied, 1U);
 
-    replayed.valueIf()->book.validate();
+    replayed.valueIf()->book.validateStructure();
     expectBookMatchesSnapshot(replayed.valueIf()->book, *joinedCapture.checkpoint);
 }
 
@@ -338,7 +338,7 @@ TEST(BitstampJoinedCapture, GoldenFixtureReplaysToHandWrittenCheckpoint) {
     EXPECT_EQ(result.stats.reconciler.ordersRemovedWithUnmatchedFill, 0U);
     EXPECT_EQ(result.stats.reconciler.staleFillsDiscarded, 0U);
 
-    result.book.validate();
+    result.book.validateStructure();
     expectBookMatchesSnapshot(result.book, *joinedCapture.checkpoint);
 }
 
@@ -398,7 +398,7 @@ TEST(BitstampJoinedCapture, RealCaptureReplaysToCheckpointWithNoResiduals) {
     EXPECT_EQ(result.stats.orderEventsBeforeSeed, 1U);
     EXPECT_EQ(result.stats.orderEventsAfterCutoff, 4207U);
 
-    result.book.validate();
+    result.book.validateStructure();
     expectBookMatchesSnapshot(result.book, *joinedCapture.checkpoint);
 }
 

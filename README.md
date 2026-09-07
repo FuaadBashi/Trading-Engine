@@ -35,8 +35,8 @@ Only three things vary between backtest and live:
 | `ExecutionVenue` | `SimulatedVenue` | `PaperVenue` (external sandbox adapter is stretch) |
 
 If any file outside those six implementations calls the system clock or knows what a WebSocket
-is, the design has leaked. The injected clock boundary exists; the automated CI source guard is
-still an explicit Plan v4 Stage 0 action and is not yet claimed as enforced.
+is, the design has leaked. The injected clock boundary exists, and CI now enforces direct-clock and
+exact-financial-type source guards with focused deliberately-broken tests.
 
 ## Layout
 
@@ -78,19 +78,18 @@ cannot exactly verify a Bitstamp book.
 
 ## Current order of attack
 
-Never do these in parallel. Full detail and exit gates are in
-[Project Plan v4](docs/project-plan-v4.md).
+Never do these in parallel. The live sequence and its exact completion gates are in
+[TODO.md](TODO.md); long-range reasoning remains in [Project Plan v4](docs/project-plan-v4.md).
 
-1. **Make a small end-to-end golden fixture mandatory on a clean checkout.** Today a fresh
-   checkout reports 194/194 green while silently skipping every real-corpus test, including the
-   correctness gate, so green does not yet mean much.
-2. Correct the timestamp-unit contract and activate truthful CI guards.
-3. Define replay-side gap/reseed behaviour and book health states, then gate strategy delivery on
-   them. Deliberately deferred by ADR 0013 until there is evidence to design against.
-4. Implement portable v3 encoding after the joined schema and timing fields are stable.
-5. Only then begin the general replay/strategy/accounting engine.
+1. Split `OrderBook` structural invariants from decision-ready checks.
+2. Decide event-loop causality in an ADR before writing the engine loop.
+3. Build exact-integer portfolio/accounting behaviour from hand-calculated tests.
+4. Add the minimal `ExecutionVenue` and `Strategy` interfaces.
+5. Wire those modules together only after their contracts are settled independently.
 
-Done since this list was written: joined order/trade capture under one manifest and ordinal; the
+Done before this list: the mandatory committed golden fixture; timestamp and ID contract fixes;
+portable v3 encoding/segment I/O; CI architecture guards; joined order/trade capture under one
+manifest and ordinal; the
 deterministic merge/reconciliation controller (ADR 0013); `id`/`id_str` agreement; and manual
 checkpoint adjustments replaced by joined trade evidence with no silent apply errors. The three
 remaining adjustments live only in the legacy order-only golden test, which has no trade stream to

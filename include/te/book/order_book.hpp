@@ -50,8 +50,8 @@ public:
     // Every rejected event has a reason; callers decide whether it means bad input or resync.
     Result<ApplyOutcome, ApplyError> apply(const OrderEvent& orderEvent);
 
-    // Debug assertions for index, aggregate, and best-price invariants.
-    void validate() const;
+    // Debug assertions for index, locator, level, and aggregate invariants.
+    void validateStructure() const;
 
     // Empty side is absence, never a sentinel price.
     std::optional<Price> bestBid() const;
@@ -61,6 +61,10 @@ public:
     Qty qtyAt(Side side, Price price) const;
 
     std::size_t levelCount() const { return bids_.size() + asks_.size(); }
+
+    // True only when both sides exist and the best bid is strictly below the best ask.
+    bool hasUsableBidAsk() const;
+
 
     /**
      * @brief  Order-independent fingerprint of the book's resting state.

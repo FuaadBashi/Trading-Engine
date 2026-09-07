@@ -39,6 +39,49 @@ TEST(OrderBook, EmptyBookHasNoBestPricesAndZeroQuantity) {
     EXPECT_EQ(book.qtyAt(te::Side::sell, te::Price{100}), te::Qty{0});
 }
 
+// A usable price shape needs both sides of the market and a strictly positive spread.
+// These tests deliberately come before the declaration and implementation of
+// hasUsableBidAsk(): compilation is the red stage of the contract.
+TEST(OrderBook, EmptyBookHasNoUsableBidAsk) {
+    const te::OrderBook book;
+
+    EXPECT_FALSE(book.hasUsableBidAsk());
+}
+
+TEST(OrderBook, OneSidedBookHasNoUsableBidAsk) {
+    te::OrderBook bidOnly;
+    ASSERT_TRUE(bidOnly.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+    EXPECT_FALSE(bidOnly.hasUsableBidAsk());
+
+    te::OrderBook askOnly;
+    ASSERT_TRUE(askOnly.apply(makeEvent(te::EventKind::add, 2, 101, 5, te::Side::sell)).hasValue());
+    EXPECT_FALSE(askOnly.hasUsableBidAsk());
+}
+
+TEST(OrderBook, StrictlySeparatedBidAndAskHaveUsableBidAsk) {
+    te::OrderBook book;
+    ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+    ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 2, 101, 5, te::Side::sell)).hasValue());
+
+    EXPECT_TRUE(book.hasUsableBidAsk());
+}
+
+TEST(OrderBook, LockedBookHasNoUsableBidAsk) {
+    te::OrderBook book;
+    ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+    ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 2, 100, 5, te::Side::sell)).hasValue());
+
+    EXPECT_FALSE(book.hasUsableBidAsk());
+}
+
+TEST(OrderBook, CrossedBookHasNoUsableBidAsk) {
+    te::OrderBook book;
+    ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 1, 101, 5, te::Side::buy)).hasValue());
+    ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 2, 100, 5, te::Side::sell)).hasValue());
+
+    EXPECT_FALSE(book.hasUsableBidAsk());
+}
+
 TEST(OrderBook, AddCreatesLevelAndUpdatesObservableState) {
     te::OrderBook book;
 
@@ -251,7 +294,7 @@ TEST(OrderBook, MoveConstructionKeepsLocatorsUsableOnAPopulatedBook) {
 
     const te::OrderBook moved = std::move(source);
 
-    moved.validate();
+    moved.validateStructure();
     EXPECT_EQ(moved.levelCount(), 2U);
     EXPECT_EQ(moved.qtyAt(te::Side::buy, te::Price{100}), te::Qty{8});
     EXPECT_EQ(moved.qtyAt(te::Side::sell, te::Price{200}), te::Qty{7});
@@ -279,7 +322,7 @@ TEST(OrderBook, MovedBookCanStillModifyAndRemoveOrdersItInherited) {
     // Emptying a level must still remove the level itself.
     ASSERT_TRUE(moved.apply(makeEvent(te::EventKind::remove, 1, 100, 2, te::Side::buy)).hasValue());
     EXPECT_EQ(moved.levelCount(), 1U);
-    moved.validate();
+    moved.validateStructure();
 }
 
 TEST(OrderBook, MoveAssignmentKeepsLocatorsUsableAndDiscardsTheOldBook) {
@@ -293,7 +336,7 @@ TEST(OrderBook, MoveAssignmentKeepsLocatorsUsableAndDiscardsTheOldBook) {
 
     target = std::move(source);
 
-    target.validate();
+    target.validateStructure();
     EXPECT_EQ(target.levelCount(), 2U);
     EXPECT_EQ(target.qtyAt(te::Side::buy, te::Price{300}), te::Qty{});
     ASSERT_TRUE(target.apply(makeEvent(te::EventKind::remove, 1, 100, 5, te::Side::buy)).hasValue());
@@ -309,7 +352,7 @@ TEST(OrderBook, SurvivesTheDoubleMoveAReplayPerforms) {
     te::OrderBook second = std::move(first);
     te::OrderBook third = std::move(second);
 
-    third.validate();
+    third.validateStructure();
     ASSERT_TRUE(third.apply(makeEvent(te::EventKind::modify, 2, 100, 1, te::Side::buy)).hasValue());
     EXPECT_EQ(third.qtyAt(te::Side::buy, te::Price{100}), te::Qty{6});
     EXPECT_EQ(third.digest(), [] {

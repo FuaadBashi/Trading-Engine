@@ -177,19 +177,19 @@ tape is write-only, and these remain open:
 
 **Highest value first:**
 
-1. **Amend plan v4 §6.** It declares the replay key as `(venueTimestampMicros, captureOrdinal)`.
-   The ordinal is now decoded and carried, and measurement says the plan is wrong for this venue:
-   Bitstamp's trade frame arrives before its matching order frame in **394 of 427** shared
-   timestamps, so ordering by ordinal runs `reconcile` before `observe` and produces 41 apply
-   failures on the reference capture. The code keeps order-wins-tie deliberately; the plan is what
-   needs changing. See ADR 0013, "`captureOrdinal` is carried, but is deliberately NOT the
-   tie-break".
+1. **Rest of Stage 0 cleanup (v4 §10)** — structural-vs-decision-ready validation split
+   (`OrderBook` has one `validate()`, not the two invariant modes §12 requires). The clock and
+   floating-point architecture guards are now enforced in CI and have focused deliberately-broken
+   tests. Closed since this was last written: plan v4 §6 is already amended (see
+   its "Amended 2026-08-28" note — this item used to list that as open, it was not, fixed
+   2026-09-02); the legacy `receipt_timestamp_us` naming bug (renamed to `receipt_timestamp_ns`);
+   the mandatory small fixture (`tests/fixtures/joined-capture-golden/`).
 
-2. **Rest of Stage 0 cleanup (v4 §10)** — structural-vs-decision-ready validation split, CI guard
-   activation. Closed since this was last written: the legacy `receipt_timestamp_us` naming bug
-   (was `Nanos` typed, named like microseconds; renamed to `receipt_timestamp_ns`, 2026-09-02) and
-   the mandatory small fixture (`tests/fixtures/joined-capture-golden/`, committed and asserted
-   mandatory by `BitstampJoinedCapture.GoldenFixtureReplaysToHandWrittenCheckpoint`).
+2. **Migrate `segment_loader.cpp` off `decodeOrder`+`decodeFill` onto `decodeCapturedOrder`.**
+   `decodeCapturedOrder` is implemented and passes its dual-run test (2026-09-02), but the
+   production call site hasn't moved yet. `decodeFill` and the dual-run test are both meant to be
+   deleted once this lands; `decodeOrder` stays permanently for the legacy recorder path, which
+   never needs fill data.
 
 **Deliberately deferred, documented as such in ADR 0013:** the book health state machine
 (`unseeded → warming → valid → stale_or_gapped → resyncing → valid`) and any reorder window. After a

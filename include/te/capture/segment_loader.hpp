@@ -24,7 +24,6 @@ enum class JoinedCaptureError {
     checkpoint_parse_failure,
     order_decode_failure,
     trade_decode_failure,
-    fill_decode_failure
 };
 
 struct JoinedCapture {

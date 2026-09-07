@@ -166,12 +166,10 @@ te::OrderEvent generate(Rng& rng) {
     // Side is decided before price, and price ranges never overlap across sides: buys live in
     // {1,2}, asks in {3,4}. OrderBook::apply is a passive index -- it applies exactly what it is
     // told and has no matching engine, so nothing stops a generator from resting a buy above a
-    // resting ask. validate()'s non-crossed assertion assumes an honest venue would never emit
-    // that combination; a generator free to pick price independently of side can, and did --
-    // this is what BookOracle originally caught (CI runs 33255903750 / 33256059656, both
-    // compilers, "Assertion `!bestBid()... || *bestBid() < *bestAsk()' failed"). Disjoint ranges
-    // make a crossed book structurally unreachable while still exercising two price levels per
-    // side, multiple orders per level, and every EventKind against them.
+    // resting ask. The generated stream deliberately avoids that market-shape case: its purpose
+    // is to compare the model's structural mutations, not to test market-shape policy. Disjoint
+    // ranges make a crossed book unreachable while still exercising two price levels per side,
+    // multiple orders per level, and every EventKind against them.
     const te::Side side = (rng.below(2) == 0) ? te::Side::buy : te::Side::sell;
     std::int64_t price =
         (side == te::Side::buy) ? static_cast<std::int64_t>(rng.below(2) + 1)
@@ -216,7 +214,7 @@ void runSequence(std::uint64_t seed, int events) {
         }
 
         // Structural invariants must hold after every accepted mutation, not just at the end.
-        book.validate();
+        book.validateStructure();
 
         EXPECT_EQ(book.levelCount(), oracle.levelCount()) << "level count disagreed at " << where;
         EXPECT_EQ(book.bestBid(), oracle.best(te::Side::buy)) << "best bid disagreed at " << where;
