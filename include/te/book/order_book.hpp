@@ -24,6 +24,7 @@ enum class ApplyError {
     invalid_quantity,
     side_mismatch,
     level_quantity_overflow,
+    invalid_side,
 };
 
 // Non-owning index entry. The PriceLevel owns the order node; this stores its stable list handle.
@@ -48,7 +49,7 @@ public:
     OrderBook& operator=(OrderBook&&) = default;
 
     // Every rejected event has a reason; callers decide whether it means bad input or resync.
-    Result<ApplyOutcome, ApplyError> apply(const OrderEvent& orderEvent);
+    [[nodiscard]] Result<ApplyOutcome, ApplyError> apply(const OrderEvent& orderEvent);
 
     // Debug assertions for index, locator, level, and aggregate invariants.
     void validateStructure() const;
@@ -64,7 +65,6 @@ public:
 
     // True only when both sides exist and the best bid is strictly below the best ask.
     bool hasUsableBidAsk() const;
-
 
     /**
      * @brief  Order-independent fingerprint of the book's resting state.

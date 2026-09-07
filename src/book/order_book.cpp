@@ -10,13 +10,17 @@ Result<ApplyOutcome, ApplyError> OrderBook::apply(const OrderEvent& orderEvent) 
         if (orderEvent.kind == EventKind::add) {
             return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::duplicate_order_id);
         }
-    } else if (!orderIndex_.contains(orderEvent.order_id)) {
+    } else {
         if (orderEvent.kind == EventKind::modify || orderEvent.kind == EventKind::remove) {
             return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::unknown_order_id);
         }
     }
 
     if (orderEvent.kind == EventKind::add) {
+        if (orderEvent.side != Side::buy &&
+            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
+                                                            ApplyError::invalid_side);
+}
         auto& levels = (orderEvent.side == Side::buy) ? bids_ : asks_;
         if (orderEvent.quantity.units <= 0) {
             return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::invalid_quantity);
@@ -25,7 +29,7 @@ Result<ApplyOutcome, ApplyError> OrderBook::apply(const OrderEvent& orderEvent) 
         if (orderEvent.price.ticks <= 0) {
             return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::invalid_price);
         }
-
+              
         auto [levelIt, createdLevel] = levels.try_emplace(orderEvent.price);
         std::optional<OrderHandle> orderHandle =
             levelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
@@ -59,6 +63,9 @@ Result<ApplyOutcome, ApplyError> OrderBook::apply(const OrderEvent& orderEvent) 
             return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::side_mismatch);
         }
         OrderHandle orderHandle = locator.order_pos;
+         if (orderEvent.side != Side::buy &&
+            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
+                                                            ApplyError::invalid_side);
         auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
         auto oldLevelIt = levels.find(locator.price);
         if (oldLevelIt == levels.end()) {
@@ -109,6 +116,9 @@ Result<ApplyOutcome, ApplyError> OrderBook::apply(const OrderEvent& orderEvent) 
         }
 
         // The stored locator is authoritative; a delete message's price and quantity are not.
+        if (orderEvent.side != Side::buy &&
+            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
+                                                            ApplyError::invalid_side);
         auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
         auto levelIt = levels.find(locator.price);
         if (levelIt == levels.end()) {
@@ -154,9 +164,17 @@ Qty OrderBook::qtyAt(Side side, Price price) const {
 void OrderBook::validateStructure() const {
     // Every index entry names an existing level and points to the order with its key's ID.
     for (const auto& [orderId, locator] : orderIndex_) {
+         if (orderEvent.side != Side::buy &&
+            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
+                                                            ApplyError::invalid_side);
         [[maybe_unused]] const auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
         assert(levels.find(locator.price) != levels.end());
         assert(locator.order_pos->id == orderId);
+        const OrderLocator& locator = indexIt->second;
+
+        assert(locator.side == expectedSide);
+        assert(locator.price == price);
+        assert(locator.order_pos == orderIt);
     }
 
     // Every level is non-empty, every resting order is indexed, and its cached total is exact.

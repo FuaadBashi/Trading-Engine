@@ -12,12 +12,12 @@ std::optional<OrderHandle> PriceLevel::addOrder(OrderId id, Qty quantity) {
         return std::nullopt;
     }
 
-    te::RestingOrder restingOrder{
-        id,
-        quantity,
-    };
+    auto orderIt = restingOrders_.insert(
+    restingOrders_.end(),
+    RestingOrder{id, quantity});
+
     total_quantity_.units += quantity.units;
-    return restingOrders_.insert(restingOrders_.end(), restingOrder);
+    return orderIt;
 }
 
 void PriceLevel::removeOrder(OrderHandle orderHandle) {
