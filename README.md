@@ -17,7 +17,7 @@ observation and local paper-order experiments. See the current
 | 0 Foundations | 0 | complete |
 | 1 Data contract + recorder | 1 to 3 | substantially implemented; durable v3 and two contract fixes remain |
 | 2 L3 book + reconciliation | 3 to 5 | merge controller built and its gate met; joined replay reproduces the venue checkpoint exactly (0 of 4,533 levels differ) |
-| 3 Deterministic replay + accounting | after joined replay | not started |
+| 3 Deterministic replay + accounting | after joined replay | causality/authority design in progress; implementation not started |
 | 4 Queue labels + execution model | after replay core | not started |
 | 5 Held-out corpus validation | after label-quality gate | not started |
 | 6 Performance laboratory | after deterministic correctness | not started |
@@ -81,11 +81,14 @@ cannot exactly verify a Bitstamp book.
 Never do these in parallel. The live sequence and its exact completion gates are in
 [TODO.md](TODO.md); long-range reasoning remains in [Project Plan v4](docs/project-plan-v4.md).
 
-1. Split `OrderBook` structural invariants from decision-ready checks.
-2. Decide event-loop causality in an ADR before writing the engine loop.
-3. Build exact-integer portfolio/accounting behaviour from hand-calculated tests.
-4. Add the minimal `ExecutionVenue` and `Strategy` interfaces.
-5. Wire those modules together only after their contracts are settled independently.
+1. Finish and accept the event-loop causality ADR, including decision blocking, latency, fills and
+   accounting order. Current draft: [ADR 0014](docs/decisions/0014-event-loop-causality-and-decision-authority.md).
+2. Build exact-integer portfolio/accounting behaviour from hand-calculated tests.
+3. Define order intentions and reason-coded decision/admission contracts.
+4. Add the minimal `ExecutionVenue`, genuine Stage 5 risk checks and `Strategy` seams; leave advanced
+   operational controls for Stage 9.
+5. Wire those modules into a single-threaded deterministic engine only after their contracts are
+   settled independently.
 
 Done before this list: the mandatory committed golden fixture; timestamp and ID contract fixes;
 portable v3 encoding/segment I/O; CI architecture guards; joined order/trade capture under one

@@ -61,7 +61,7 @@ bool BookHealth::markCorrupted(FailureReason reason) {
     return true;
 }
 
-bool BookHealth::isUsable() const {
+bool BookHealth::isTrusted() const {
     return state_ == BookHealthState::valid;
 }
 

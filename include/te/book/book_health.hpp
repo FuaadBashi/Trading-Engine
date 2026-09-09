@@ -29,7 +29,7 @@ bool synchronizationSucceeded();
 bool synchronizationFailed(FailureReason reason);
 bool markCorrupted(FailureReason reason);
 
-bool isUsable() const;
+bool isTrusted() const;
 
 BookHealthState getState() const {return state_;}
 

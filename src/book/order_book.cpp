@@ -227,15 +227,23 @@ void OrderBook::validateStructure() const {
     validateLevels(Side::sell, asks_);
 }
 
-bool OrderBook::hasUsableBidAsk() const {
+MarketShape OrderBook::marketShape() const {
     const std::optional<Price> bid = bestBid();
     const std::optional<Price> ask = bestAsk();
 
-    if (!bid.has_value() || !ask.has_value()) {
-        return false;
+    if (!bid.has_value() && !ask.has_value()) {
+        return MarketShape::empty;
     }
-
-    return *bid < *ask;
+    if (!bid.has_value() || !ask.has_value()) {
+        return MarketShape::one_sided;
+    }
+    if (*bid == *ask) {
+        return MarketShape::locked;
+    }
+    if (*bid > *ask) {
+        return MarketShape::crossed;
+    }
+    return MarketShape::open;
 }
 std::uint64_t OrderBook::digest() const {
     // FNV-1a. std::map iterates in ascending price order, so the walk is already canonical and

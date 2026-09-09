@@ -39,47 +39,45 @@ TEST(OrderBook, EmptyBookHasNoBestPricesAndZeroQuantity) {
     EXPECT_EQ(book.qtyAt(te::Side::sell, te::Price{100}), te::Qty{0});
 }
 
-// A usable price shape needs both sides of the market and a strictly positive spread.
-// These tests deliberately come before the declaration and implementation of
-// hasUsableBidAsk(): compilation is the red stage of the contract.
-TEST(OrderBook, EmptyBookHasNoUsableBidAsk) {
+// Market shape describes visible prices only. Feed trust and permission to trade are separate.
+TEST(OrderBook, EmptyBookReportsEmptyMarketShape) {
     const te::OrderBook book;
 
-    EXPECT_FALSE(book.hasUsableBidAsk());
+    EXPECT_EQ(book.marketShape(), te::MarketShape::empty);
 }
 
-TEST(OrderBook, OneSidedBookHasNoUsableBidAsk) {
+TEST(OrderBook, OneSidedBooksReportOneSidedMarketShape) {
     te::OrderBook bidOnly;
     ASSERT_TRUE(bidOnly.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
-    EXPECT_FALSE(bidOnly.hasUsableBidAsk());
+    EXPECT_EQ(bidOnly.marketShape(), te::MarketShape::one_sided);
 
     te::OrderBook askOnly;
     ASSERT_TRUE(askOnly.apply(makeEvent(te::EventKind::add, 2, 101, 5, te::Side::sell)).hasValue());
-    EXPECT_FALSE(askOnly.hasUsableBidAsk());
+    EXPECT_EQ(askOnly.marketShape(), te::MarketShape::one_sided);
 }
 
-TEST(OrderBook, StrictlySeparatedBidAndAskHaveUsableBidAsk) {
+TEST(OrderBook, StrictlySeparatedBidAndAskReportOpenMarketShape) {
     te::OrderBook book;
     ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
     ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 2, 101, 5, te::Side::sell)).hasValue());
 
-    EXPECT_TRUE(book.hasUsableBidAsk());
+    EXPECT_EQ(book.marketShape(), te::MarketShape::open);
 }
 
-TEST(OrderBook, LockedBookHasNoUsableBidAsk) {
+TEST(OrderBook, EqualBestPricesReportLockedMarketShape) {
     te::OrderBook book;
     ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
     ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 2, 100, 5, te::Side::sell)).hasValue());
 
-    EXPECT_FALSE(book.hasUsableBidAsk());
+    EXPECT_EQ(book.marketShape(), te::MarketShape::locked);
 }
 
-TEST(OrderBook, CrossedBookHasNoUsableBidAsk) {
+TEST(OrderBook, BestBidAboveBestAskReportsCrossedMarketShape) {
     te::OrderBook book;
     ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 1, 101, 5, te::Side::buy)).hasValue());
     ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 2, 100, 5, te::Side::sell)).hasValue());
 
-    EXPECT_FALSE(book.hasUsableBidAsk());
+    EXPECT_EQ(book.marketShape(), te::MarketShape::crossed);
 }
 
 TEST(OrderBook, AddCreatesLevelAndUpdatesObservableState) {

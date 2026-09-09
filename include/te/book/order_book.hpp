@@ -29,6 +29,15 @@ enum class ApplyError {
     allocation_failure,
 };
 
+// Observable top-of-book shape. This reports market state, not whether the feed is trustworthy.
+enum class MarketShape {
+    empty,
+    one_sided,
+    locked,
+    crossed,
+    open,
+};
+
 // Non-owning index entry. The PriceLevel owns the order node; this stores its stable list handle.
 struct OrderLocator {
     Side side;
@@ -65,8 +74,8 @@ public:
 
     std::size_t levelCount() const { return bids_.size() + asks_.size(); }
 
-    // True only when both sides exist and the best bid is strictly below the best ask.
-    bool hasUsableBidAsk() const;
+    // Classifies the visible best prices without deciding whether trading is permitted.
+    MarketShape marketShape() const;
 
     /**
      * @brief  Order-independent fingerprint of the book's resting state.

@@ -1,7 +1,7 @@
 # Trading Engine Project Plan v4
 
 **Owner:** Fuaad Bashi  
-**Revised:** 2026-08-28  
+**Revised:** 2026-09-09
 **Primary career target:** Quant developer, with credible C++ market-data and performance-engineering evidence  
 **Status:** Current source of truth
 
@@ -42,9 +42,10 @@ The target interview story is:
 
 ## 2. Current verified baseline
 
-The status below reflects the repository on **2026-08-28**. A clean build passes **273 CTest cases**
-plus 8 Python tests. Six C++ tests skip when private capture data is absent -- see the fixture gap
-below, which is why a green run on a fresh checkout does not yet mean much.
+The status below reflects the working tree on **2026-09-09** at `HEAD 22bc074` plus the documented
+uncommitted trust/shape/causality changes. The full configured build passes **303 of 303 CTest
+cases**. The mandatory joined fixture is committed; larger private-corpus tests remain additional
+evidence rather than the only correctness gate.
 
 `docs/handoff/status.md` is the short companion to this table and is refreshed more often.
 
@@ -62,6 +63,8 @@ below, which is why a green run on a fresh checkout does not yet mean much.
 | Snapshot parsing | Bitstamp `group=2` L3 snapshot parser | Synthetic and real-snapshot tests |
 | Event filtering | Bitstamp zero-price lifecycle classifier | Reason-counted classifier tests |
 | Reference book | `PriceLevel`, move-only `OrderBook`, add/modify/remove, locators and invariants | Focused book tests |
+| Book trust | `BookHealth` state machine and reason-coded synchronization failures | Focused transition tests |
+| Market shape | `OrderBook::marketShape()` distinguishes empty, one-sided, locked, crossed and open | Focused shape tests |
 | Bootstrap | Seed a fresh `OrderBook` from a parsed venue snapshot | Bootstrap tests |
 | Venue checkpoint | Replay order events from one snapshot to a later independent snapshot | Real golden replay test |
 | Fill correction | `TradeEvent`, trade decoder, `TradeReconciler` fill ledger keyed by `(orderId, venueTimestamp)` | Partial/full fill lifecycle tests; ADR 0013 |
@@ -74,17 +77,15 @@ below, which is why a green run on a fresh checkout does not yet mean much.
 
 | Gap | Why it matters |
 |---|---|
-| **Hermetic end-to-end golden fixture** | **The blocker.** A fresh checkout reports every test green while silently skipping every real-corpus test, including the correctness gate. Closing this is what makes all later Stage 3 evidence worth anything. |
 | Correction path unreached on real data | 637 of 637 fills against a resting order were already reported by `live_orders`, so `TradeReconciler` has never fired on a real capture. Insurance, not a validated path -- ADR 0013. |
 | Three unexplained golden-replay orders | Previously assumed to be silent full fills. That explanation is now unlikely; they remain unexplained and cannot be diagnosed from an order-only historical capture. |
-| Book health states | `unseeded -> warming -> valid -> stale_or_gapped -> resyncing -> valid` does not exist. No strategy gating. |
+| Book-health integration | `BookHealth` exists, but no engine yet owns its transitions or combines trust with market shape and operational state. |
 | Replay-side gap/reseed policy | The *capture* side now refuses a seed that predates its stream. What replay should do on meeting a gap is still undecided (ADR 0013, deliberately deferred). |
 | Multi-segment capture loading | `loadJoinedCapture` reads only the first segment, so a capture that reconnected is partly unreachable from C++. |
 | Nothing replays *from* a v3 tape | `writeEventTape` converts a joined capture into a segment (L1: merge order baked in, classification/book/reconciliation still run on read) — built 2026-09-02. `EventSegmentReader` decodes records but nothing feeds them into an `OrderBook`. Blocked on proving tape/raw replay equivalence: `Replay` warms a stateful classifier on pre-seed orders that a tape does not carry. See `docs/specs/v3-segment-format.md`, "Known gap: classifier warm-up". v3 is a derived accelerator over the raw capture, not the archive — ADR 0011, decided 2026-09-01. |
-| Timestamp type contract | Receipt timestamp naming and nanosecond storage disagree; venue/local clock subtraction is not network latency. |
-| Two invariant modes | Structural invariants and stable decision-ready book checks must not be treated as identical. |
 | Same-venue L2/checkpoint suite | Replay compares one final checkpoint; captures carry a checkpoint per segment. |
-| Replay, strategy, ledger, risk and venue interfaces | Slice 3 and later production components are still placeholders. |
+| Event-loop causality | ADR 0014 records settled authority/order rules but remains proposed until latency, fill, accounting and degraded-state ordering are decided. |
+| Replay, strategy, ledger, risk and venue interfaces | Stage 5 engine modules remain placeholders; do not implement them ahead of ADR 0014. |
 
 ### Closed since this table was written
 
@@ -96,6 +97,10 @@ below, which is why a green run on a fresh checkout does not yet mean much.
 | `id` and `id_str` agreement | `DecoderError::id_mismatch`, ADR 0005 satisfied |
 | Every input accounted for | `beforeSeed + read + afterCutoff == input size`, asserted on the real capture |
 | Deterministic digests | `OrderBook::digest()` and `ReplayStats::appliedEventDigest`; ten-run identical test |
+| Mandatory hermetic fixture | `tests/fixtures/joined-capture-golden/` exercises the real loader and replay path on every checkout |
+| Timestamp type contract | Receipt time is named/stored as nanoseconds and CI guards direct clock use |
+| Two invariant modes | Debug structural checks are separate from reason-coded safe-checkpoint market shape |
+| Decode merge | `segment_loader.cpp` uses `decodeCapturedOrder`; the obsolete separate fill decode path is removed |
 
 ## 3. Role alignment
 
@@ -428,6 +433,23 @@ Begin single-threaded. Concurrency is not allowed to complicate correctness.
 - periodic state digests for locating divergence;
 - run manifest for every replay.
 
+### Stage 5 scope boundary
+
+Stage 5 implements a real but intentionally small execution path. `NoopStrategy` proves observation
+and conservation, while a separate scripted strategy must emit at least one `OrderIntent` through a
+hand-calculated accept, fill, fee and PnL scenario. Therefore order intention, admission, simulated
+venue and accounting are load-bearing even though the no-op test does not exercise them.
+
+The Stage 5 admission/risk policy must have genuine tested behaviour—initially maximum order
+quantity/notional and maximum resulting absolute position. It must not be a `return true` stub.
+Order-rate limits, drawdown limits, live pause/resume, production kill-switch wiring, heartbeat
+recovery and durable operational auditing remain Stage 9 implementation work.
+
+Book trust, market shape and operational state are independent inputs. They flow into one
+engine-owned decision gate; they never mutate one another. Strategies observe every successfully
+processed event but return intentions only when the engine requests a decision, and never receive
+direct venue authority. See proposed ADR 0014.
+
 ### Causality questions that must be answered
 
 1. When does an input event become visible?
@@ -442,7 +464,10 @@ Begin single-threaded. Concurrency is not allowed to complicate correctness.
 ### Gate
 
 - no-op strategy conserves event counts, cash, position and PnL;
-- a hand-calculated order/fill/fee/PnL scenario matches exactly;
+- a scripted intention passes real admission and produces an exact hand-calculated
+  order/fill/fee/PnL result;
+- at least one intention is rejected by a real admission rule without changing venue or portfolio
+  state;
 - ten identical runs produce identical event, book, order, cash, position and PnL hashes.
 
 ## 16. Stage 6 - queue model, labels and transparent baselines
@@ -583,6 +608,9 @@ why each optimization exists. A speedup without semantic equivalence is a failed
 State transitions are explicit and idempotent. A client order ID prevents accidental duplicate
 submission.
 
+In replay, operational transitions are scripted deterministic inputs, never ambient wall-clock or
+unscripted operator actions. In live mode, operator actions become reasoned external control events.
+
 ### Risk controls
 
 - maximum order quantity and notional;
@@ -714,20 +742,18 @@ At the end of each stage, Fuaad should be able to explain without the editor:
 
 ## 24. Immediate next actions
 
-Do these in order:
+The detailed current sequence and exit gates live only in `TODO.md`. In short:
 
-1. Make Plan v4 and README status truthful; mark older plans historical.
-2. Fix timestamp-unit semantics and `id`/`id_str` consistency before freezing a new schema.
-3. Specify the joined order/trade capture record and one shared `captureOrdinal`.
-4. Capture and validate one short joined snapshot/order/trade/checkpoint session.
-5. Write the event-causality/merge ADR, including exact tie, late-event and health rules.
-6. Write synthetic merge-controller tests before the controller implementation.
-7. Implement the deterministic controller around existing decoder, classifier, reconciler and book.
-8. Replace the manual checkpoint adjustments with joined reconciliation evidence.
-9. Create a mandatory small golden fixture and a separate full-corpus validation command.
-10. Implement ADR 0011 v3 only after the joined schema and timestamp fields are stable.
+1. Finish and accept ADR 0014 through concrete latency, fill, accounting, timestamp and degraded-
+   state scenarios.
+2. Implement exact-integer portfolio/accounting tests and behaviour.
+3. Define order intentions and reason-coded decision/admission contracts.
+4. Implement the minimal simulated venue, genuine Stage 5 risk checks and strategy interface.
+5. Wire the single-thread deterministic engine and pass conservation, hand-calculated and repeated-
+   hash gates.
+6. Ship the replay executable and refresh implementation-status documentation.
 
-Do not start `Strategy`, SPSC, optimization or dashboard work before actions 1 through 9 close.
+Do not start SPSC optimization or dashboard work before the deterministic Stage 5 gates close.
 
 ## 25. Final definition of done
 
