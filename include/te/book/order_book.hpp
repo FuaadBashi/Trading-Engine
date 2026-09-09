@@ -25,6 +25,8 @@ enum class ApplyError {
     side_mismatch,
     level_quantity_overflow,
     invalid_side,
+    invalid_event_kind,
+    allocation_failure,
 };
 
 // Non-owning index entry. The PriceLevel owns the order node; this stores its stable list handle.
@@ -84,6 +86,10 @@ public:
     std::uint64_t digest() const;
 
 private:
+    Result<ApplyOutcome, ApplyError> applyAdd(const OrderEvent& orderEvent);
+    Result<ApplyOutcome, ApplyError> applyModify(const OrderEvent& orderEvent);
+    Result<ApplyOutcome, ApplyError> applyRemove(const OrderEvent& orderEvent);
+
     std::map<Price, PriceLevel> bids_{};
     std::map<Price, PriceLevel> asks_{};
     std::unordered_map<OrderId, OrderLocator, OrderIdHash> orderIndex_{};

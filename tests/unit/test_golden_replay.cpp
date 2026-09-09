@@ -70,7 +70,10 @@ te::OrderBook replayFromSeedTo(const te::bitstamp::BookSnapshot& seed, const std
         if (classifier.classify(event) != te::bitstamp::EventDisposition::apply_to_book) {
             continue;  // zero_price_lifecycle
         }
-        book.apply(event);
+        // This superseded order-only fixture contains known startup-boundary unknown IDs. Preserve
+        // its historical tolerant replay policy; joined-capture tests are the strict correctness
+        // gate. Naming the discarded result makes that choice explicit under [[nodiscard]].
+        [[maybe_unused]] const auto applied = book.apply(event);
     }
     return book;
 }

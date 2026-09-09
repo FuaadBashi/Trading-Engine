@@ -129,6 +129,27 @@ TEST(OrderBook, AddRejectsInvalidPriceAndQuantity) {
     EXPECT_FALSE(book.bestBid().has_value());
 }
 
+TEST(OrderBook, RejectsInvalidSideWithoutChangingBook) {
+    te::OrderBook book;
+    const auto invalidSide = static_cast<te::Side>(255);
+
+    const auto result =
+        book.apply(makeEvent(te::EventKind::add, 1, 100, 5, invalidSide));
+
+    expectError(result, te::ApplyError::invalid_side);
+    EXPECT_EQ(book.levelCount(), 0U);
+}
+
+TEST(OrderBook, RejectsInvalidEventKindWithoutChangingBook) {
+    te::OrderBook book;
+    const auto invalidKind = static_cast<te::EventKind>(255);
+
+    const auto result = book.apply(makeEvent(invalidKind, 1, 100, 5));
+
+    expectError(result, te::ApplyError::invalid_event_kind);
+    EXPECT_EQ(book.levelCount(), 0U);
+}
+
 TEST(OrderBook, SamePriceModifyReplacesQuantityWithoutChangingLevels) {
     te::OrderBook book;
     ASSERT_TRUE(book.apply(makeEvent(te::EventKind::add, 1, 100, 5)).hasValue());
@@ -357,8 +378,10 @@ TEST(OrderBook, SurvivesTheDoubleMoveAReplayPerforms) {
     EXPECT_EQ(third.qtyAt(te::Side::buy, te::Price{100}), te::Qty{6});
     EXPECT_EQ(third.digest(), [] {
         te::OrderBook direct;
-        direct.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy));
-        direct.apply(makeEvent(te::EventKind::add, 2, 100, 1, te::Side::buy));
+        EXPECT_TRUE(
+            direct.apply(makeEvent(te::EventKind::add, 1, 100, 5, te::Side::buy)).hasValue());
+        EXPECT_TRUE(
+            direct.apply(makeEvent(te::EventKind::add, 2, 100, 1, te::Side::buy)).hasValue());
         return direct.digest();
     }()) << "a moved book must hash identically to one built in place";
 }

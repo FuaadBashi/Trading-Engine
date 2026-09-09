@@ -1,142 +1,174 @@
 #include <cassert>
 #include <te/book/order_book.hpp>
+#include <new>
 
 namespace te {
 
 Result<ApplyOutcome, ApplyError> OrderBook::apply(const OrderEvent& orderEvent) {
-    ApplyOutcome applyOutcome;
+    if (orderEvent.side != Side::buy && orderEvent.side != Side::sell) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::invalid_side);
+    }
+
     // Reject ID-state contradictions before selecting a side or touching a price level.
     if (orderIndex_.contains(orderEvent.order_id)) {
         if (orderEvent.kind == EventKind::add) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::duplicate_order_id);
+            return Result<ApplyOutcome, ApplyError>::failure(ApplyError::duplicate_order_id);
         }
     } else {
         if (orderEvent.kind == EventKind::modify || orderEvent.kind == EventKind::remove) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::unknown_order_id);
+            return Result<ApplyOutcome, ApplyError>::failure(ApplyError::unknown_order_id);
         }
     }
 
-    if (orderEvent.kind == EventKind::add) {
-        if (orderEvent.side != Side::buy &&
-            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
-                                                            ApplyError::invalid_side);
+    const auto result = [&]() -> Result<ApplyOutcome, ApplyError> {
+        switch (orderEvent.kind) {
+            case EventKind::add:
+                return applyAdd(orderEvent);
+
+            case EventKind::modify:
+                return applyModify(orderEvent);
+
+            case EventKind::remove:
+                return applyRemove(orderEvent);
+        }
+
+        return Result<ApplyOutcome, ApplyError>::failure(
+            ApplyError::invalid_event_kind);
+    }();
+
+#ifndef NDEBUG
+    if (result.hasValue()) {
+        validateStructure();
+    }
+#endif
+
+    return result;
 }
-        auto& levels = (orderEvent.side == Side::buy) ? bids_ : asks_;
-        if (orderEvent.quantity.units <= 0) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::invalid_quantity);
-        }
 
-        if (orderEvent.price.ticks <= 0) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::invalid_price);
-        }
-              
-        auto [levelIt, createdLevel] = levels.try_emplace(orderEvent.price);
-        std::optional<OrderHandle> orderHandle =
-            levelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
-        if (!orderHandle.has_value()) {
-            // Roll back a level created solely for this failed insertion.
-            if (createdLevel) {
-                levels.erase(levelIt);
-            }
-            return Result<ApplyOutcome, ApplyError>::failure(
-                te::ApplyError::level_quantity_overflow);
-        }
-        OrderLocator orderLocator = {orderEvent.side, orderEvent.price, *orderHandle
-
-        };
-        applyOutcome.createdLevel = createdLevel;
-        orderIndex_.emplace(orderEvent.order_id, orderLocator);
-        return Result<ApplyOutcome, ApplyError>::success(applyOutcome);
+Result<ApplyOutcome, ApplyError> OrderBook::applyAdd(const OrderEvent& orderEvent) {
+    if (orderEvent.quantity.units <= 0) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::invalid_quantity);
+    }
+    if (orderEvent.price.ticks <= 0) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::invalid_price);
     }
 
-    if (orderEvent.kind == EventKind::modify) {
-        if (orderEvent.quantity.units <= 0) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::invalid_quantity);
-        }
-        if (orderEvent.price.ticks <= 0) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::invalid_price);
-        }
-        auto orderIt = orderIndex_.find(orderEvent.order_id);
-        assert(orderIt != orderIndex_.end());
-        OrderLocator& locator = orderIt->second;
-        if (orderEvent.side != locator.side) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::side_mismatch);
-        }
-        OrderHandle orderHandle = locator.order_pos;
-         if (orderEvent.side != Side::buy &&
-            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
-                                                            ApplyError::invalid_side);
-        auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
-        auto oldLevelIt = levels.find(locator.price);
-        if (oldLevelIt == levels.end()) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::unknown_order_id);
-        }
-
-        if (orderEvent.price == locator.price) {
-            // A quantity-only change keeps the existing list node and therefore its position.
-            bool quantityChanged = oldLevelIt->second.changeQty(orderHandle, orderEvent.quantity);
-            if (!quantityChanged) {
-                return Result<ApplyOutcome, ApplyError>::failure(
-                    te::ApplyError::level_quantity_overflow);
-            }
-            return Result<ApplyOutcome, ApplyError>::success(applyOutcome);
-        } else {
-            // Insert at the destination first. If it overflows, the original order is untouched.
-            auto [targetLevelIt, createdLevel] = levels.try_emplace(orderEvent.price);
-            std::optional<OrderHandle> newOrderHandle =
-                targetLevelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
-            if (!newOrderHandle.has_value()) {
-                if (createdLevel) {
-                    levels.erase(targetLevelIt);
-                }
-                return Result<ApplyOutcome, ApplyError>::failure(
-                    te::ApplyError::level_quantity_overflow);
-            }
-
-            oldLevelIt->second.removeOrder(locator.order_pos);
-            if (oldLevelIt->second.isEmpty()) {
-                levels.erase(oldLevelIt);
-                applyOutcome.removedLevel = true;
-            }
-
-            locator.price = orderEvent.price;
-            locator.order_pos = *newOrderHandle;
-            applyOutcome.createdLevel = createdLevel;
-
-            return Result<ApplyOutcome, ApplyError>::success(applyOutcome);
-        }
-    }
-
-    if (orderEvent.kind == EventKind::remove) {
-        auto orderIt = orderIndex_.find(orderEvent.order_id);
-        assert(orderIt != orderIndex_.end());
-        OrderLocator& locator = orderIt->second;
-        if (orderEvent.side != locator.side) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::side_mismatch);
-        }
-
-        // The stored locator is authoritative; a delete message's price and quantity are not.
-        if (orderEvent.side != Side::buy &&
-            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
-                                                            ApplyError::invalid_side);
-        auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
-        auto levelIt = levels.find(locator.price);
-        if (levelIt == levels.end()) {
-            return Result<ApplyOutcome, ApplyError>::failure(te::ApplyError::unknown_order_id);
-        }
-
-        levelIt->second.removeOrder(locator.order_pos);
-
-        if (levelIt->second.isEmpty()) {
+    auto& levels = (orderEvent.side == Side::buy) ? bids_ : asks_;
+    auto [levelIt, createdLevel] = levels.try_emplace(orderEvent.price);
+    const std::optional<OrderHandle> orderHandle =
+        levelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
+    if (!orderHandle.has_value()) {
+        // Roll back a level created solely for this failed insertion.
+        if (createdLevel) {
             levels.erase(levelIt);
-            applyOutcome.removedLevel = true;
         }
-
-        orderIndex_.erase(orderIt);
-        return Result<ApplyOutcome, ApplyError>::success(applyOutcome);
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::level_quantity_overflow);
     }
 
-    return Result<ApplyOutcome, ApplyError>::failure(ApplyError::side_mismatch);
+    const OrderLocator orderLocator{
+        .side = orderEvent.side,
+        .price = orderEvent.price,
+        .order_pos = *orderHandle,
+    };
+    try {
+    orderIndex_.emplace(orderEvent.order_id, orderLocator);
+    } catch (const std::bad_alloc&) {
+        levelIt->second.removeOrder(*orderHandle);
+
+        if (createdLevel) {
+            levels.erase(levelIt);
+        }
+
+        return Result<ApplyOutcome, ApplyError>::failure(
+            ApplyError::allocation_failure);
+    }
+
+    return Result<ApplyOutcome, ApplyError>::success(
+        ApplyOutcome{.createdLevel = createdLevel});
+        orderIndex_.emplace(orderEvent.order_id, orderLocator);
+  
+}
+
+Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderEvent) {
+    if (orderEvent.quantity.units <= 0) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::invalid_quantity);
+    }
+    if (orderEvent.price.ticks <= 0) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::invalid_price);
+    }
+
+    auto orderIt = orderIndex_.find(orderEvent.order_id);
+    assert(orderIt != orderIndex_.end());
+    OrderLocator& locator = orderIt->second;
+    if (orderEvent.side != locator.side) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::side_mismatch);
+    }
+
+    auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
+    auto oldLevelIt = levels.find(locator.price);
+    if (oldLevelIt == levels.end()) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::unknown_order_id);
+    }
+
+    if (orderEvent.price == locator.price) {
+        // A quantity-only change keeps the existing list node and therefore its position.
+        const bool quantityChanged =
+            oldLevelIt->second.changeQty(locator.order_pos, orderEvent.quantity);
+        if (!quantityChanged) {
+            return Result<ApplyOutcome, ApplyError>::failure(
+                ApplyError::level_quantity_overflow);
+        }
+        return Result<ApplyOutcome, ApplyError>::success(ApplyOutcome{});
+    }
+
+    // Insert at the destination first. If it overflows, the original order is untouched.
+    auto [targetLevelIt, createdLevel] = levels.try_emplace(orderEvent.price);
+    const std::optional<OrderHandle> newOrderHandle =
+        targetLevelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
+    if (!newOrderHandle.has_value()) {
+        if (createdLevel) {
+            levels.erase(targetLevelIt);
+        }
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::level_quantity_overflow);
+    }
+
+    ApplyOutcome outcome{.createdLevel = createdLevel};
+    oldLevelIt->second.removeOrder(locator.order_pos);
+    if (oldLevelIt->second.isEmpty()) {
+        levels.erase(oldLevelIt);
+        outcome.removedLevel = true;
+    }
+
+    locator.price = orderEvent.price;
+    locator.order_pos = *newOrderHandle;
+    return Result<ApplyOutcome, ApplyError>::success(outcome);
+}
+
+Result<ApplyOutcome, ApplyError> OrderBook::applyRemove(const OrderEvent& orderEvent) {
+    auto orderIt = orderIndex_.find(orderEvent.order_id);
+    assert(orderIt != orderIndex_.end());
+    const OrderLocator& locator = orderIt->second;
+    if (orderEvent.side != locator.side) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::side_mismatch);
+    }
+
+    // The stored locator is authoritative; a delete message's price and quantity are not.
+    auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
+    auto levelIt = levels.find(locator.price);
+    if (levelIt == levels.end()) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::unknown_order_id);
+    }
+
+    levelIt->second.removeOrder(locator.order_pos);
+
+    ApplyOutcome outcome{};
+    if (levelIt->second.isEmpty()) {
+        levels.erase(levelIt);
+        outcome.removedLevel = true;
+    }
+
+    orderIndex_.erase(orderIt);
+    return Result<ApplyOutcome, ApplyError>::success(outcome);
 }
 std::optional<Price> OrderBook::bestBid() const {
     if (bids_.empty()) {
@@ -164,57 +196,46 @@ Qty OrderBook::qtyAt(Side side, Price price) const {
 void OrderBook::validateStructure() const {
     // Every index entry names an existing level and points to the order with its key's ID.
     for (const auto& [orderId, locator] : orderIndex_) {
-         if (orderEvent.side != Side::buy &&
-            orderEvent.side != Side::sell) {return Result<ApplyOutcome, ApplyError>::failure(
-                                                            ApplyError::invalid_side);
         [[maybe_unused]] const auto& levels = (locator.side == Side::buy) ? bids_ : asks_;
         assert(levels.find(locator.price) != levels.end());
         assert(locator.order_pos->id == orderId);
-        const OrderLocator& locator = indexIt->second;
-
-        assert(locator.side == expectedSide);
-        assert(locator.price == price);
-        assert(locator.order_pos == orderIt);
     }
 
-    // Every level is non-empty, every resting order is indexed, and its cached total is exact.
-    for (const auto& [price, level] : bids_) {
-        assert(!level.isEmpty());
+    // Every order points back to this exact side, price, and list node, and totals are exact.
+    const auto validateLevels = [this]([[maybe_unused]] Side expectedSide,
+                                       const auto& levels) {
+        for (const auto& [price, level] : levels) {
+            assert(!level.isEmpty());
 
-        Qty currentQty{0};
-        for (const auto& order : level) {
-            assert(orderIndex_.contains(order.id));
-            currentQty.units += order.qty.units;
+            Qty currentQty{0};
+            for (auto orderIt = level.begin(); orderIt != level.end(); ++orderIt) {
+                const auto indexIt = orderIndex_.find(orderIt->id);
+                assert(indexIt != orderIndex_.end());
+
+                [[maybe_unused]] const OrderLocator& locator = indexIt->second;
+                assert(locator.side == expectedSide);
+                assert(locator.price == price);
+                assert(locator.order_pos == orderIt);
+
+                currentQty.units += orderIt->qty.units;
+            }
+            assert(level.totalQuantity() == currentQty);
         }
-        assert(level.totalQuantity() == currentQty);
-    }
-    for (const auto& [price, level] : asks_) {
-        assert(!level.isEmpty());
-        Qty currentQty{0};
-        for (const auto& order : level) {
-            assert(orderIndex_.contains(order.id));
-            currentQty.units += order.qty.units;
-        }
-        assert(level.totalQuantity() == currentQty);
-    }
+    };
+
+    validateLevels(Side::buy, bids_);
+    validateLevels(Side::sell, asks_);
 }
 
-// returns true only when:{
-// - a best bid exists;
-// - a best ask exists;
-// - the bid is strictly below the ask.}
-// It returns false when:{
-// - the book is empty;
-// - only buyers or only sellers exist;
-// - bid equals ask, called a locked book;
-// - bid is above ask, called a crossed book.}
-
 bool OrderBook::hasUsableBidAsk() const {
-    if (!bestBid().has_value() || !bestAsk().has_value()) {
+    const std::optional<Price> bid = bestBid();
+    const std::optional<Price> ask = bestAsk();
+
+    if (!bid.has_value() || !ask.has_value()) {
         return false;
     }
 
-    return bestBid() < bestAsk();
+    return *bid < *ask;
 }
 std::uint64_t OrderBook::digest() const {
     // FNV-1a. std::map iterates in ascending price order, so the walk is already canonical and
