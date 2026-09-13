@@ -29,9 +29,20 @@ to become:
 
 ## Sources of truth, in order
 
-1. `docs/project-plan-v4.md` — current scope, stage ordering, exit gates.
-2. `docs/handoff/status.md` — what is actually true right now; refreshed most often.
-3. `docs/decisions/` — ADRs 0001–0013. Read the relevant one before changing a contract it covers.
+Fast path — read these three before anything else in a new session:
+
+1. `docs/handoff/status.md` — what is actually true right now; refreshed most often. Written
+   explicitly to start a fresh session from.
+2. `TODO.md` — the single active task list and its exact done-when criteria. If a fact about current
+   progress lives here, it must not also be re-derived elsewhere; other docs point at this file
+   instead of restating it.
+3. `CONTEXT.md` — the domain glossary. Check it before using a term like "book trust" or "market
+   shape" that another doc warns against confusing.
+
+Deeper background, read only the relevant part as needed:
+
+4. `docs/project-plan-v4.md` — long-range scope, stage ordering, exit gates.
+5. `docs/decisions/` — ADRs 0001–0014. Read the relevant one before changing a contract it covers.
 
 Older plans (`project-plan-v2.md`, `coding-plan-v3.md`, `slice-1-plan.md`) are historical.
 

@@ -85,33 +85,14 @@ Do not overwrite or discard these changes.
 Do not implement Strategy, Portfolio, DecisionGate, RiskGate, ExecutionVenue or the engine loop until
 the causality ADR is accepted.
 
-Already settled:
+**What's settled and what's still open lives in `TODO.md` item 1 — read it there.** It used to be
+copied here too; two paraphrases of a list that changes every time a sub-question resolves is exactly
+the kind of drift this file exists to prevent, so this is the one copy now. Proposed
+[ADR 0014](../decisions/0014-event-loop-causality-and-decision-authority.md) has the full reasoning
+behind each settled point.
 
-1. Apply and reconcile a successful market event before strategy observation.
-2. Deliver every successfully processed event to observation, even when decisions are blocked.
-3. Observation carries no execution authority; strategies eventually return `OrderIntent` values.
-4. Book trust, market shape and operational state are independent inputs flowing one way into an
-   engine-owned decision gate. They do not mutate one another.
-5. Evaluate shape only at a safe checkpoint after all work for one logical input is complete.
-6. A strategy-side condition is advisory only; centralized admission and a final venue check enforce
-   rejection with named reasons.
-7. Debug uses full post-mutation structural sweeps. Release hot paths need cheap local checks; a
-   structural failure is fatal `internal_invariant_violation`, not a recoverable market-health issue.
-8. Replay operational transitions are scripted deterministic inputs, never ambient wall time.
-
-Still open, and best handled one concrete scenario at a time:
-
-1. Minimal Stage 5 replay operational states and transitions.
-2. When an accepted intent enters the simulated outbound-latency queue.
-3. First-fill eligibility at arrival time versus only on later market activity.
-4. Ordering of exchange, receipt, simulation, control and equal timestamps.
-5. Exact acknowledgement/fill/fee/cash/position/average-price/PnL sequence.
-6. Observation and decision behaviour during every BookHealth state and transport failure.
-7. Stable decision-block, admission-rejection and fatal-run reason enums.
-8. Evidence-based escalation from crossed safe checkpoints to lost trust.
-
-The next teaching question should continue with **minimal Stage 5 operational states**, not jump into
-class implementation.
+The next teaching question should continue with **minimal Stage 5 operational states** (`TODO.md`
+item 1's first open sub-question), not jump into class implementation.
 
 ## Stage 5 versus Stage 9 scope
 
