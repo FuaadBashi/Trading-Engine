@@ -13,6 +13,7 @@ bool BookHealth::startSynchronization(){
 
     if (state_ == BookHealthState::corrupted) {
         state_ = BookHealthState::synchronizing;
+        failureReason_ = FailureReason::none;
         return true;
     }
 

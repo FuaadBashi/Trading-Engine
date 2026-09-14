@@ -60,6 +60,20 @@ TEST(BookHealth, InvalidTransitionsLeaveStateUnchanged) {
     EXPECT_TRUE(health.isTrusted());
 }
 
+TEST(BookHealth, RestartingSynchronizationFromCorruptedClearsThePriorReason) {
+    te::BookHealth health;
+
+    ASSERT_TRUE(health.startSynchronization());
+    ASSERT_TRUE(health.synchronizationSucceeded());
+    ASSERT_TRUE(health.markCorrupted(te::FailureReason::event_gap));
+    ASSERT_EQ(health.getFailureReason(), te::FailureReason::event_gap);
+
+    ASSERT_TRUE(health.startSynchronization());
+    EXPECT_EQ(health.getState(), te::BookHealthState::synchronizing);
+    EXPECT_EQ(health.getFailureReason(), te::FailureReason::none)
+        << "same synchronizing state reached from unseeded already clears this; corrupted must match";
+}
+
 TEST(BookHealth, SuccessfulResynchronizationClearsPreviousFailures) {
     te::BookHealth health;
 
