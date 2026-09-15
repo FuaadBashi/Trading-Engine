@@ -1,6 +1,6 @@
 # ADR 0014: Event-loop causality and decision authority
 
-- **Status:** proposed — 5 of 8 open questions resolved (D1-D5); 3 remain
+- **Status:** accepted — all 8 open questions resolved (D1-D8), reviewed together 2026-09-15
 - **Date:** 2026-09-09, amended 2026-09-15
 - **Stage:** 5 (with explicitly deferred Stage 9 controls)
 
@@ -38,7 +38,8 @@ stream and silently drift from the engine's market history.
 Market shape is evaluated only at a declared safe checkpoint after classification, reconciliation
 and all mutations caused by one logical input are complete. An intermediate crossed state is not
 diagnosed before that checkpoint. A crossed safe checkpoint blocks decisions and is counted by
-reason; the evidence and threshold needed to classify persistent crossing as lost trust remain open.
+reason; whether persistent crossing should also escalate `BookHealth` to `corrupted` is decided by
+D8 — not yet, evidence is logged first.
 
 ### Observation is not execution authority
 
@@ -46,12 +47,14 @@ A strategy never receives a mutable `OrderBook` or direct access to `ExecutionVe
 updates strategy state. When the engine's decision gate permits it, a separate decision call returns
 `OrderIntent` values. An intent is data, not an accepted order.
 
-The engine-owned decision gate reads independent inputs; it does not mutate them:
+The engine-owned decision gate reads independent inputs; it does not mutate them. This is the full,
+eventual shape, once Stage 9 gives operational state real values (D1); at Stage 5 the gate reads only
+the first two inputs:
 
 ```text
 BookHealth trust ----\
 MarketShape ----------> DecisionGate -> decision allowed or named block reason
-Operational state ---/
+Operational state ---/  (Stage 9 only — see D1)
 ```
 
 The arrows point into the gate only. `BookHealth`, `OrderBook` and operational-state storage never
@@ -121,8 +124,8 @@ absent and explicitly deferred.
 
 ## Decisions settled after the first draft
 
-Five of the eight questions below were resolved in design sessions on 2026-09-14/15 and are recorded
-here. Three remain open; this ADR stays **proposed** until they are answered.
+All eight open questions below were resolved in design sessions on 2026-09-14/15 and are recorded
+here as D1-D8. This ADR stays **proposed** until D1-D8 are reviewed together and signed off.
 
 ### D1. Stage 5 has no operational-state type (was open question 1)
 
@@ -227,9 +230,56 @@ On a confirmed fill:
 Reasoning: acquisition costs belong in cost basis; disposal costs reduce proceeds. The atomicity
 requirement matches the failure atomicity `OrderBook` already guarantees for rejected mutations.
 
+### D6. `DecisionGate` is invoked at every checkpoint, trusted or not (was open question 6a)
+
+`DecisionGate` is called unconditionally at every safe checkpoint, including while the book is
+untrusted. An untrusted book is blocked with a named reason like any other block; the gate is never
+skipped as a fast path.
+
+Reasoning: if the engine skipped the call while untrusted, nothing else could produce the
+"N decisions blocked, reason: untrusted" count the Stage 5 evidence gate requires — the engine would
+either have to duplicate trust-checking logic itself (violating the single-owner policy this ADR
+already establishes for `DecisionGate`) or simply not count those blocks at all. Always invoking it
+keeps one place responsible for every named reason, at negligible cost (an enum comparison per
+checkpoint).
+
+The remaining half of open question 6 — behaviour during `disconnected`, `gapped` and
+`resynchronizing` specifically — stays out of scope, per D1: those states do not exist at Stage 5,
+since replay has no live connection to lose.
+
+### D7. A reason becomes a permanent contract only once a test asserts it by name (was open question 7)
+
+Decision-block, admission-rejection and fatal-failure reasons are **not** permanent the moment they
+are written. A reason becomes a stable public contract only once a committed Stage 5 test asserts it
+by name; until then it may be freely renamed or restructured.
+
+Reasoning: this is the same "don't lock in more than is currently load-bearing" rule this ADR already
+applies in D1 to reject a premature `OperationalState`. A name nothing depends on yet can be changed
+for free; a name a test checks against cannot. The trigger is deliberately checkable — a test exists
+or it does not — rather than a matter of memory or convention.
+
+Consequence: the actual reason taxonomy (naming and testing each value) is TODO item 3's job, not
+this ADR's. This ADR fixes only the rule for when a name becomes permanent.
+
+### D8. No crossed-to-corrupted threshold yet; measure first (was open question 8)
+
+No duration threshold is set for escalating a persistently crossed safe checkpoint to
+`BookHealth::corrupted`. None may be invented without evidence, and none currently exists.
+
+This does not leave crossed markets unhandled: `DecisionGate` already blocks every decision when
+`marketShape()` reports `crossed`, via D6, independent of duration. The open question is narrower —
+only when a crossed book is corrupted enough to demand resynchronization, not whether it may be
+traded.
+
+Decision: **start recording evidence now, decide the threshold later.** Every crossed safe checkpoint's
+duration is logged in the replay report (folding into the run manifest, TODO item 8). No escalation
+logic is implemented until the corpus shows how long real transient crossings actually last. This
+mirrors flap-damping in network monitoring (BGP route flapping, Kubernetes liveness-probe failure
+thresholds): the debounce window is measured, not assumed.
+
 ## Hand-worked partial timeline
 
-Incorporating D1-D5:
+Incorporating D1-D8:
 
 ```text
 T0  input market event selected by deterministic replay ordering
@@ -239,7 +289,7 @@ T3  debug structural validation
 T4  safe checkpoint: compute book trust and market shape        [D1: no operational state at Stage 5]
 T4a availability policy applied: zero / fixed(80ms) / recorded, declared per run    [D4]
 T5  strategy observes the post-event BookView regardless of decision readiness
-T6  DecisionGate either records a block reason or asks the strategy to decide
+T6  DecisionGate always runs; records a block reason (incl. while untrusted) or asks to decide  [D6]
 T7  strategy returns zero or more OrderIntent values
 T8  admission/risk policy accepts or rejects each intent by reason
 T9  accepted intent enters the outbound-latency queue           [D2: only after T6 and T8 accept]
@@ -253,19 +303,8 @@ Ordering throughout uses venue timestamps only (D4.1).
 
 ## Open decisions required before acceptance
 
-1. **Observation and decision behaviour while book trust is absent.** Observation is settled
-   (unconditional). What remains open is whether `DecisionGate` is still *invoked* during untrusted
-   states so every block carries a named reason, or skipped as a fast path. The Stage 5 evidence gate
-   requiring "every blocked decision counted by its named reason" argues for always invoking it.
-   Note that `disconnected`, `gapped` and `resynchronizing` are out of Stage 5 scope per D1.
-2. **Stable public taxonomies** for decision blocks, admission rejections and fatal engine failures.
-   The narrow option is that only reasons a Stage 5 test asserts by name become permanent contracts;
-   the broad option mirrors venue practice, where a published reject code is never removed, only
-   added to.
-3. **Evidence-based escalation from a crossed safe checkpoint to lost book trust.** No threshold may
-   be invented without evidence. The viable path is to block on `crossed` every time via market
-   shape, record the duration of each crossed checkpoint in the replay report, and set a threshold
-   once the corpus shows how long real transient crossings last.
+None. All eight plan-v4 causality questions are answered above (D1-D8), reviewed together against
+the rest of this document on 2026-09-15, and accepted.
 
 ## Consequences
 

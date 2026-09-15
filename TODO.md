@@ -10,17 +10,15 @@ No deadlines are set. The old list had none, and you have not given me any. See 
 
 ## Do these first
 
-Five jobs. The first three are quick. The last two unblock everything else.
+Six jobs from the original list are now done: capture files are protected, all eight ADR 0014
+questions are answered (D1-D8), **ADR 0014 is reviewed and accepted (15 September 2026)**, and the
+work is committed and pushed.
 
-1. Protect your capture files. Your recorded market data was wiped from the laptop this week and had to be pulled back from iCloud. It will happen again.
+One remains:
 
-2. Save this week's decisions into ADR 0014. You answered five design questions in chat. They are not written down anywhere. If you lose the chat, you lose them.
-
-3. Commit the work sitting on your laptop. Code fixes and document updates are not saved to git yet.
-
-4. Answer the last three design questions. ADR 0014 cannot be accepted until these are done. Nothing else in the engine can start.
-
-5. Make the loader check the capture file is complete. Right now a damaged or empty capture loads silently and replay runs on it. This is the biggest correctness risk.
+1. **Make the loader check the capture file is complete.** Right now a damaged or empty capture
+   loads silently and replay runs on it. This is the biggest correctness risk, and with the ADR
+   accepted it's also the last thing blocking engine work in section D.
 
 ## A. Protect what you have
 
@@ -94,9 +92,11 @@ cmake --build build -j
 
 **Done when:** cmake --build build -j works from a clean start and ctest --test-dir build passes 304 of 304.
 
-## B. Finish the design decision
+## B. Finish the design decision — DONE, ADR 0014 accepted 15 September 2026
 
-This is the gate. No engine code can be written until ADR 0014 is accepted. An "ADR" is a short document recording one design decision and why you made it.
+This was the gate. No engine code could be written until ADR 0014 was accepted; now it can, once
+section C's foundation repairs are also done. An "ADR" is a short document recording one design
+decision and why you made it. Kept here for the record of how the five sessions got there.
 
 ### Save this week's five answers into ADR 0014
 
@@ -141,19 +141,32 @@ Status today: proposed. It becomes accepted once all eight are answered.
 
 ### Answer the last three design questions
 
-- [ ] **HIGH | UPDATED | NO DEADLINE**
+- [x] **HIGH | UPDATED | NO DEADLINE** — answered 15 September 2026
 
-This was item 1 on the old list. Five of eight questions are now answered, so only three are left.
+All eight questions are now answered in ADR 0014, as D1-D8. The three answered this session:
 
-**What Is Still Open**
+1. **Does the decision gate still get asked when the data is untrusted?** Yes, always. Skipping it
+   would mean nothing else could produce the "N blocked, reason: untrusted" count your own evidence
+   rule requires. (D6)
 
-1. Does the decision gate still get asked when the data is untrusted? Either always ask it, so every block has a written reason, or skip it to save time. Your own evidence rule says every blocked decision must be counted by name, which points to always asking.
+2. **Which rejection reasons become permanent promises?** Only the ones a committed test checks by
+   name. Anything untested stays free to rename — same rule that already killed `OperationalState`.
+   Naming and testing the actual reasons is TODO item 3's job, not this ADR's. (D7)
 
-2. Which rejection reasons become permanent promises? Either only the ones a test checks by name, or everything that exists when you ship.
+3. **How long must the market look wrong before you stop trusting the book?** No number yet — none
+   may be invented without evidence, and there isn't any. Every crossed period is blocked from
+   trading regardless (via market shape), and its duration gets logged in the replay report so a
+   real threshold can be set once the corpus shows how long crossings actually last. (D8)
 
-3. How long must the market look wrong before you stop trusting the book? A "crossed" book means the best buy price is above the best sell price, which should be impossible. Your own note says do not invent a number without evidence. The way forward is to block every time it happens, record how long each one lasts, and pick a number once you have data.
+**Reviewed and accepted 15 September 2026.** Reading D1-D8 side by side against the rest of the
+document surfaced five stale spots written before D6-D8 existed — a status line still claiming "3
+remain," a `DecisionGate` diagram still showing three Stage 5 inputs instead of two, a leftover "the
+threshold remains open" line, an intro paragraph, and a timeline heading that said "D1-D5." All five
+fixed. Nothing else contradicted.
 
-**Done when:** one accepted ADR answers all eight questions, says what is deliberately left out, includes at least one hand-worked timeline, and gives a named reason for every blocked decision and rejected order.
+**Done when:** the ADR lists all eight as decided, its status line reads accepted, all eight
+questions are answered, deferred scope is stated, a hand-worked timeline exists, and every block has
+a named reason. All true as of 15 September 2026.
 
 ## C. Repair the foundation
 

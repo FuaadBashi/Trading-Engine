@@ -18,7 +18,9 @@ Plain-language progress, diagrams and worked examples: `docs/project-progress-gu
 
 PDF export: `output/pdf/trading-engine-progress-guide.pdf`
 
-Current proposed decision: `docs/decisions/0014-event-loop-causality-and-decision-authority.md`
+**ADR 0014 is accepted (15 September 2026).** All eight causality questions are answered as D1-D8:
+`docs/decisions/0014-event-loop-causality-and-decision-authority.md`. Engine implementation now
+waits only on section C's foundation repairs, not on the ADR.
 
 ## Working agreement
 
@@ -45,9 +47,10 @@ tests**. Two cautions from that run:
   loader detects this: the manifest records `payload_bytes`/`payload_sha256` and frame counts, and
   the C++ reader parses none of them. See TODO section C.
 
-The trust/shape interface changes, glossary and proposed ADR 0014 formerly listed here as
-uncommitted were committed in `6b5c0ab`. `d00e244` also clears the prior failure reason when restarting
-synchronization from a corrupted state. Neither change completes ADR acceptance or Portfolio.
+The trust/shape interface changes, glossary and ADR 0014 (proposed at the time) formerly listed here
+as uncommitted were committed in `6b5c0ab`. `d00e244` also clears the prior failure reason when
+restarting synchronization from a corrupted state. ADR 0014 is now accepted (above); Portfolio
+implementation has not started.
 
 At the start of this refresh there were no tracked source changes. Local untracked Claude
 commands/skills were present and were preserved. Inspect `git status --short` for current changes;
@@ -98,13 +101,14 @@ do not discard local work based on an old handoff inventory.
 
 ## Current sequence: follow the replacement TODO
 
-Read **Do these first** and sections A-D in `TODO.md`; do not recreate the list here. Section B
-records five conversation answers to transfer into ADR 0014 and three remaining design questions.
-That transfer is still a listed task: this import did not edit or accept the ADR. Do not restart
-the old operational-state discussion without first reading those recorded answers.
+Read **Do these first** and sections A-D in `TODO.md`; do not recreate the list here. Section B is
+now closed: all eight ADR 0014 questions are answered and recorded as D1-D8, reviewed together and
+accepted on 15 September 2026. Do not restart the operational-state discussion (D1) or any of D2-D8
+without first reading the ADR — the reasoning behind each is written there, not just the conclusion.
 
-Under the replacement checklist, engine implementation waits for ADR acceptance and completion of
-section C. The older progress guide is explanatory background, not authority over the new list.
+Engine implementation now waits only on section C's foundation repairs (capture admission, the two
+unguarded aggregations, the allocation rollback gap). The older progress guide is explanatory
+background, not authority over the new list.
 
 ## Stage 5 versus Stage 9 scope
 
@@ -112,8 +116,8 @@ Stage 5 needs real code for the path its gates exercise:
 
 - `NoopStrategy` for complete observation and conservation;
 - a scripted strategy that emits an intention;
-- a real decision gate over the inputs settled by the ADR; TODO section B records the decision to
-  defer Stage 5 operational state, pending its transfer into ADR 0014;
+- a real decision gate over book trust and market shape only — ADR 0014 D1 defers operational state
+  to Stage 9 entirely, so the gate is two inputs, not three, until then;
 - a deterministic simulated venue;
 - small genuine admission checks (maximum quantity/notional and resulting absolute position);
 - exact fill, fee and portfolio accounting;
@@ -142,7 +146,9 @@ runbooks and the external paper adapter.
   foundation" does not mean every failure path has been proved safe.
 - The guide's industry recheck adds proposed Stage 5 detail for information availability, outstanding
   exposure, partial-fill/cancel races, a fill journal, run manifests and reproducible scenario traces.
-  These remain unimplemented; ADR 0014 is still proposed and no active task is marked complete.
+  These remain unimplemented. Information availability specifically is now settled in ADR 0014 D4
+  (three named delay policies: `zero`, `fixed` at 80ms, `recorded`); the others are still proposed
+  Stage 5 upgrades, not accepted decisions or completed tasks.
 - No Strategy, Portfolio, DecisionGate, ExecutionVenue, complete risk system or engine loop exists
   yet; their headers remain placeholders.
 
