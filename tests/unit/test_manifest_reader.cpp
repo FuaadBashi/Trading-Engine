@@ -50,7 +50,16 @@ TEST(ManifestReader, ReadsOneSegmentAndBuildsCompletePaths) {
         "payload": "segment-0000.jsonl",
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
-        "checkpoint": "checkpoint-0000.snapshot"
+        "checkpoint": "checkpoint-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
       }]
     })");
 
@@ -71,6 +80,18 @@ TEST(ManifestReader, ReadsOneSegmentAndBuildsCompletePaths) {
     EXPECT_EQ(segment.seedPath, capture.path() / "segment-0000.snapshot");
     ASSERT_TRUE(segment.checkpointPath.has_value());
     EXPECT_EQ(*segment.checkpointPath, capture.path() / "checkpoint-0000.snapshot");
+
+    EXPECT_EQ(segment.declaredPayloadBytes, 100U);
+    EXPECT_EQ(segment.declaredPayloadSha256,
+              "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+    EXPECT_EQ(segment.declaredFrameIndexBytes, 50U);
+    EXPECT_EQ(segment.declaredFrameIndexSha256,
+              "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
+    EXPECT_EQ(segment.declaredFrameCount, 4U);
+    EXPECT_EQ(segment.declaredOrderEventCount, 2U);
+    EXPECT_EQ(segment.declaredTradeEventCount, 1U);
+    EXPECT_EQ(segment.declaredControlFrameCount, 1U);
+    EXPECT_TRUE(segment.declaredChainValid);
 }
 
 TEST(ManifestReader, PreservesMultipleSegmentsInChronologicalOrder) {
@@ -85,14 +106,32 @@ TEST(ManifestReader, PreservesMultipleSegmentsInChronologicalOrder) {
           "payload": "segment-0000.jsonl",
           "frame_index": "segment-0000.frames.jsonl",
           "snapshot": "segment-0000.snapshot",
-          "checkpoint": "checkpoint-0000.snapshot"
+          "checkpoint": "checkpoint-0000.snapshot",
+          "payload_bytes": 100,
+          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "frames_bytes": 50,
+          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+          "frames": 4,
+          "order_events": 2,
+          "trade_events": 1,
+          "control_frames": 1,
+          "chain_valid": true
         },
         {
           "index": 1,
           "payload": "segment-0001.jsonl",
           "frame_index": "segment-0001.frames.jsonl",
           "snapshot": "segment-0001.snapshot",
-          "checkpoint": "checkpoint-0001.snapshot"
+          "checkpoint": "checkpoint-0001.snapshot",
+          "payload_bytes": 100,
+          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "frames_bytes": 50,
+          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+          "frames": 4,
+          "order_events": 2,
+          "trade_events": 1,
+          "control_frames": 1,
+          "chain_valid": true
         }
       ]
     })");
@@ -117,7 +156,16 @@ TEST(ManifestReader, AllowsSegmentWithoutCheckpoint) {
         "index": 0,
         "payload": "segment-0000.jsonl",
         "frame_index": "segment-0000.frames.jsonl",
-        "snapshot": "segment-0000.snapshot"
+        "snapshot": "segment-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
       }]
     })");
 
@@ -164,6 +212,98 @@ TEST(ManifestReader, RejectsMissingRequiredSegmentField) {
     EXPECT_EQ(*result.errorIf(), te::ManifestError::manifest_missing_field);
 }
 
+TEST(ManifestReader, RejectsMissingDeclaredCompletenessField) {
+    const TempManifestDirectory capture{"te_manifest_reader_missing_completeness_field"};
+    writeManifest(capture, R"({
+      "format_version": 2,
+      "venue": "bitstamp",
+      "instrument": "btcusd",
+      "segments": [{
+        "index": 0,
+        "payload": "segment-0000.jsonl",
+        "frame_index": "segment-0000.frames.jsonl",
+        "snapshot": "segment-0000.snapshot",
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
+      }]
+    })");
+
+    const auto result = te::manifestReader(capture.path());
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::ManifestError::manifest_missing_field)
+        << "payload_bytes was omitted; an older manifest missing a declared field must not be "
+           "silently trusted";
+}
+
+TEST(ManifestReader, RejectsMalformedPayloadHash) {
+    const TempManifestDirectory capture{"te_manifest_reader_bad_payload_hash"};
+    writeManifest(capture, R"({
+      "format_version": 2,
+      "venue": "bitstamp",
+      "instrument": "btcusd",
+      "segments": [{
+        "index": 0,
+        "payload": "segment-0000.jsonl",
+        "frame_index": "segment-0000.frames.jsonl",
+        "snapshot": "segment-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "not-a-real-hash",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
+      }]
+    })");
+
+    const auto result = te::manifestReader(capture.path());
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::ManifestError::manifest_invalid_hash);
+}
+
+TEST(ManifestReader, RejectsPayloadHashOfWrongLength) {
+    const TempManifestDirectory capture{"te_manifest_reader_short_payload_hash"};
+    writeManifest(capture, R"({
+      "format_version": 2,
+      "venue": "bitstamp",
+      "instrument": "btcusd",
+      "segments": [{
+        "index": 0,
+        "payload": "segment-0000.jsonl",
+        "frame_index": "segment-0000.frames.jsonl",
+        "snapshot": "segment-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
+      }]
+    })");
+
+    const auto result = te::manifestReader(capture.path());
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::ManifestError::manifest_invalid_hash)
+        << "16 hex characters is not a SHA-256 digest, even though every character is valid hex";
+}
+
 TEST(ManifestReader, RejectsUnsupportedFormatVersion) {
     const TempManifestDirectory capture{"te_manifest_reader_unsupported_version"};
     writeManifest(capture, R"({
@@ -191,13 +331,31 @@ TEST(ManifestReader, RejectsNonContiguousSegmentIndexes) {
           "index": 0,
           "payload": "segment-0000.jsonl",
           "frame_index": "segment-0000.frames.jsonl",
-          "snapshot": "segment-0000.snapshot"
+          "snapshot": "segment-0000.snapshot",
+          "payload_bytes": 100,
+          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "frames_bytes": 50,
+          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+          "frames": 4,
+          "order_events": 2,
+          "trade_events": 1,
+          "control_frames": 1,
+          "chain_valid": true
         },
         {
           "index": 2,
           "payload": "segment-0002.jsonl",
           "frame_index": "segment-0002.frames.jsonl",
-          "snapshot": "segment-0002.snapshot"
+          "snapshot": "segment-0002.snapshot",
+          "payload_bytes": 100,
+          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "frames_bytes": 50,
+          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+          "frames": 4,
+          "order_events": 2,
+          "trade_events": 1,
+          "control_frames": 1,
+          "chain_valid": true
         }
       ]
     })");

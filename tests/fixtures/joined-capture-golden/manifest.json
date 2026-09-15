@@ -9,7 +9,16 @@
       "payload": "segment-0000.jsonl",
       "frame_index": "segment-0000.frames.jsonl",
       "snapshot": "segment-0000.snapshot",
-      "checkpoint": "checkpoint-0000.snapshot"
+      "checkpoint": "checkpoint-0000.snapshot",
+      "payload_bytes": 1292,
+      "payload_sha256": "3f25f566077900808b1d32b0f1fea1bfd5819c1d04bfaaf6bcc0b703a0e5a69e",
+      "frames_bytes": 895,
+      "frames_sha256": "4841853a302ce7d28a61bfaf6e864d4661c03cc2f9221a4cf97ea4319dd02c25",
+      "frames": 7,
+      "order_events": 5,
+      "trade_events": 2,
+      "control_frames": 0,
+      "chain_valid": true
     }
   ]
 }

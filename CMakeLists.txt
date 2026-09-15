@@ -62,6 +62,7 @@ target_sources(te_core PRIVATE
     src/capture/event_tape_writer.cpp
     src/capture/manifest_reader.cpp
     src/capture/segment_loader.cpp
+    src/capture/capture_validator.cpp
     src/capture/capture_coordinator.cpp
 
     # v3 portable tape format (ADR 0011). Current; not legacy.

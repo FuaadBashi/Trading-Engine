@@ -64,7 +64,16 @@ TEST(CaptureCoordinator, ReportsMatchingCheckpoint) {
         "payload": "segment-0000.jsonl",
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
-        "checkpoint": "checkpoint-0000.snapshot"
+        "checkpoint": "checkpoint-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
       }]
     })");
     writeTextFile(capture.path() / "segment-0000.snapshot",
@@ -97,7 +106,16 @@ TEST(CaptureCoordinator, ReportsWrongQuantityAsMismatch) {
         "payload": "segment-0000.jsonl",
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
-        "checkpoint": "checkpoint-0000.snapshot"
+        "checkpoint": "checkpoint-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
       }]
     })");
     writeTextFile(capture.path() / "segment-0000.snapshot",
@@ -128,7 +146,16 @@ TEST(CaptureCoordinator, ReportsUnexpectedActualLevel) {
         "payload": "segment-0000.jsonl",
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
-        "checkpoint": "checkpoint-0000.snapshot"
+        "checkpoint": "checkpoint-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
       }]
     })");
     writeTextFile(capture.path() / "segment-0000.snapshot",
@@ -157,7 +184,16 @@ TEST(CaptureCoordinator, LeavesCheckpointComparisonEmptyWhenCheckpointIsAbsent) 
         "index": 0,
         "payload": "segment-0000.jsonl",
         "frame_index": "segment-0000.frames.jsonl",
-        "snapshot": "segment-0000.snapshot"
+        "snapshot": "segment-0000.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
       }]
     })");
     writeTextFile(capture.path() / "segment-0000.snapshot",
@@ -183,13 +219,31 @@ TEST(CaptureCoordinator, ProcessesEverySegmentIndependently) {
           "index": 0,
           "payload": "segment-0000.jsonl",
           "frame_index": "segment-0000.frames.jsonl",
-          "snapshot": "segment-0000.snapshot"
+          "snapshot": "segment-0000.snapshot",
+          "payload_bytes": 100,
+          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "frames_bytes": 50,
+          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+          "frames": 4,
+          "order_events": 2,
+          "trade_events": 1,
+          "control_frames": 1,
+          "chain_valid": true
         },
         {
           "index": 1,
           "payload": "segment-0001.jsonl",
           "frame_index": "segment-0001.frames.jsonl",
-          "snapshot": "segment-0001.snapshot"
+          "snapshot": "segment-0001.snapshot",
+          "payload_bytes": 100,
+          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "frames_bytes": 50,
+          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+          "frames": 4,
+          "order_events": 2,
+          "trade_events": 1,
+          "control_frames": 1,
+          "chain_valid": true
         }
       ]
     })");
@@ -220,7 +274,16 @@ TEST(CaptureCoordinator, RejectsManifestAndSpecMismatch) {
         "index": 0,
         "payload": "missing.jsonl",
         "frame_index": "missing.frames.jsonl",
-        "snapshot": "missing.snapshot"
+        "snapshot": "missing.snapshot",
+        "payload_bytes": 100,
+        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "frames_bytes": 50,
+        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "frames": 4,
+        "order_events": 2,
+        "trade_events": 1,
+        "control_frames": 1,
+        "chain_valid": true
       }]
     })");
     te::InstrumentSpec wrongSpec = btcUsd();

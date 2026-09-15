@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 #include <vector>
 #include "te/core/instrument.hpp"
 #include "te/core/result.hpp"
@@ -17,7 +18,8 @@ enum class ManifestError {
     manifest_missing_segment,
     manifest_invalid_structure,
     mismatch_index,
-    unsupported_format_version
+    unsupported_format_version,
+    manifest_invalid_hash
 };
 
 struct SegmentDescription {
@@ -27,6 +29,17 @@ struct SegmentDescription {
     std::filesystem::path frameIndexPath;
     std::filesystem::path seedPath;
     std::optional<std::filesystem::path> checkpointPath;
+
+    
+    std::uint64_t declaredPayloadBytes{};
+    std::string declaredPayloadSha256;
+    std::uint64_t declaredFrameIndexBytes{};
+    std::string declaredFrameIndexSha256;
+    std::uint64_t declaredFrameCount{};
+    std::uint64_t declaredOrderEventCount{};
+    std::uint64_t declaredTradeEventCount{};
+    std::uint64_t declaredControlFrameCount{};
+    bool declaredChainValid{};
 };
 
 struct CaptureManifest {

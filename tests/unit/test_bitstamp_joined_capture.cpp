@@ -60,7 +60,16 @@ constexpr std::string_view kManifest = R"({
       "payload": "payload.jsonl",
       "frame_index": "frames.jsonl",
       "snapshot": "seed.snapshot",
-      "checkpoint": "checkpoint.snapshot"
+      "checkpoint": "checkpoint.snapshot",
+      "payload_bytes": 100,
+      "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "frames_bytes": 50,
+      "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "frames": 4,
+      "order_events": 2,
+      "trade_events": 1,
+      "control_frames": 1,
+      "chain_valid": true
     }
   ]
 })";
