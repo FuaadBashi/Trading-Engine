@@ -86,14 +86,10 @@ cannot exactly verify a Bitstamp book.
 Never do these in parallel. The live sequence and its exact completion gates are in
 [TODO.md](TODO.md); long-range reasoning remains in [Project Plan v4](docs/project-plan-v4.md).
 
-1. Finish and accept the event-loop causality ADR, including decision blocking, latency, fills and
-   accounting order. Current draft: [ADR 0014](docs/decisions/0014-event-loop-causality-and-decision-authority.md).
-2. Build exact-integer portfolio/accounting behaviour from hand-calculated tests.
-3. Define order intentions and reason-coded decision/admission contracts.
-4. Add the minimal `ExecutionVenue`, genuine Stage 5 risk checks and `Strategy` seams; leave advanced
-   operational controls for Stage 9.
-5. Wire those modules into a single-threaded deterministic engine only after their contracts are
-   settled independently.
+The checklist was replaced on 15 September 2026 with the supplied new to-do list, available as
+[TODO.pdf](TODO.pdf). Start with its **Do these first** section, then follow sections A-D.
+It supersedes the earlier checklist and the progress guide's suggested sequence. The guide remains
+background explanation; TODO owns current priorities, recorded design answers and open questions.
 
 Done before this list: the mandatory committed golden fixture; timestamp and ID contract fixes;
 portable v3 encoding/segment I/O; CI architecture guards; joined order/trade capture under one

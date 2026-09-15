@@ -8,6 +8,12 @@ Long-range scope and gates: `docs/project-plan-v4.md`
 
 Exact active sequence: `TODO.md`
 
+The checklist was replaced on 15 September 2026 from the user-supplied `new-todo-list.pdf`.
+`TODO.pdf` is the unchanged supplied PDF; `TODO.md` is its Markdown transcription. Its commands,
+commit tasks, questions and ADR-update task were imported as list content, not executed. This
+replacement supersedes the earlier guide's proposed sequence. Existing build evidence below is
+preserved; the checklist import did not rerun tests.
+
 Plain-language progress, diagrams and worked examples: `docs/project-progress-guide.md`
 
 PDF export: `output/pdf/trading-engine-progress-guide.pdf`
@@ -37,11 +43,11 @@ tests**. Two cautions from that run:
 - The corpus tests depend on gitignored capture data that macOS had evicted to iCloud
   (`ls -lO` showed `dataless`; reads returned empty). `brctl download` restored it. Nothing in the
   loader detects this: the manifest records `payload_bytes`/`payload_sha256` and frame counts, and
-  the C++ reader parses none of them. See TODO item 2a.
+  the C++ reader parses none of them. See TODO section C.
 
 The trust/shape interface changes, glossary and proposed ADR 0014 formerly listed here as
 uncommitted were committed in `6b5c0ab`. `d00e244` also clears the prior failure reason when restarting
-synchronization from a corrupted state. Neither change completes TODO item 1 or item 2.
+synchronization from a corrupted state. Neither change completes ADR acceptance or Portfolio.
 
 At the start of this refresh there were no tracked source changes. Local untracked Claude
 commands/skills were present and were preserved. Inspect `git status --short` for current changes;
@@ -90,19 +96,15 @@ do not discard local work based on an old handoff inventory.
 - `Decision readiness` is the future combination of book trust, market shape and operational state.
 - `CONTEXT.md` is the canonical short glossary for those distinctions.
 
-## Current task: finish proposed ADR 0014
+## Current sequence: follow the replacement TODO
 
-Do not implement Strategy, Portfolio, DecisionGate, RiskGate, ExecutionVenue or the engine loop until
-the causality ADR is accepted.
+Read **Do these first** and sections A-D in `TODO.md`; do not recreate the list here. Section B
+records five conversation answers to transfer into ADR 0014 and three remaining design questions.
+That transfer is still a listed task: this import did not edit or accept the ADR. Do not restart
+the old operational-state discussion without first reading those recorded answers.
 
-**What's settled and what's still open lives in `TODO.md` item 1 — read it there.** It used to be
-copied here too; two paraphrases of a list that changes every time a sub-question resolves is exactly
-the kind of drift this file exists to prevent, so this is the one copy now. Proposed
-[ADR 0014](../decisions/0014-event-loop-causality-and-decision-authority.md) has the full reasoning
-behind each settled point.
-
-The next teaching question should continue with **minimal Stage 5 operational states** (`TODO.md`
-item 1's first open sub-question), not jump into class implementation.
+Under the replacement checklist, engine implementation waits for ADR acceptance and completion of
+section C. The older progress guide is explanatory background, not authority over the new list.
 
 ## Stage 5 versus Stage 9 scope
 
@@ -110,7 +112,8 @@ Stage 5 needs real code for the path its gates exercise:
 
 - `NoopStrategy` for complete observation and conservation;
 - a scripted strategy that emits an intention;
-- a real decision gate over trust, shape and minimal operational state;
+- a real decision gate over the inputs settled by the ADR; TODO section B records the decision to
+  defer Stage 5 operational state, pending its transfer into ADR 0014;
 - a deterministic simulated venue;
 - small genuine admission checks (maximum quantity/notional and resulting absolute position);
 - exact fill, fee and portfolio accounting;
@@ -135,7 +138,7 @@ runbooks and the external paper adapter.
 - Full structural validation is intentionally absent from the release per-event hot path. Cheap
   always-on local checks are specified but not yet implemented as a complete production policy.
 - The review found capture-admission/validator mismatches, unchecked aggregate arithmetic and
-  incomplete allocation rollback. The required repairs are tracked in TODO item 2a; "implemented
+  incomplete allocation rollback. The required repairs are tracked in TODO section C; "implemented
   foundation" does not mean every failure path has been proved safe.
 - The guide's industry recheck adds proposed Stage 5 detail for information availability, outstanding
   exposure, partial-fill/cancel races, a fill journal, run manifests and reproducible scenario traces.

@@ -1,7 +1,7 @@
 # ADR 0014: Event-loop causality and decision authority
 
-- **Status:** proposed
-- **Date:** 2026-09-09
+- **Status:** proposed — 5 of 8 open questions resolved (D1-D5); 3 remain
+- **Date:** 2026-09-09, amended 2026-09-15
 - **Stage:** 5 (with explicitly deferred Stage 9 controls)
 
 ## Context
@@ -93,7 +93,8 @@ Load-bearing Stage 5 code:
 
 - apply-before-observe sequencing;
 - unconditional ordered observation of successfully processed events;
-- a decision gate that genuinely combines trust, shape and a minimal replay operational state;
+- a decision gate that genuinely combines book trust and market shape (per D1, operational state is
+  deferred to Stage 9 rather than stubbed);
 - `OrderIntent` values and a scripted strategy that emits at least one in the hand-calculated test;
 - a deterministic simulated venue with real accept, reject, fill and cancel transitions;
 - a small real admission/risk policy sufficient to prove both acceptance and rejection, initially
@@ -118,43 +119,119 @@ These behaviours may be named and constrained now, but Stage 5 must not contain 
 stubs or pretend they have been implemented. Either a check has real behaviour and tests, or it stays
 absent and explicitly deferred.
 
+## Decisions settled after the first draft
+
+Five of the eight questions below were resolved in design sessions on 2026-09-14/15 and are recorded
+here. Three remain open; this ADR stays **proposed** until they are answered.
+
+### D1. Stage 5 has no operational-state type (was open question 1)
+
+`OperationalState` is **deferred whole to Stage 9**. At Stage 5 the decision gate combines exactly
+two inputs: `BookHealth::isTrusted()` and `OrderBook::marketShape()`.
+
+Reasoning: Stage 5 replays a finite file. There is no operator to pause it, no kill switch to trip,
+and a file cannot disconnect. Every state this type could hold reduces to one unvarying value, so no
+test could distinguish it from absent. That is the same condition this ADR already rejects when it
+forbids `return true` risk stubs — a check that cannot fail is not a check. The rule is applied to
+itself rather than carved out.
+
+Consequence: the three-input diagram above describes the Stage 9 shape. Stage 5 implements the
+two-input form, and adding the third input later is an addition, not a redesign.
+
+### D2. An intent enters the latency queue only after both gates accept (was open question 2)
+
+The outbound-latency queue models **transmission time to the venue**, not deliberation time. An
+intent therefore enters it only after `DecisionGate` permits the decision *and* the admission/risk
+policy accepts the intent. A blocked decision or a rejected intent never occupies the queue, and
+neither consumes simulated latency.
+
+### D3. First fill eligibility begins at the simulated arrival timestamp (was open question 3)
+
+An arriving order may fill immediately against the book **as it stands at its arrival timestamp** —
+not the book the strategy saw when it decided. The stricter alternative, requiring a subsequent
+market event before any fill, was considered and rejected as more machinery than Stage 5 needs.
+
+This is a modelling choice, not a claim of venue realism. It must be stated wherever fill results are
+reported.
+
+### D4. Ordering uses venue time only, with two named tie-breaks (was open question 4)
+
+1. **Venue timestamp is the only ordering clock.** Receipt timestamps are not used for ordering.
+   Receipt time varies with local network and machine conditions, so ordering by it would make the
+   same input replay differently on different runs — the standard event-time versus processing-time
+   distinction from stream processing.
+2. **A real market event precedes a synthetic order arrival** at an equal timestamp, so an
+   engine-generated order can never be sequenced ahead of history that actually happened.
+3. **Two of the engine's own orders break ties by submission sequence number**, lowest first — a
+   monotonic per-intent counter. This mirrors the FIFO time priority `PriceLevel` already implements
+   for resting orders.
+
+**Assumption requiring explicit sign-off:** ordering by venue time alone implies a **zero
+market-data delay** model — the strategy is treated as seeing an event at its venue timestamp. That
+is a legitimate first assumption, but it is an assumption, not a latency-realism claim, and it is
+distinct from the ordering rules above. It must be declared wherever results are reported. Confirm
+before this ADR is accepted.
+
+### D5. Fill accounting order, committed atomically (was open question 5)
+
+On a confirmed fill:
+
+1. The venue confirms the fill (price, quantity).
+2. Compute the fee.
+3. **Buy:** fold execution price and fee into a new weighted-average entry price.
+   **Sell:** use the **existing** average entry price to compute realized PnL on the quantity sold;
+   the fee reduces that realized PnL. A partial sale does **not** change the average entry price of
+   the remaining position, and realizes PnL only on the quantity actually sold.
+4. Commit cash, signed position, average entry price and PnL **together**, so no observer can see a
+   partially updated portfolio.
+
+Reasoning: acquisition costs belong in cost basis; disposal costs reduce proceeds. The atomicity
+requirement matches the failure atomicity `OrderBook` already guarantees for rejected mutations.
+
 ## Hand-worked partial timeline
 
-The decisions settled so far imply this prefix:
+Incorporating D1-D5:
 
 ```text
-T0 input market event selected by deterministic replay ordering
-T1 decode and classify
-T2 apply/reconcile all mutations caused by that logical input
-T3 debug structural validation
-T4 safe checkpoint: compute trust, market shape and operational state
-T5 strategy observes the post-event BookView regardless of decision readiness
-T6 DecisionGate either records a block reason or asks the strategy to decide
-T7 strategy returns zero or more OrderIntent values
-T8 admission/risk policy accepts or rejects each intent by reason
-T9 accepted intent enters the simulated venue path
+T0  input market event selected by deterministic replay ordering
+T1  decode and classify
+T2  apply/reconcile all mutations caused by that logical input
+T3  debug structural validation
+T4  safe checkpoint: compute book trust and market shape        [D1: no operational state at Stage 5]
+T5  strategy observes the post-event BookView regardless of decision readiness
+T6  DecisionGate either records a block reason or asks the strategy to decide
+T7  strategy returns zero or more OrderIntent values
+T8  admission/risk policy accepts or rejects each intent by reason
+T9  accepted intent enters the outbound-latency queue           [D2: only after T6 and T8 accept]
+T10 arrival at the simulated venue; eligible to fill at this instant   [D3]
+      - a real market event at the same timestamp applies first        [D4.2]
+      - two own orders order by submission sequence number             [D4.3]
+T11 fill -> fee -> average price or realized PnL -> atomic commit      [D5]
 ```
 
-The timing and ordering after T9 remain open below.
+Ordering throughout uses venue timestamps only (D4.1).
 
 ## Open decisions required before acceptance
 
-1. Exact minimal Stage 5 operational states and transitions.
-2. When an accepted intent enters the outbound-latency queue.
-3. Whether first fill eligibility begins at the simulated arrival timestamp or only with later market
-   activity.
-4. Ordering among venue timestamps, receipt timestamps, simulation time, control events and equal
-   timestamps.
-5. Exact order of acknowledgement, fill, fee, cash, position, average-price and PnL mutations.
-6. Observation and decision behaviour while unseeded, synchronizing, corrupted, disconnected,
-   gapped and resynchronizing.
-7. Stable public taxonomies for decision blocks, admission rejections and fatal engine failures.
-8. Evidence-based escalation from a crossed safe checkpoint to lost book trust.
+1. **Observation and decision behaviour while book trust is absent.** Observation is settled
+   (unconditional). What remains open is whether `DecisionGate` is still *invoked* during untrusted
+   states so every block carries a named reason, or skipped as a fast path. The Stage 5 evidence gate
+   requiring "every blocked decision counted by its named reason" argues for always invoking it.
+   Note that `disconnected`, `gapped` and `resynchronizing` are out of Stage 5 scope per D1.
+2. **Stable public taxonomies** for decision blocks, admission rejections and fatal engine failures.
+   The narrow option is that only reasons a Stage 5 test asserts by name become permanent contracts;
+   the broad option mirrors venue practice, where a published reject code is never removed, only
+   added to.
+3. **Evidence-based escalation from a crossed safe checkpoint to lost book trust.** No threshold may
+   be invented without evidence. The viable path is to block on `crossed` every time via market
+   shape, record the duration of each crossed checkpoint in the replay report, and set a threshold
+   once the corpus shows how long real transient crossings last.
 
 ## Consequences
 
 - Replay and live observation share strategy semantics without giving strategies execution power.
-- Book trust, market shape and operational state remain independently observable and testable.
+- Book trust and market shape remain independently observable and testable; operational state joins
+  them as a third independent input when Stage 9 gives it values worth testing (D1).
 - One decision module owns cross-cutting permission policy, improving locality and preventing every
   strategy from rebuilding it differently.
 - Stage 5 exercises genuine order and accounting behaviour without pulling the full Stage 9

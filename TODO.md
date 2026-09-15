@@ -1,181 +1,432 @@
-# Project TODO
+# Trading Engine — To-Do List
 
-This is the single current, forward-looking checklist, refreshed against the repository on
-2026-09-15. This refresh inspected source and review findings; it did not rerun the C++ suite.
-Completed history is summarized at the end instead of being left in the active sequence.
-Work in order: later modules depend on the decisions and contracts established earlier.
+Updated 15 September 2026. Replaces the previous list.
 
-For the rechecked sequence, industry comparisons, diagrams and a worked account example, read
-[Trading Engine: your next milestone](docs/project-progress-guide.md).
+> Source: the supplied [new-todo-list.pdf](TODO.pdf), imported on 15 September 2026. This replaces the previous checklist. Wording, priorities, decisions and completion claims below are the supplied document's record; this import did not execute its commands, rerun tests, commit work, or update/accept ADR 0014.
 
-## Current task
+How to read this. Every job from the old list is still here. Jobs you have finished are in Done at the end. NEW means the job is not on the old list. UPDATED means the job changed because of what we found this week.
 
-- [ ] **1. Accept the event-loop causality ADR before implementing engine modules.**
+No deadlines are set. The old list had none, and you have not given me any. See Questions for me.
 
-      The ADR must describe one deterministic sequence from a market event entering the engine to
-      observation, strategy decisions, order arrival, fills and accounting. It must use the domain
-      terms in `CONTEXT.md` consistently.
+## Do these first
 
-      **Already decided:**
+Five jobs. The first three are quick. The last two unblock everything else.
 
-      - A successfully decoded and accepted event mutates `OrderBook` before the strategy sees it.
-      - Every successfully processed event reaches the strategy's observation path, including events
-        that leave the market not decision-ready.
-      - Observation never grants execution authority. A strategy does not call `ExecutionVenue`
-        directly; it produces `OrderIntent` values only when the engine requests a decision.
-      - Book trust and market shape are independent facts:
-        `BookHealth::isTrusted()` reports snapshot/stream trust, while
-        `OrderBook::marketShape()` reports `empty`, `one_sided`, `locked`, `crossed` or `open`.
-      - Market shape is evaluated only at a declared safe checkpoint after classification,
-        reconciliation and book mutation. An intermediate crossed state is not diagnosed early.
-      - One engine-owned `DecisionGate` combines book trust, market shape and operational trading
-        state. Strategies must not reproduce this policy independently.
-      - Every `OrderIntent` must also pass a centralized `RiskGate`; `ExecutionVenue` performs a
-        final defensive check and every rejection has a named audit reason.
-      - Full `OrderBook::validateStructure()` runs after successful mutations in debug builds.
-        Always-on structural checks at declared release-replay checkpoints remain planned;
-        assertion-based validation alone does not provide them under `NDEBUG`. Production hot paths
-        require cheap local checks rather than a full-book scan per event.
+1. Protect your capture files. Your recorded market data was wiped from the laptop this week and had to be pulled back from iCloud. It will happen again.
 
-      **Still to decide through concrete scenarios:**
+2. Save this week's decisions into ADR 0014. You answered five design questions in chat. They are not written down anywhere. If you lose the chat, you lose them.
 
-      1. The exact minimal Stage 5 replay operational states and transitions. Live pause/resume,
-         shutdown orchestration and kill-switch wiring remain Stage 9 work.
-      2. When a submitted intent enters the simulated outbound-latency queue.
-      3. Whether an order can first fill at its arrival timestamp or only on later market activity.
-      4. How exchange, receipt, strategy-availability, simulation and equal timestamps are ordered
-         deterministically. Declare any zero market-data delay assumption; distinguish venue-time
-         reconstruction from when the strategy could know an event.
-      5. The exact sequence for fill acknowledgement, fees, cash, position, average price and PnL.
-      6. What observation and decision callbacks occur while unseeded, synchronizing, corrupted,
-         disconnected, gapped or resynchronizing.
-      7. Which decision-block and order-rejection reasons are permanent public contracts.
-      8. When a crossed safe checkpoint becomes persistent enough to mark book trust corrupted and
-         request resynchronization; do not invent a threshold without evidence.
+3. Commit the work sitting on your laptop. Code fixes and document updates are not saved to git yet.
 
-      **Done when:** one accepted ADR answers all eight plan-v4 causality questions, states what is
-      deliberately deferred, includes at least one hand-worked event timeline, and defines a
-      deterministic reason for every blocked decision or rejected order.
+4. Answer the last three design questions. ADR 0014 cannot be accepted until these are done. Nothing else in the engine can start.
 
-## Implementation sequence after the ADR
+5. Make the loader check the capture file is complete. Right now a damaged or empty capture loads silently and replay runs on it. This is the biggest correctness risk.
 
-- [ ] **2. Implement exact-integer portfolio and accounting behaviour test-first.**
+## A. Protect what you have
 
-      Define cash, signed position, average entry price, realized PnL, unrealized PnL and fees using
-      exact integer units—never `float` or `double`. Start with a hand-calculated sequence containing
-      a buy, partial exit, final exit and fees before designing the class around it.
+Small jobs. Do them first because they stop you losing work.
 
-      Specify cash/fee currency scales, cost basis, mark-price policy, rounding and checked
-      intermediate arithmetic. Record fills and fees with execution identities so their journal
-      can reproduce Portfolio state and a duplicate economic fill cannot post twice.
+### Protect your capture files from being wiped
 
-      **Done when:** isolated tests reproduce every hand calculation exactly, distinguish realized
-      from unrealized PnL, cover long/flat/short transitions, and reject arithmetic overflow without
-      partially changing state.
+- [ ] **HIGH | NEW | NO DEADLINE**
 
-- [ ] **2a. Close the foundation repair gate before expanding the execution path.**
+Your project sits in ~/Desktop, which syncs to iCloud. iCloud removes the contents of big files it thinks you are not using, and leaves an empty shell behind. That is what happened to your capture data. The files looked normal but read as empty.
 
-      Align recorder, validator and C++ admission on seed coverage, interrupted segments' optional
-      checkpoints, stream ordering and the integrity/continuity contract. Reject corrupt input with
-      a named reason. Shared fixtures must exercise both validator and consumer.
+Your capture files are not in git (they are too big), so git cannot bring them back.
 
-      Reject overflow in fill-credit/checkpoint aggregation and complete allocation rollback so a
-      failed mutation leaves the book unchanged. Add boundary and allocation-failure tests.
+**Steps**
 
-      Run Python capture/validator suites in CI, declare/pin the Python environment and hash fetched
-      C++ archives. Include a Release check for behavior affected by disabled assertions.
+1. Choose one: move the whole project out of ~/Desktop, or move just the data/ folder somewhere iCloud does not sync.
 
-      **Done when:** focused regression cases and relevant C++/Python suites pass; corrupt input is
-      rejected consistently; a fresh checkout can recreate the declared test environment.
+2. Copy the data/ folder to a second place — an external drive or a backup service that is not iCloud.
 
-- [ ] **3. Define order intentions, decision status and reason taxonomies.**
+3. Turn off "Optimise Mac Storage" in System Settings → Apple Account → iCloud, if you keep the project where it is.
 
-      Add the smallest value types required by the accepted ADR: `OrderIntent`, operational trading
-      state, decision-block reason and order-rejection reason. Keep observation, permission to decide
-      and permission to execute distinct. Do not add an interface until a real caller needs it.
+4. Check nothing is still hollow.
 
-      **Done when:** unit tests demonstrate that untrusted data, every non-open market shape, and
-      the scripted operational blocks selected by the accepted ADR produce distinct deterministic
-      reasons. This does not require Stage 9 live pause/resume or production kill-switch wiring.
+**Commands You Will Need**
 
-- [ ] **4. Add the `ExecutionVenue` seam, minimal admission/risk policy and deterministic simulated
-      adapter.**
+```bash
+# list files iCloud has emptied out
+find data -type f -flags +dataless
+```
 
-      Begin with submit, accept/reject, partial fill, fill and cancel behaviour. A pending cancel is
-      not a confirmed cancellation; test a fill while cancellation is pending. The risk gate checks
-      quantity, notional and resulting-position limits, accounting for already-admitted outstanding
-      orders and their reservation/release lifecycle. Check positive and negative worst-case exposure
-      without assuming opposite orders fill together. The simulated
-      venue independently rechecks safety before acceptance and records a reasoned audit result.
-      Implement the no-latency behaviour first; add the latency queue only according to the ADR.
-      Order-rate, drawdown, production kill-switch and live recovery controls stay explicitly
-      deferred to Stage 9—do not create `return true` placeholders for them.
+```bash
+# pull one back
+brctl download data/raw/<capture>/segment-0000.jsonl
+```
 
-      **Done when:** submit/accept/reject/fill/cancel scenarios are directly unit-testable, rejection
-      leaves portfolio and open-order state unchanged, and strategies cannot bypass the gate by
-      calling the venue directly.
+13 files under data/ were still hollow after the last check. Biggest at risk: data/rawOld/btcusd-live-orders.jsonl (126 MB). "dataless" is the macOS flag meaning "contents are not on this laptop".
 
-- [ ] **5. Add the `Strategy` seam and `NoopStrategy`.**
+**Done when:** find data -type f -flags +dataless returns nothing, and a full copy of data/ exists somewhere outside iCloud.
 
-      Separate unconditional ordered observation from gated decision-making. A strategy receives a
-      lifetime-bounded read-only `BookView` and returns `OrderIntent` values; it receives neither a
-      mutable `OrderBook` nor direct venue authority.
+### Commit the work sitting on your laptop
 
-      **Done when:** `NoopStrategy` observes every supplied event, produces no intentions, compiles
-      against the real interface, and is directly testable without an engine loop.
+- [ ] **HIGH | NEW | NO DEADLINE**
 
-- [ ] **6. Implement the single-threaded deterministic engine loop.**
+There are code fixes, document updates and two new PDFs that are not saved to git.
 
-      Inject `Feed`, `Clock`, `Strategy`, `DecisionGate`, the minimal admission/risk policy,
-      `ExecutionVenue`, `OrderBook`, `BookHealth` and `Portfolio`. Implement the exact ordering
-      accepted in the ADR before adding concurrency or performance optimization.
+**What Is Waiting**
 
-      **Done when:** a synthetic timeline proves apply-before-observe, observation during blocked
-      states, gated decisions, deterministic availability/latency/arrival ordering and exact post-fill
-      accounting. Reusable scenarios and optional step traces identify the first differing event and
-      preserve input provenance and named reasons.
+- Six small code and comment fixes (listed in Done).
 
-- [ ] **7. Pass the Stage 5 evidence gates.**
+- Updated README.md, TODO.md, status.md and docs/project-progress-guide.md.
 
-      Item 2a's foundation repairs must already pass. Then prove the complete engine path:
+- docs/TradingEngine-DeepDive.pdf — the 54-page code manual.
 
-      - A no-op strategy conserves event counts, cash, position and PnL over a committed capture.
-      - One scripted strategy produces a real intention and the hand-calculated
-        accept/fill/fee/PnL scenario matches exactly end to end.
-      - At least one real admission rule rejects an intention without changing venue or portfolio
-        state; a no-op `RiskGate` does not satisfy this gate.
-      - Ten identical runs produce identical event, book, decision, order, cash, position and PnL
-        digests.
-      - Every blocked decision and rejected order is counted by its named reason.
-      - Partial fills, cancel races, outstanding exposure and duplicate executions have committed
-        scenarios; replaying the fill/fee journal reproduces account state.
-      - Intermediate order/account comparisons catch divergence hidden by equal aggregate totals.
-        Add reproducible seeded scenarios after the direct regressions pass.
+- This list, once you are happy with it.
 
-      **Done when:** all gates pass from a clean checkout without relying on private capture files.
+Suggested split: one commit for the review-driven document updates, one for the code fixes, one for the PDFs.
 
-- [ ] **8. Ship the replay executable and refresh current documentation.**
+**Done when:** git status is clean, and the test suite still passes 304 of 304.
 
-      Wire `apps/replay_main.cpp` into CMake. It must run the committed capture through the real engine
-      with `NoopStrategy` and print a concise report covering provenance, counts, health, market-shape
-      reasons, decisions, orders, accounting and deterministic digests. Then update plan v4, README,
-      `docs/handoff/status.md` and placeholder module comments to describe what actually exists.
+### Delete the broken build folder
 
-      **Done when:** `cmake --build` produces the replay executable, its report is reproducible, and
-      no current document labels implemented modules as placeholders.
+- [ ] **LOW | NEW | NO DEADLINE**
 
-      Include plan v4 section 8's run manifest: input hashes, commit/build identity, dirty-tree state,
-      instrument scales, configuration/seed, exclusions, policy versions and result digests. Keep
-      detailed tracing optional and separate from later performance measurements.
+The build/ folder in your project no longer works. It fails before it starts with FindThreads only works if either C or CXX language is enabled. Your source code is fine — only the saved build settings are broken.
 
-## Closed foundation
+```bash
+rm -rf build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+```
 
-- Capture decoding uses one `decodeCapturedOrder` pass while the legacy order-only decoder remains
-  available to the old recorder path.
-- Clock and floating-point architecture guards are active in CI and have deliberately broken tests.
-- `OrderBook` now separates debug structural validation from reason-coded market shape.
-- `BookHealth::isTrusted()` and `OrderBook::marketShape()` have distinct meanings documented in
-  `CONTEXT.md`.
-- `OrderBook::apply()` dispatches by event kind, preserves failure atomicity for ordinary rejected
-  mutations, and runs structural validation after successful debug-build mutations.
-- The full suite passed 303 tests after the trust/shape interface migration on 2026-09-09.
+**Done when:** cmake --build build -j works from a clean start and ctest --test-dir build passes 304 of 304.
+
+## B. Finish the design decision
+
+This is the gate. No engine code can be written until ADR 0014 is accepted. An "ADR" is a short document recording one design decision and why you made it.
+
+### Save this week's five answers into ADR 0014
+
+- [x] **HIGH | NEW | NO DEADLINE** — done 15 September 2026
+
+Written into the ADR as **D1-D5**, each with its reasoning. The open list is now three items,
+renumbered. The hand-worked timeline runs to T11. Status line updated to
+"proposed — 5 of 8 open questions resolved (D1-D5); 3 remain".
+
+Two consequential edits followed from D1: the Stage 5 working scope no longer asks for a gate
+combining "trust, shape and a minimal replay operational state", and the consequences section no
+longer claims operational state is observable at Stage 5.
+
+**One item needs your sign-off before the ADR can be accepted.** D4 records venue-time-only
+ordering, which implies a **zero market-data delay** assumption — the strategy is treated as seeing
+an event at its venue timestamp. That is a reasonable first assumption but was not explicitly
+decided in conversation, so it is flagged in D4 rather than asserted. Confirm or change it.
+
+You settled five of the eight open questions in conversation. The ADR previously listed all eight as open.
+
+**The Five Answers To Write Down**
+
+1. Operational state: do not build it yet. At this stage there is no operator, no kill switch, and a file cannot disconnect — so it could only ever hold one value and no test could prove it works. The decision gate checks two things for now: is the data trustworthy, and is the market a shape you can trade.
+
+2. Latency queue: an order only joins the queue after both the decision gate and the risk check say yes. The queue models travel time to the exchange, not thinking time. A rejected order never enters it.
+
+3. First fill: an order can fill the moment it arrives, using the book as it stands at that exact moment.
+
+4. Time order: use the exchange's own timestamp only — never the time your machine received it, because that changes with your network speed. If a real market event and your own order share a timestamp, the real event goes first. If two of your own orders share one, the one submitted first goes first.
+
+5. Money order: confirm the fill, work out the fee, then — when buying, add the price and fee into a new average cost; when selling, use the old average cost to work out profit, and take the fee off that profit. Update cash, position, average cost and profit together, so nothing ever sees half an update. Selling part of a holding does not change the average cost of what is left.
+
+File: `docs/decisions/0014-event-loop-causality-and-decision-authority.md`
+
+Status today: proposed. It becomes accepted once all eight are answered.
+
+**Done when:** the ADR lists these five as decided, not open, and the "still to decide" list has only three items left.
+
+### Answer the last three design questions
+
+- [ ] **HIGH | UPDATED | NO DEADLINE**
+
+This was item 1 on the old list. Five of eight questions are now answered, so only three are left.
+
+**What Is Still Open**
+
+1. Does the decision gate still get asked when the data is untrusted? Either always ask it, so every block has a written reason, or skip it to save time. Your own evidence rule says every blocked decision must be counted by name, which points to always asking.
+
+2. Which rejection reasons become permanent promises? Either only the ones a test checks by name, or everything that exists when you ship.
+
+3. How long must the market look wrong before you stop trusting the book? A "crossed" book means the best buy price is above the best sell price, which should be impossible. Your own note says do not invent a number without evidence. The way forward is to block every time it happens, record how long each one lasts, and pick a number once you have data.
+
+**Done when:** one accepted ADR answers all eight questions, says what is deliberately left out, includes at least one hand-worked timeline, and gives a named reason for every blocked decision and rejected order.
+
+## C. Repair the foundation
+
+This was item 2a on the old list. This week gave it real evidence and exact locations. Do this before building more on top.
+
+### Make the loader check the capture file is complete
+
+- [ ] **HIGH | UPDATED | NO DEADLINE**
+
+Your recorder already writes down exactly what it produced. The C++ loader reads none of it. So a damaged, empty or half-written capture loads without complaint, and replay runs on it.
+
+This week proved it: the capture file was empty, the loader returned "success, zero events", and the real problem only appeared much later as a confusing test failure.
+
+**What The Recorder Already Records, And Nobody Checks**
+
+- payload_bytes, payload_sha256 — size and fingerprint of the data file
+
+- frames_bytes, frames_sha256 — same for the index file
+
+- frames, order_events, trade_events, control_frames — expected counts
+
+- chain_valid — whether the recorder saw any gaps
+
+- status — whether the recording finished properly
+
+Example: the 22 August capture declares 14,684,968 bytes and 29,490 frames.
+
+**Steps**
+
+1. Decide where the check lives. Three options, in the Questions section.
+
+2. Read the size and count fields in manifest_reader.cpp. It currently reads only file paths.
+
+3. Compare them against the real files before handing any events to replay.
+
+4. Give every mismatch its own named error, so the message says what was wrong.
+
+5. Make an empty capture a named failure instead of a silent success.
+
+6. Add a test with a deliberately truncated capture.
+
+Files: `src/capture/manifest_reader.cpp`, `src/capture/segment_loader.cpp`
+
+The silent-success line is `segment_loader.cpp:101`.
+
+**Done when:** a capture with a wrong size, wrong count or empty payload is rejected with a named reason, and replay cannot run on it.
+
+### Fix the test that should skip but fails instead
+
+- [ ] **MEDIUM | NEW | NO DEADLINE**
+
+One test is meant to skip quietly when your private capture data is missing. It only checks that manifest.json exists. That small file survived; the big data file it points to did not. So the test ran anyway and reported a hard failure.
+
+Check the data file is present and not empty, not just the manifest.
+
+File: tests/unit/test_bitstamp_joined_capture.cpp, lines 349–354
+
+**Done when:** deleting or emptying the capture data makes the test skip with a clear message, not fail.
+
+### Guard the two unchecked sums
+
+- [ ] **MEDIUM | UPDATED | NO DEADLINE**
+
+Two places add numbers together without first checking the result will fit. Everywhere else in your code checks first. In C++, a whole number going past its limit is undefined behaviour — the compiler is allowed to assume it cannot happen, so the result is not simply a wrong number.
+
+Real market sizes are far too small to trigger this. The point is consistency with your own standard.
+
+- `src/feed/trade_reconciler.cpp:26` — adding up fills at the same timestamp
+- `src/capture/capture_coordinator.cpp:81` and `:84` — adding up checkpoint sizes
+
+Copy the pattern already in `src/book/price_level.cpp:11`.
+
+**Done when:** both places check before adding, return a named error instead of overflowing, and a test proves it.
+
+### Finish the order book's undo path
+
+- [ ] **MEDIUM | UPDATED | NO DEADLINE**
+
+When adding an order, the book first creates a new price level, then adds the order to it. If the second step runs out of memory and throws, the cleanup code never runs, because that cleanup only sits on the normal return path. An empty price level is left behind, and the error escapes as an exception instead of the error value the function promises.
+
+An empty price level is a problem on its own: it can become the "best price" with nothing actually for sale behind it.
+
+Same gap exists when an order changes price.
+
+`src/book/order_book.cpp:57` (add) and `:125` (price change)
+
+The throwing line is `src/book/price_level.cpp:15`.
+
+**Decide First**
+
+Is running out of memory something to recover from, or something to stop on? Today the code promises a recoverable error but does not always deliver one. Pick one and make it consistent.
+
+**Done when:** a failed add or price change leaves the book exactly as it was, with no leftover empty level, and a test forces the failure.
+
+### Run the Python tests in CI and pin the downloads
+
+- [ ] **MEDIUM | UPDATED | NO DEADLINE**
+
+CI runs only one Python test. Your recorder and capture-checker tests never run, so they can break without anyone noticing. Your C++ downloads also have no fingerprint, so you cannot prove you got the same file twice.
+
+**Steps**
+
+1. Add the Python test folder to CI.
+
+2. Add a URL_HASH to each download in cmake/dependencies.cmake. Your own ADR 0001 already asks for this.
+
+3. Write down which Python version and which websockets version you need.
+
+4. Add a Release-mode test run, because some checks switch off outside debug builds.
+
+- `.github/workflows/ci.yml:28` — currently the only Python line
+- `cmake/dependencies.cmake:13` and `:19` — the two downloads
+
+**Done when:** CI runs every Python test, both downloads have a fingerprint, and someone new can set up the project from the repository alone.
+
+### Make the release-mode safety check real, or say it is not
+
+- [ ] **LOW | NEW | NO DEADLINE**
+
+validateStructure() checks the order book is internally consistent. It is built entirely from assertions, which switch off in release builds. So in release the function walks the whole book and checks nothing.
+
+Either make the checks work in release too, or write plainly that this is a debug-only check.
+
+src/book/order_book.cpp:196 ; called from src/feed/bitstamp/replay.cpp:172
+
+**Done when:** the release build either really checks, or the documents stop implying it does.
+
+## D. Build the trading engine
+
+Unchanged from the old list except where marked. Do these in order — each one uses the one before. Do not start until ADR 0014 is accepted and section C is done.
+
+### Build the money tracker, tests first
+
+- [ ] **HIGH | NO DEADLINE**
+
+Track cash, position, average cost, profit taken, profit on paper, and fees. Use whole numbers only — never decimals, which drift.
+
+Write a buy, a partial sell, a final sell and fees out by hand first. Then build the class to match your arithmetic.
+
+Also settle: currency scales, how cost is worked out, how you value open positions, rounding, and checked arithmetic in the middle of a calculation. Record every fill and fee with its own identity, so replaying the list rebuilds the account and the same fill cannot be counted twice.
+
+**Done when:** tests reproduce every hand calculation exactly, tell taken profit apart from paper profit, cover long, flat and short, and refuse numbers that are too big without half-changing anything.
+
+### Name the order types and rejection reasons
+
+- [ ] **MEDIUM | NO DEADLINE**
+
+Add only the small value types the accepted ADR needs: the order request, the operational state, the reason a decision was blocked, and the reason an order was rejected.
+
+Keep three ideas separate: seeing the market, being allowed to decide, and being allowed to trade. Do not add an interface until something really needs it.
+
+**Done when:** tests show that untrusted data, each untradeable market shape, and each scripted block produce their own distinct reason.
+
+### Add the venue seam and a pretend exchange
+
+- [ ] **MEDIUM | NO DEADLINE**
+
+Start with submit, accept, reject, partial fill, full fill and cancel. A cancel that has been asked for is not a cancel that has happened — test an order filling while its cancel is still in flight.
+
+The risk check looks at size, value and the position you would end up with. It must count orders already accepted but not yet filled, and check the worst case in both directions without assuming opposite orders fill at the same time.
+
+The pretend exchange checks safety again before accepting, and records why. Build the no-delay version first. Add the delay queue only as the ADR says.
+
+Rate limits, loss limits, the production kill switch and live recovery stay out. Do not add empty stand-ins that always say yes.
+
+**Done when:** submit, accept, reject, fill and cancel can each be tested on their own, a rejection changes nothing, and a strategy cannot skip the risk check.
+
+### Add the strategy seam and a do-nothing strategy
+
+- [ ] **MEDIUM | NO DEADLINE**
+
+Keep watching the market separate from deciding to trade. A strategy gets a read-only view of the book that it must not keep, and returns order requests. It never gets the real book or the ability to trade directly.
+
+**Done when:** the do-nothing strategy sees every event, asks for nothing, builds against the real interface, and can be tested without the engine.
+
+### Build the engine loop
+
+- [ ] **MEDIUM | NO DEADLINE**
+
+Wire together the feed, clock, strategy, decision gate, risk check, venue, order book, health tracker and money tracker. One thread. Follow the order the ADR sets before making anything faster.
+
+**Done when:** a made-up timeline proves the book updates before the strategy sees it, watching continues while trading is blocked, decisions are gated, timing order is repeatable, and the money maths after a fill is exact. Test scenarios can be reused and can point at the first event where two runs differ.
+
+### Pass the Stage 5 proof tests
+
+- [ ] **MEDIUM | NO DEADLINE**
+
+Section C must already pass. Then prove the whole path:
+
+- The do-nothing strategy changes no counts, cash, position or profit over a real capture.
+
+- One scripted strategy places a real order, and your hand-worked fill, fee and profit match end to end.
+
+- At least one real risk rule rejects an order and changes nothing. A rule that always says yes does not count.
+
+- Ten identical runs produce identical fingerprints for events, book, decisions, orders, cash, position and profit.
+
+- Every blocked decision and rejected order is counted by name.
+
+- Partial fills, cancel races, outstanding exposure and duplicate fills all have saved test cases. Replaying the fill and fee list rebuilds the account.
+
+- Mid-run comparisons catch differences that identical totals would hide.
+
+**Done when:** every one of these passes from a fresh copy of the project, without needing your private capture files.
+
+### Ship the replay program and refresh the documents
+
+- [ ] **LOW | NO DEADLINE**
+
+Connect apps/replay_main.cpp to the build. It runs the saved capture through the real engine with the do-nothing strategy and prints a short report: where the data came from, counts, health, market shapes, decisions, orders, money and fingerprints.
+
+Include a run record: input fingerprints, which commit and build, whether the project had uncommitted changes, instrument scales, settings, what was left out, policy versions and result fingerprints. Keep detailed step-by-step tracing optional.
+
+Then update plan v4, the README, the handoff notes, and the placeholder comments so nothing still calls a finished module unfinished.
+
+**Done when:** the build produces the replay program, its report comes out the same every time, and no current document calls a built module a placeholder.
+
+## Questions for me
+
+I did not guess at any of these. Answer them and I will fold them in.
+
+1. Your message had an empty placeholder: "[paste new tasks, deadlines or changes]". Nothing was pasted, so I added nothing from it. Do you have tasks or changes to add?
+
+2. Do you want any deadlines? There are no dates anywhere in the project, and you have not given me any, so every task says "No deadline". Tell me the dates and I will add them.
+
+3. Where should the capture completeness check live? Three options. (a) Inside loadSegment — simplest, but then loading and checking are the same job. (b) A separate check that produces its own type, which replay is the only thing able to accept — this makes it impossible to replay unchecked data, but is the most work. (c) A step in the coordinator — cheap, but people can still call the loader directly and skip it. I would pick (b), because the mistake you just hit was exactly "something used data nobody checked".
+
+4. Should the capture check get its own ADR? It is a contract decision, like ADR 0013 was. It could be ADR 0015, or it could just live inside the section C task. I lean towards its own ADR, because three separate programs have to agree on the same rules.
+
+5. Move the whole project out of iCloud, or just the data/ folder? Moving everything is simplest and safest. Moving only data/ keeps your code backed up by iCloud, which is useful, but leaves the split to remember.
+
+6. Is running out of memory recoverable, or fatal? Needed before the order book undo path can be finished properly. Right now the code half-promises recovery. Either answer is fine; it just has to be one of them.
+
+7. Should the 54-page code manual be committed to the repository? It is at docs/TradingEngine-DeepDive.pdf and not yet in git. It is 2.3 MB.
+
+## Done
+
+Finished work, newest first. Kept short.
+
+### This week
+
+- [x] Recovered the capture data. It was not lost — iCloud had emptied the files. One command brought it back. 15 Sep
+
+- [x] Confirmed the test suite passes 304 of 304 from a clean build. 15 Sep
+
+- [x] Removed dead code in the order book — a duplicate line that could never run. 15 Sep
+
+- [x] Corrected the fingerprint comments. The code says "FNV-1a" but uses a slightly different starting number. The comment now says so, and warns not to change it — every saved fingerprint depends on it. 15 Sep
+
+- [x] Corrected the "order-independent" label on the applied-event fingerprint. It is order-sensitive, and that is deliberate. 15 Sep
+
+- [x] Fixed the swapped labels in ADR 0008. "Cancels ahead of you" is the optimistic case, not the pessimistic one. 15 Sep
+
+- [x] Tidied two mismatched function names in the replay code. 15 Sep
+
+- [x] Recorded the fresh test result and the broken build folder in the handoff notes. 15 Sep
+
+- [x] Wrote the 54-page code manual tracing one market message from raw bytes to finished book state. 15 Sep
+
+- [x] Answered five of the eight open design questions — operational state, latency queue, first fill, time ordering and money ordering. 14–15 Sep
+
+- [x] Fixed the health tracker so restarting from a corrupted state clears the old failure reason. Commit d00e244
+
+- [x] Regenerated the old to-do PDF to match the eight-item list. Commit ad0f0a7
+
+### Earlier foundation work
+
+- [x] Merged the two decoders into one pass, keeping the old order-only decoder for the legacy recorder.
+
+- [x] Turned on the CI guards for clock use and decimal numbers, with tests that deliberately break to prove they work.
+
+- [x] Split the order book's internal checks from its market-shape reporting.
+
+- [x] Separated "is the data trustworthy" from "what shape is the market", with both written down in CONTEXT.md.
+
+- [x] Made the order book handle each event type properly, leaving state unchanged when an ordinary event is rejected, and checking itself after every successful change in debug builds.
+
+- [x] Passed 303 tests after the trust and shape rework. 9 Sep
+
+Working agreement: CLAUDE.md. Active checklist: TODO.md. Plain-language guide: docs/project-progress-guide.md. Refresh this list when a task closes or when reality disagrees with it.
