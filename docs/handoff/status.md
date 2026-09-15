@@ -1,12 +1,14 @@
 # Status handoff
 
-Use this file to start a fresh assistant session. It reflects the repository on **2026-09-09** at
-`HEAD 22bc074` plus the uncommitted changes listed below. Verify before trusting it with the commands
-at the end.
+Use this file to start a fresh assistant session. Source and Git state were rechecked on
+**2026-09-15** at `HEAD d00e244`. This was a documentation refresh, not a fresh C++ build/test run.
+Verify before trusting it with the commands at the end.
 
 Long-range scope and gates: `docs/project-plan-v4.md`
 
 Exact active sequence: `TODO.md`
+
+Plain-language progress, diagrams and worked examples: `docs/project-progress-guide.md`
 
 Current proposed decision: `docs/decisions/0014-event-loop-causality-and-decision-authority.md`
 
@@ -19,31 +21,25 @@ or push unless he explicitly asks.
 
 ## Verified build state
 
-The configured full build and CTest suite pass **303 of 303 tests** on 2026-09-09. The focused
-BookHealth/OrderBook migration passes 31 tests. The mandatory joined-capture fixture is committed, so
-the principal end-to-end correctness path does not disappear on a fresh checkout. Larger private
-capture tests remain additional corpus evidence.
+The previously recorded full build and CTest result is **303 of 303 tests on 2026-09-09**;
+the focused BookHealth/OrderBook migration recorded 31 passing tests. These are historical results,
+not a fresh claim for this documentation refresh. The mandatory joined-capture fixture is committed
+and synthetic; larger private real-capture tests provide additional, optional corpus evidence.
 
-The working tree is intentionally dirty. Current uncommitted work is exactly:
+The trust/shape interface changes, glossary and proposed ADR 0014 formerly listed here as
+uncommitted were committed in `6b5c0ab`. `d00e244` also clears the prior failure reason when restarting
+synchronization from a corrupted state. Neither change completes TODO item 1 or item 2.
 
-- `BookHealth::isUsable()` renamed to `isTrusted()`, and its test updated;
-- `OrderBook::hasUsableBidAsk()` replaced by reason-coded `marketShape()`, returning
-  `MarketShape { empty, one_sided, locked, crossed, open }`, and its tests updated to assert each
-  case by name instead of one collapsed boolean;
-- `CONTEXT.md` (new domain glossary distinguishing book trust, market shape and decision
-  readiness) and proposed ADR 0014;
-- README/TODO/plan-v4/handoff documentation refreshed to match the above and to point at ADR 0014.
-
-`OrderBook::apply()`'s event-kind dispatch, invalid-side/kind errors, allocation rollback and
-debug-build `validateStructure()` are already committed (`HEAD`), not part of this diff.
-
-Do not overwrite or discard these changes.
+At the start of this refresh there were no tracked source changes. Local untracked Claude
+commands/skills were present and were preserved. Inspect `git status --short` for current changes;
+do not discard local work based on an old handoff inventory.
 
 ## Implemented foundation
 
 ### Data and capture
 
-- Bitstamp `live_orders` is the primary public L3 source; Coinbase L2 is secondary only.
+- Bitstamp `live_orders` plus `live_trades` is the current capture path. The older Coinbase script
+  is a legacy probe; its current venue compatibility was not verified in this refresh.
 - Snapshot-backed joined order/trade captures carry a shared local ordinal and immutable raw frames.
 - Snapshot parsing, exact integer conversion, chain validation, capture manifests and checkpoint
   comparison are implemented.
@@ -57,7 +53,8 @@ Do not overwrite or discard these changes.
   order-wins exact-tie rule centralized in `MergeCursor`.
 - `TradeReconciler` uses fill credits keyed by `(orderId, venueTimestampMicros)` and corrects only
   uncovered fill quantity, avoiding double subtraction.
-- Joined real-corpus replay matches the independent checkpoint with **0 of 4,533 level residuals**.
+- Previously recorded joined real-corpus replay matched the independent checkpoint with
+  **0 of 4,533 level residuals**. This documentation refresh did not rerun that corpus test.
 - `OrderBook::digest()` and applied-event digests are deterministic across repeated runs.
 
 ### Reference order book
@@ -124,6 +121,9 @@ runbooks and the external paper adapter.
   equivalence remain open until Stage 8 creates a measured need.
 - Full structural validation is intentionally absent from the release per-event hot path. Cheap
   always-on local checks are specified but not yet implemented as a complete production policy.
+- The review found capture-admission/validator mismatches, unchecked aggregate arithmetic and
+  incomplete allocation rollback. The required repairs are tracked in TODO item 7; "implemented
+  foundation" does not mean every failure path has been proved safe.
 - No Strategy, Portfolio, DecisionGate, ExecutionVenue, complete risk system or engine loop exists
   yet; their headers remain placeholders.
 

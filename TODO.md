@@ -1,8 +1,12 @@
 # Project TODO
 
 This is the single current, forward-looking checklist, refreshed against the repository on
-2026-09-09. Completed history is summarized at the end instead of being left in the active sequence.
+2026-09-15. This refresh inspected source and review findings; it did not rerun the C++ suite.
+Completed history is summarized at the end instead of being left in the active sequence.
 Work in order: later modules depend on the decisions and contracts established earlier.
+
+For a plain-language progress map, diagrams and a worked account example, read
+[Where the project is, and what comes next](docs/project-progress-guide.md).
 
 ## Current task
 
@@ -29,8 +33,9 @@ Work in order: later modules depend on the decisions and contracts established e
       - Every `OrderIntent` must also pass a centralized `RiskGate`; `ExecutionVenue` performs a
         final defensive check and every rejection has a named audit reason.
       - Full `OrderBook::validateStructure()` runs after successful mutations in debug builds.
-        Release replay uses explicit checkpoints; production hot paths require cheap local checks
-        rather than a full-book scan per event.
+        Always-on structural checks at declared release-replay checkpoints remain planned;
+        assertion-based validation alone does not provide them under `NDEBUG`. Production hot paths
+        require cheap local checks rather than a full-book scan per event.
 
       **Still to decide through concrete scenarios:**
 
@@ -68,8 +73,9 @@ Work in order: later modules depend on the decisions and contracts established e
       state, decision-block reason and order-rejection reason. Keep observation, permission to decide
       and permission to execute distinct. Do not add an interface until a real caller needs it.
 
-      **Done when:** unit tests demonstrate that untrusted data, every non-open market shape, paused
-      operation and kill-switch activation produce distinct deterministic reasons.
+      **Done when:** unit tests demonstrate that untrusted data, every non-open market shape, and
+      the scripted operational blocks selected by the accepted ADR produce distinct deterministic
+      reasons. This does not require Stage 9 live pause/resume or production kill-switch wiring.
 
 - [ ] **4. Add the `ExecutionVenue` seam, minimal admission/risk policy and deterministic simulated
       adapter.**
@@ -104,6 +110,18 @@ Work in order: later modules depend on the decisions and contracts established e
       states, gated decisions, deterministic latency/arrival ordering and exact post-fill accounting.
 
 - [ ] **7. Pass the Stage 5 evidence gates.**
+
+      Foundation repairs identified in the 2026-09 review must pass before broader capture-based
+      Stage 5 results are treated as correctness evidence:
+
+      - Capture admission rejects uncovered startup and backward stream time, handles interrupted
+        segments' optional checkpoints correctly, and enforces the integrity/continuity contract
+        before C++ replay. Shared fixtures exercise both validator and consumer.
+      - Fill-credit/checkpoint aggregation rejects overflow; allocation failures cannot leave a
+        partially mutated book. Boundary and allocation-failure tests demonstrate the policy.
+      - CI runs the Python capture/validator suites as well as the C++ and architecture checks.
+
+      Then prove the complete engine path:
 
       - A no-op strategy conserves event counts, cash, position and PnL over a committed capture.
       - One scripted strategy produces a real intention and the hand-calculated

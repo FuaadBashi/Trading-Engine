@@ -12,10 +12,14 @@ observation and local paper-order experiments. See the current
 
 ## Status
 
+For a plain-language explanation of what exists, diagrams, and why the next steps are ordered as
+they are, read [Where the project is, and what comes next](docs/project-progress-guide.md).
+The table below uses historical slice numbers; the guide and active planner use plan-v4 stages.
+
 | Slice | Weeks | State |
 |---|---|---|
 | 0 Foundations | 0 | complete |
-| 1 Data contract + recorder | 1 to 3 | substantially implemented; durable v3 and two contract fixes remain |
+| 1 Data contract + recorder | 1 to 3 | capture and portable v3 file I/O implemented; reviewed admission/validation repairs remain |
 | 2 L3 book + reconciliation | 3 to 5 | merge controller built and its gate met; joined replay reproduces the venue checkpoint exactly (0 of 4,533 levels differ) |
 | 3 Deterministic replay + accounting | after joined replay | causality/authority design in progress; implementation not started |
 | 4 Queue labels + execution model | after replay core | not started |
