@@ -5,8 +5,8 @@ This is the single current, forward-looking checklist, refreshed against the rep
 Completed history is summarized at the end instead of being left in the active sequence.
 Work in order: later modules depend on the decisions and contracts established earlier.
 
-For a plain-language progress map, diagrams and a worked account example, read
-[Where the project is, and what comes next](docs/project-progress-guide.md).
+For the rechecked sequence, industry comparisons, diagrams and a worked account example, read
+[Trading Engine: your next milestone](docs/project-progress-guide.md).
 
 ## Current task
 
@@ -43,7 +43,9 @@ For a plain-language progress map, diagrams and a worked account example, read
          shutdown orchestration and kill-switch wiring remain Stage 9 work.
       2. When a submitted intent enters the simulated outbound-latency queue.
       3. Whether an order can first fill at its arrival timestamp or only on later market activity.
-      4. How exchange, receipt, simulation and equal timestamps are ordered deterministically.
+      4. How exchange, receipt, strategy-availability, simulation and equal timestamps are ordered
+         deterministically. Declare any zero market-data delay assumption; distinguish venue-time
+         reconstruction from when the strategy could know an event.
       5. The exact sequence for fill acknowledgement, fees, cash, position, average price and PnL.
       6. What observation and decision callbacks occur while unseeded, synchronizing, corrupted,
          disconnected, gapped or resynchronizing.
@@ -63,9 +65,28 @@ For a plain-language progress map, diagrams and a worked account example, read
       exact integer units—never `float` or `double`. Start with a hand-calculated sequence containing
       a buy, partial exit, final exit and fees before designing the class around it.
 
+      Specify cash/fee currency scales, cost basis, mark-price policy, rounding and checked
+      intermediate arithmetic. Record fills and fees with execution identities so their journal
+      can reproduce Portfolio state and a duplicate economic fill cannot post twice.
+
       **Done when:** isolated tests reproduce every hand calculation exactly, distinguish realized
       from unrealized PnL, cover long/flat/short transitions, and reject arithmetic overflow without
       partially changing state.
+
+- [ ] **2a. Close the foundation repair gate before expanding the execution path.**
+
+      Align recorder, validator and C++ admission on seed coverage, interrupted segments' optional
+      checkpoints, stream ordering and the integrity/continuity contract. Reject corrupt input with
+      a named reason. Shared fixtures must exercise both validator and consumer.
+
+      Reject overflow in fill-credit/checkpoint aggregation and complete allocation rollback so a
+      failed mutation leaves the book unchanged. Add boundary and allocation-failure tests.
+
+      Run Python capture/validator suites in CI, declare/pin the Python environment and hash fetched
+      C++ archives. Include a Release check for behavior affected by disabled assertions.
+
+      **Done when:** focused regression cases and relevant C++/Python suites pass; corrupt input is
+      rejected consistently; a fresh checkout can recreate the declared test environment.
 
 - [ ] **3. Define order intentions, decision status and reason taxonomies.**
 
@@ -80,8 +101,11 @@ For a plain-language progress map, diagrams and a worked account example, read
 - [ ] **4. Add the `ExecutionVenue` seam, minimal admission/risk policy and deterministic simulated
       adapter.**
 
-      Begin with submit, accept/reject, fill and cancel behaviour. The risk gate checks quantity,
-      notional and resulting-position limits with real behaviour and rejection tests. The simulated
+      Begin with submit, accept/reject, partial fill, fill and cancel behaviour. A pending cancel is
+      not a confirmed cancellation; test a fill while cancellation is pending. The risk gate checks
+      quantity, notional and resulting-position limits, accounting for already-admitted outstanding
+      orders and their reservation/release lifecycle. Check positive and negative worst-case exposure
+      without assuming opposite orders fill together. The simulated
       venue independently rechecks safety before acceptance and records a reasoned audit result.
       Implement the no-latency behaviour first; add the latency queue only according to the ADR.
       Order-rate, drawdown, production kill-switch and live recovery controls stay explicitly
@@ -107,21 +131,13 @@ For a plain-language progress map, diagrams and a worked account example, read
       accepted in the ADR before adding concurrency or performance optimization.
 
       **Done when:** a synthetic timeline proves apply-before-observe, observation during blocked
-      states, gated decisions, deterministic latency/arrival ordering and exact post-fill accounting.
+      states, gated decisions, deterministic availability/latency/arrival ordering and exact post-fill
+      accounting. Reusable scenarios and optional step traces identify the first differing event and
+      preserve input provenance and named reasons.
 
 - [ ] **7. Pass the Stage 5 evidence gates.**
 
-      Foundation repairs identified in the 2026-09 review must pass before broader capture-based
-      Stage 5 results are treated as correctness evidence:
-
-      - Capture admission rejects uncovered startup and backward stream time, handles interrupted
-        segments' optional checkpoints correctly, and enforces the integrity/continuity contract
-        before C++ replay. Shared fixtures exercise both validator and consumer.
-      - Fill-credit/checkpoint aggregation rejects overflow; allocation failures cannot leave a
-        partially mutated book. Boundary and allocation-failure tests demonstrate the policy.
-      - CI runs the Python capture/validator suites as well as the C++ and architecture checks.
-
-      Then prove the complete engine path:
+      Item 2a's foundation repairs must already pass. Then prove the complete engine path:
 
       - A no-op strategy conserves event counts, cash, position and PnL over a committed capture.
       - One scripted strategy produces a real intention and the hand-calculated
@@ -131,6 +147,10 @@ For a plain-language progress map, diagrams and a worked account example, read
       - Ten identical runs produce identical event, book, decision, order, cash, position and PnL
         digests.
       - Every blocked decision and rejected order is counted by its named reason.
+      - Partial fills, cancel races, outstanding exposure and duplicate executions have committed
+        scenarios; replaying the fill/fee journal reproduces account state.
+      - Intermediate order/account comparisons catch divergence hidden by equal aggregate totals.
+        Add reproducible seeded scenarios after the direct regressions pass.
 
       **Done when:** all gates pass from a clean checkout without relying on private capture files.
 
@@ -143,6 +163,10 @@ For a plain-language progress map, diagrams and a worked account example, read
 
       **Done when:** `cmake --build` produces the replay executable, its report is reproducible, and
       no current document labels implemented modules as placeholders.
+
+      Include plan v4 section 8's run manifest: input hashes, commit/build identity, dirty-tree state,
+      instrument scales, configuration/seed, exclusions, policy versions and result digests. Keep
+      detailed tracing optional and separate from later performance measurements.
 
 ## Closed foundation
 

@@ -13,7 +13,8 @@ observation and local paper-order experiments. See the current
 ## Status
 
 For a plain-language explanation of what exists, diagrams, and why the next steps are ordered as
-they are, read [Where the project is, and what comes next](docs/project-progress-guide.md).
+they are, read [Trading Engine: your next milestone](docs/project-progress-guide.md)
+or its [PDF edition](output/pdf/trading-engine-progress-guide.pdf).
 The table below uses historical slice numbers; the guide and active planner use plan-v4 stages.
 
 | Slice | Weeks | State |

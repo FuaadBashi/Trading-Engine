@@ -10,6 +10,8 @@ Exact active sequence: `TODO.md`
 
 Plain-language progress, diagrams and worked examples: `docs/project-progress-guide.md`
 
+PDF export: `output/pdf/trading-engine-progress-guide.pdf`
+
 Current proposed decision: `docs/decisions/0014-event-loop-causality-and-decision-authority.md`
 
 ## Working agreement
@@ -122,8 +124,11 @@ runbooks and the external paper adapter.
 - Full structural validation is intentionally absent from the release per-event hot path. Cheap
   always-on local checks are specified but not yet implemented as a complete production policy.
 - The review found capture-admission/validator mismatches, unchecked aggregate arithmetic and
-  incomplete allocation rollback. The required repairs are tracked in TODO item 7; "implemented
+  incomplete allocation rollback. The required repairs are tracked in TODO item 2a; "implemented
   foundation" does not mean every failure path has been proved safe.
+- The guide's industry recheck adds proposed Stage 5 detail for information availability, outstanding
+  exposure, partial-fill/cancel races, a fill journal, run manifests and reproducible scenario traces.
+  These remain unimplemented; ADR 0014 is still proposed and no active task is marked complete.
 - No Strategy, Portfolio, DecisionGate, ExecutionVenue, complete risk system or engine loop exists
   yet; their headers remain placeholders.
 
