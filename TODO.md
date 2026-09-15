@@ -110,10 +110,14 @@ Two consequential edits followed from D1: the Stage 5 working scope no longer as
 combining "trust, shape and a minimal replay operational state", and the consequences section no
 longer claims operational state is observable at Stage 5.
 
-**One item needs your sign-off before the ADR can be accepted.** D4 records venue-time-only
-ordering, which implies a **zero market-data delay** assumption — the strategy is treated as seeing
-an event at its venue timestamp. That is a reasonable first assumption but was not explicitly
-decided in conversation, so it is flagged in D4 rather than asserted. Confirm or change it.
+**D4's availability assumption is now settled, not just flagged.** Ordering stays venue-time-only.
+Separately, measuring `localWallTimestampNanos - venueTimestampMicros` over 189,375 real order
+frames and 789 trades gave a 75.1 ms median delay (33.2 ms floor, 1382.7 ms worst case) — so zero
+market-data delay was not a safe silent assumption. D4 now defines three named, swappable
+availability policies (`zero`, `fixed` at 80 ms, `recorded`), stamped per run, with the same
+"implement more than one and report the spread" reasoning ADR 0008 already uses for cancel
+assumptions. `fixed`'s 80 ms constant is a declared round number, not a claimed measurement — open
+to revision.
 
 You settled five of the eight open questions in conversation. The ADR previously listed all eight as open.
 

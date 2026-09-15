@@ -154,7 +154,7 @@ market event before any fill, was considered and rejected as more machinery than
 This is a modelling choice, not a claim of venue realism. It must be stated wherever fill results are
 reported.
 
-### D4. Ordering uses venue time only, with two named tie-breaks (was open question 4)
+### D4. Ordering uses venue time only; availability is a separate, measured, declared policy (was open question 4)
 
 1. **Venue timestamp is the only ordering clock.** Receipt timestamps are not used for ordering.
    Receipt time varies with local network and machine conditions, so ordering by it would make the
@@ -166,11 +166,50 @@ reported.
    monotonic per-intent counter. This mirrors the FIFO time priority `PriceLevel` already implements
    for resting orders.
 
-**Assumption requiring explicit sign-off:** ordering by venue time alone implies a **zero
-market-data delay** model — the strategy is treated as seeing an event at its venue timestamp. That
-is a legitimate first assumption, but it is an assumption, not a latency-realism claim, and it is
-distinct from the ordering rules above. It must be declared wherever results are reported. Confirm
-before this ADR is accepted.
+#### Ordering time and availability time are separate contracts
+
+Ordering by venue time says *when an event happened*. It does not say *when the strategy could have
+known about it*. Conflating the two silently assumes zero market-data delay, which the capture data
+disproves.
+
+**Measured, 2026-09-15**, over five capture segments — `localWallTimestampNanos` minus
+`venueTimestampMicros`, per frame:
+
+| stream | n | min | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| orders | 189,375 | 33.2 ms | 75.1 ms | 154.9 ms | 249.0 ms | 1382.7 ms |
+| trades | 789 | 33.0 ms | 76.2 ms | 173.2 ms | 210.3 ms | 244.4 ms |
+
+Per-segment medians range 53-96 ms across sessions a week apart. **Zero negative values** across
+190,164 samples, so the local clock is not running ahead of the venue's.
+
+Caveat: this is delay **plus unknown clock skew**; the capture alone cannot separate them. The shape
+of the distribution is trustworthy; the absolute floor carries whatever constant offset exists
+between the two clocks.
+
+Feeding events to a strategy at venue timestamp would grant it roughly 75 ms of lookahead — reacting
+before the message could physically have arrived. For a short-horizon strategy that is most of the
+opportunity, so results would flatter the strategy for reasons that have nothing to do with it.
+
+**Decision: availability is a declared, swappable policy, kept separate from ordering.**
+
+| Policy | Delay source | Applies to |
+|---|---|---|
+| `zero` | none | Baseline. Comparing against it measures the lookahead bias directly. |
+| `fixed` | one declared constant, **80 ms** | Everything, including synthetic scenarios with no recorded delay. |
+| `recorded` | `localWallTimestampNanos` per frame | Real captures only. Faithful, keeps the tail, still fully deterministic because it replays recorded data. |
+
+`fixed` exists because `recorded` cannot serve hand-written test timelines — they have no capture
+metadata. Running one scenario under more than one policy and reporting the spread follows the
+precedent ADR 0008 already sets for cancel assumptions: where an assumption cannot be settled by
+evidence, implement several and report how far the answer moves.
+
+80 ms was chosen over the measured 75 ms median as a declared round number with a small safety
+margin above it, not a claim of measured accuracy — revisit if evidence says otherwise.
+
+The active policy **must be recorded alongside every result**, mirroring
+`kOrderingPolicyOrderWinsTie` in the v3 segment header: a result whose assumptions are not stamped
+cannot be compared against another. This folds into the planned run manifest (TODO section E).
 
 ### D5. Fill accounting order, committed atomically (was open question 5)
 
@@ -198,6 +237,7 @@ T1  decode and classify
 T2  apply/reconcile all mutations caused by that logical input
 T3  debug structural validation
 T4  safe checkpoint: compute book trust and market shape        [D1: no operational state at Stage 5]
+T4a availability policy applied: zero / fixed(80ms) / recorded, declared per run    [D4]
 T5  strategy observes the post-event BookView regardless of decision readiness
 T6  DecisionGate either records a block reason or asks the strategy to decide
 T7  strategy returns zero or more OrderIntent values
