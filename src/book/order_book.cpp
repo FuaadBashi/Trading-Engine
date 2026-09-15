@@ -85,8 +85,6 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyAdd(const OrderEvent& orderEven
 
     return Result<ApplyOutcome, ApplyError>::success(
         ApplyOutcome{.createdLevel = createdLevel});
-        orderIndex_.emplace(orderEvent.order_id, orderLocator);
-  
 }
 
 Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderEvent) {
@@ -246,8 +244,13 @@ MarketShape OrderBook::marketShape() const {
     return MarketShape::open;
 }
 std::uint64_t OrderBook::digest() const {
-    // FNV-1a. std::map iterates in ascending price order, so the walk is already canonical and
-    // does not depend on the order events arrived in.
+    // FNV-1a structure with a project-specific offset basis: this constant is NOT the published
+    // FNV-1a 64-bit basis (14695981039346656037). Every recorded digest, including those in
+    // ADR 0013, was produced with the value below, so changing it would invalidate them. Version
+    // the digest before ever altering it, and do not describe the output as standard FNV-1a.
+    //
+    // std::map iterates in ascending price order, so the walk is already canonical and does not
+    // depend on the order events arrived in.
     constexpr std::uint64_t kOffsetBasis = 1469598103934665603ULL;
     constexpr std::uint64_t kPrime = 1099511628211ULL;
 

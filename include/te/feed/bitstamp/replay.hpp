@@ -31,7 +31,10 @@ struct ReplayStats {
     std::size_t redundantOrderRemovals{};
     ReconcilerStats reconciler {};
 
-    // Order-independent fingerprint of every event applied to the book, raw and corrective alike.
+    // Order-sensitive fingerprint of every event applied to the book, raw and corrective alike.
+    // Folded sequentially, so a reordering changes it -- that is the point: this answers "did two
+    // runs process the same tape in the same sequence". OrderBook::digest() is the order-independent
+    // one; do not make this fold commutative.
     // Two runs that agree here processed the same tape; Stage 8 needs it to compare an optimized
     // book against this reference one.
     std::uint64_t appliedEventDigest{};

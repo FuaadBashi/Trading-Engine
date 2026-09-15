@@ -28,6 +28,17 @@ the focused BookHealth/OrderBook migration recorded 31 passing tests. These are 
 not a fresh claim for this documentation refresh. The mandatory joined-capture fixture is committed
 and synthetic; larger private real-capture tests provide additional, optional corpus evidence.
 
+Freshly verified on **2026-09-15**: a clean out-of-tree configure and build passes **304 of 304
+tests**. Two cautions from that run:
+
+- The checked-in `build/` directory no longer configures (`FindThreads only works if either C or CXX
+  language is enabled`). The source is fine; the cache is stale. Configure a fresh build directory
+  rather than trusting `build/`.
+- The corpus tests depend on gitignored capture data that macOS had evicted to iCloud
+  (`ls -lO` showed `dataless`; reads returned empty). `brctl download` restored it. Nothing in the
+  loader detects this: the manifest records `payload_bytes`/`payload_sha256` and frame counts, and
+  the C++ reader parses none of them. See TODO item 2a.
+
 The trust/shape interface changes, glossary and proposed ADR 0014 formerly listed here as
 uncommitted were committed in `6b5c0ab`. `d00e244` also clears the prior failure reason when restarting
 synchronization from a corrupted state. Neither change completes TODO item 1 or item 2.

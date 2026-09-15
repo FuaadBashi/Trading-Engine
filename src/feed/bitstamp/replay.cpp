@@ -9,9 +9,12 @@
 namespace te::bitstamp {
 namespace {
 
-// FNV-1a over the event's semantic fields, never its memory layout: a padding byte or a field
-// reorder must not change the fingerprint, or the digest stops being comparable across compilers
-// and across a future optimized book implementation.
+// FNV-1a structure over the event's semantic fields, never its memory layout: a padding byte or a
+// field reorder must not change the fingerprint, or the digest stops being comparable across
+// compilers and across a future optimized book implementation.
+//
+// The basis below is NOT the published FNV-1a 64-bit basis (14695981039346656037); it is
+// project-specific and must match OrderBook::digest(). Recorded digests depend on it.
 constexpr std::uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
 constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -33,7 +36,7 @@ std::uint64_t mixEvent(std::uint64_t digest, const OrderEvent& event) {
     return digest;
 }
 
-bool isTimeOrderedOrder(const std::vector<CapturedOrderEvent>& events) {
+bool isTimeOrderedOrders(const std::vector<CapturedOrderEvent>& events) {
     for (std::size_t index = 1; index < events.size(); ++index) {
         if (events.at(index).event.venue_timestamp_us < events.at(index - 1).event.venue_timestamp_us) {
             return false;
@@ -41,7 +44,7 @@ bool isTimeOrderedOrder(const std::vector<CapturedOrderEvent>& events) {
     }
     return true;
 }
-bool isTimeOrderedtrade(const std::vector<CapturedTradeEvent>& events) {
+bool isTimeOrderedTrades(const std::vector<CapturedTradeEvent>& events) {
     for (std::size_t index = 1; index < events.size(); ++index) {
         if (events.at(index).event.venue_timestamp_us < events.at(index - 1).event.venue_timestamp_us) {
             return false;
@@ -113,11 +116,11 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
                                                  const std::vector<CapturedTradeEvent>& tradeEvents,
                                                  std::uint64_t cutoffMicros) {
     // The two-pointer merge is valid only when each input is ordered independently.
-    if (!isTimeOrderedOrder(orderEvents)) {
+    if (!isTimeOrderedOrders(orderEvents)) {
         return Result<ReplayResult, ReplayError>::failure(
             ReplayError::order_input_not_time_ordered);
     }
-    if (!isTimeOrderedtrade(tradeEvents)) {
+    if (!isTimeOrderedTrades(tradeEvents)) {
         return Result<ReplayResult, ReplayError>::failure(
             ReplayError::trade_input_not_time_ordered);
     }
