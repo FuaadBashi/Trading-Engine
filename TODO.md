@@ -13,11 +13,12 @@ No deadlines are set. The old list had none, and you have not given me any. See 
 Seven jobs from the original list are now done: capture files are protected, all eight ADR 0014
 questions are answered (D1-D8), **ADR 0014 is reviewed and accepted (15 September 2026)**, that work
 is committed and pushed, and **the loader now checks capture completeness (16 September 2026,
-commit `aef6fc3`, not yet pushed)**.
+commit `aef6fc3`, pushed)**.
 
 Nothing is flagged urgent right now. Section A still has two open small jobs (commit the remaining
-uncommitted docs, delete the broken `build/` folder) and section C has several foundation repairs
-left before section D's engine work can start — see below.
+uncommitted docs, delete the broken `build/` folder) and section C has a few foundation repairs left
+(the order book's undo path, and whether the iCloud fix actually held) before section D's engine work
+can start — see below.
 
 ## A. Protect what you have
 
@@ -281,36 +282,48 @@ Is running out of memory something to recover from, or something to stop on? Tod
 
 ### Run the Python tests in CI and pin the downloads
 
-- [ ] **MEDIUM | UPDATED | NO DEADLINE**
+- [x] **MEDIUM | UPDATED | NO DEADLINE** — done 16 September 2026, commit `8111763`
 
-CI runs only one Python test. Your recorder and capture-checker tests never run, so they can break without anyone noticing. Your C++ downloads also have no fingerprint, so you cannot prove you got the same file twice.
+CI now discovers and runs all four `tests/python/test_*.py` files via `unittest discover`, not just
+`test_architecture_guards.py` — the recorder and capture-checker tests
+(`test_audit_book_bootstrap`, `test_dump_raw_ws_bitstamp`, `test_validate_joined_capture`) had never
+run in CI before. All 13 cases were run locally first to confirm they actually pass.
 
-**Steps**
-
-1. Add the Python test folder to CI.
-
-2. Add a URL_HASH to each download in cmake/dependencies.cmake. Your own ADR 0001 already asks for this.
-
-3. Write down which Python version and which websockets version you need.
-
-4. Add a Release-mode test run, because some checks switch off outside debug builds.
-
-- `.github/workflows/ci.yml:28` — currently the only Python line
-- `cmake/dependencies.cmake:13` and `:19` — the two downloads
-
-**Done when:** CI runs every Python test, both downloads have a fingerprint, and someone new can set up the project from the repository alone.
+Python is pinned to 3.9 (matching `.venv/pyvenv.cfg`, the version these tests are actually verified
+against), and `tests/python/requirements.txt` pins `websockets==15.0.1`. Both `cmake/dependencies.cmake`
+downloads (simdjson v3.9.1, googletest v1.14.0) now have a `URL_HASH`, computed from a fresh download
+and confirmed against a clean configure — ADR 0001 asked for this and it had never been done.
 
 ### Make the release-mode safety check real, or say it is not
 
-- [ ] **LOW | NEW | NO DEADLINE**
+- [x] **LOW | NEW | NO DEADLINE** — done 16 September 2026, commit `c3e195a`
 
-validateStructure() checks the order book is internally consistent. It is built entirely from assertions, which switch off in release builds. So in release the function walks the whole book and checks nothing.
+Chose "say it is not" over making the checks real in release. `validateStructure()`'s per-apply()
+call in `order_book.cpp` was already correctly guarded with `#ifndef NDEBUG`; only the one-time
+end-of-replay call in `replay.cpp` wasn't, so release builds walked the whole book checking nothing.
+That call is now guarded the same way, and both the header declaration and the call site say plainly
+that every check inside is a no-op under NDEBUG.
 
-Either make the checks work in release too, or write plainly that this is a debug-only check.
+Deliberately did not make the checks real in release: that's a design decision (what should a release
+build do when it finds a corrupt book — abort, or propagate an error through `Replay`'s `Result`-based
+API?), not a mechanical fix, and `status.md` already documents the per-event hot-path exclusion as
+intentional. Flag if you want the other option instead.
 
-src/book/order_book.cpp:196 ; called from src/feed/bitstamp/replay.cpp:172
+Also added a `release` CI job (plain `Release` build, no sanitizers) so anything that only differs
+under NDEBUG gets built and tested going forward, not just Debug+ASan/UBSan.
 
-**Done when:** the release build either really checks, or the documents stop implying it does.
+**The release job itself then failed in CI** (never tested locally against real gcc before pushing)
+— fixed 16 September 2026, commit `cd9171c`. Two distinct causes: `applyModify`/`applyRemove` in
+`order_book.cpp` each `assert()`ed the looked-up order existed instead of checking; the assert
+strips under `NDEBUG`, so GCC's `-O2 -Wnull-dereference` couldn't see any guard between the lookup
+and the dereference. Turned both into real `ApplyError::unknown_order_id` checks — genuine
+defense-in-depth, not just a warning fix, since it no longer depends on a separate check in
+`apply()` to hold. The remaining ~9 flagged sites were all the core `Result<T,E>` idiom itself
+(`if (!x.hasValue()) return failure(*x.errorIf());`, same object, adjacent lines) — provably safe,
+confirmed by hand at each one, and clang never raises it at any optimization level. Scoped
+`-Wno-null-dereference` to GCC only in `cmake/warnings.cmake` rather than rewrite the error-handling
+idiom used at every `Result<T,E>` call site in the codebase. Verified against real gcc-15 and clang,
+Debug+sanitizers and Release, 325/325 each; confirmed green in CI itself afterward.
 
 ## D. Build the trading engine
 
@@ -426,11 +439,24 @@ Finished work, newest first. Kept short.
 
 ### This week
 
+- [x] CI now runs all four Python test files (was one) and pins Python, websockets, and both
+  cmake/dependencies.cmake downloads. Added a release-mode CI job. Made validateStructure()'s
+  debug-only nature explicit instead of silently checking nothing in release. Also fixed the CI
+  build itself (broken since `59fc9ae`, a missing default initializer under -Werror), a test that
+  should skip on missing capture data but failed instead, and two unguarded sums. Commits `e2cc1ff`,
+  `8111763`, `c3e195a`, pushed.
+
+- [x] The new release CI job itself then failed (never tested locally against real gcc first): a
+  real hardening gap in `order_book.cpp` (assert instead of a check, invisible to GCC's optimizer
+  once NDEBUG strips it) plus ~9 instances of a GCC-only false positive on the core `Result<T,E>`
+  idiom, scoped out for GCC only rather than rewritten everywhere. Verified against real gcc-15 and
+  clang before pushing this time; confirmed green in CI. Commit `cd9171c`, pushed. 16 Sep
+
 - [x] Wired capture validation into the coordinator: `capture_coordinator.cpp` now checks
   `loadSegment()`'s result before use, validates it against the manifest immediately after, and
   reads every downstream value (cutoff, replay inputs, checkpoint comparison) from the validated
   capture only, so an unvalidated capture has no remaining path to `replay()`. Commit `aef6fc3`,
-  not yet pushed. 16 Sep
+  pushed. 16 Sep
 
 - [x] Recovered the capture data. It was not lost — iCloud had emptied the files. One command brought it back. 15 Sep
 
