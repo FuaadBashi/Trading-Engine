@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include <te/feed/trade_reconciler.hpp>
 
 namespace {
@@ -154,4 +156,27 @@ TEST(TradeReconciler, NewTimestampDiscardsUnmatchedCredit) {
     reconciler.observe(laterModify, te::Qty{2'000'000});
 
     EXPECT_EQ(reconciler.stats().staleFillsDiscarded, 1U);
+}
+
+TEST(TradeReconciler, SameTimestampCreditSaturatesInsteadOfOverflowing) {
+    // Two fill credits for one order at the same venue timestamp are summed. Real fills can never
+    // approach INT64_MAX, but the sum is guarded, and the guard saturates rather than wrapping --
+    // observe() returns void, so there is no channel to report a named error on. Saturating is
+    // safe because reconcile() only ever consumes min(shortfall, credit): a saturated credit still
+    // caps at whatever the trade actually needs, it can never over-credit.
+    te::TradeReconciler reconciler;
+    reconciler.observe(makeEvent(te::EventKind::add, 555, 7'000'000, 100'000'000), te::Qty{});
+
+    auto firstModify = makeEvent(te::EventKind::modify, 555, 7'000'000, 90'000'000);
+    reconciler.observe(firstModify, te::Qty{std::numeric_limits<std::int64_t>::max()});
+
+    auto secondModify = makeEvent(te::EventKind::modify, 555, 7'000'000, 90'000'000);
+    secondModify.venue_timestamp_us = firstModify.venue_timestamp_us;
+    reconciler.observe(secondModify, te::Qty{1'000'000});
+
+    // Unwrapped, the second credit would have wrapped the total negative, leaving the trade
+    // uncovered and manufacturing a spurious correction. Saturated, the credit absorbs it fully.
+    auto trade = makeTrade(999, 555, 6'000'000);
+    trade.venue_timestamp_us = firstModify.venue_timestamp_us;
+    EXPECT_TRUE(reconciler.reconcile(trade).empty());
 }

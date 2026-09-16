@@ -333,6 +333,47 @@ TEST(CaptureCoordinator, RejectsCaptureWhoseDeclaredByteCountExceedsWhatWasActua
     EXPECT_EQ(*result.errorIf(), te::CaptureCoordinatorError::capture_validation_failure);
 }
 
+TEST(CaptureCoordinator, RejectsCheckpointWhoseAggregatedQuantityWouldOverflow) {
+    const TempCaptureDirectory capture{"te_capture_coordinator_checkpoint_overflow"};
+    writeTextFile(capture.path() / "manifest.json", R"({
+      "format_version": 2,
+      "venue": "bitstamp",
+      "instrument": "btcusd",
+      "segments": [{
+        "index": 0,
+        "payload": "segment-0000.jsonl",
+        "frame_index": "segment-0000.frames.jsonl",
+        "snapshot": "segment-0000.snapshot",
+        "checkpoint": "checkpoint-0000.snapshot",
+        "payload_bytes": 0,
+        "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames_bytes": 0,
+        "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames": 0,
+        "order_events": 0,
+        "trade_events": 0,
+        "control_frames": 0,
+        "chain_valid": true
+      }]
+    })");
+    writeTextFile(capture.path() / "segment-0000.snapshot",
+                  R"({"microtimestamp":"1000","bids":[],"asks":[]})");
+    // Two orders at the SAME price, each just over half of INT64_MAX units (8 decimal places, so
+    // 92233720368.0 -> 9223372036800000000 units). Individually valid; aggregating them onto one
+    // level overflows. Unguarded this wraps negative and the comparison silently reports a
+    // nonsense expected quantity instead of refusing the checkpoint.
+    writeTextFile(capture.path() / "checkpoint-0000.snapshot",
+                  R"({"microtimestamp":"2000","bids":[["100.00","92233720368.00000000","42"],)"
+                  R"(["100.00","92233720368.00000000","43"]],"asks":[]})");
+    writeEmptyStreams(capture, "segment-0000");
+
+    const auto result = te::captureCoordinator(capture.path(), btcUsd());
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::CaptureCoordinatorError::checkpoint_quantity_overflow);
+}
+
 TEST(CaptureCoordinator, GoldenCaptureMatchesIndependentCheckpoint) {
     const std::filesystem::path capture =
         std::filesystem::path{TE_TEST_DATA_DIR} / "joined-capture-golden";

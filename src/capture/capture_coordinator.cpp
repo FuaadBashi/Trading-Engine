@@ -80,19 +80,29 @@ Result<CaptureReplayReport, CaptureCoordinatorError> captureCoordinator(const st
             std::unordered_map<Price, Qty, PriceHash> expectedBids;
             std::unordered_map<Price, Qty, PriceHash> expectedAsks;
 
+            // Aggregating many orders onto one price level is the same accumulation PriceLevel
+            // guards, so it gets PriceLevel's actual contract: check, refuse, leave state
+            // unchanged -- not saturate and carry on with a silently wrong total.
             for (const bitstamp::SnapshotOrder& order : capture.checkpoint->orders) {
-                if (order.side == Side::buy) {
-                    expectedBids[order.price].units += order.quantity.units;
-                } else if (order.side == Side::sell) {
-                    expectedAsks[order.price].units += order.quantity.units;
+                if (order.side != Side::buy && order.side != Side::sell) {
+                    continue;
                 }
+                Qty& runningTotal = (order.side == Side::buy) ? expectedBids[order.price]
+                                                              : expectedAsks[order.price];
+                if (runningTotal.units >
+                    std::numeric_limits<std::int64_t>::max() - order.quantity.units) {
+                    return Result<CaptureReplayReport, CaptureCoordinatorError>::failure(
+                        CaptureCoordinatorError::checkpoint_quantity_overflow);
+                }
+                runningTotal.units += order.quantity.units;
             }
-            // Same check-before-adding shape as price_level.cpp's addOrder. A real book can never
-            // approach SIZE_MAX price levels, but consistency with the project's own standard.
-            checkpointComparison.expectedLevelCount =
-                (expectedBids.size() > std::numeric_limits<std::size_t>::max() - expectedAsks.size())
-                    ? std::numeric_limits<std::size_t>::max()
-                    : expectedBids.size() + expectedAsks.size();
+            // Level counts are bounded by the map sizes themselves, so this can only overflow if
+            // the two maps already exhausted the address space. Checked for consistency.
+            if (expectedBids.size() > std::numeric_limits<std::size_t>::max() - expectedAsks.size()) {
+                return Result<CaptureReplayReport, CaptureCoordinatorError>::failure(
+                    CaptureCoordinatorError::checkpoint_quantity_overflow);
+            }
+            checkpointComparison.expectedLevelCount = expectedBids.size() + expectedAsks.size();
             checkpointComparison.actualLevelCount = replayedBook.levelCount();
 
             for (const auto& [price, expectedQuantity] : expectedBids) {

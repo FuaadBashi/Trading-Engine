@@ -1,5 +1,7 @@
 #include <te/capture/capture_validator.hpp>
 
+#include <limits>
+
 namespace te {
 Result<ValidatedCapture, ValidationError> validateCapture(
     JoinedCapture capture, const SegmentDescription& declared)
@@ -41,9 +43,19 @@ Result<ValidatedCapture, ValidationError> validateCapture(
 
     };
 
+    // Same check-before-adding standard as price_level.cpp. Two vector sizes plus a counter can
+    // only overflow a uint64 on a machine that could not hold the vectors in the first place, but
+    // an unchecked sum here would make a corrupt manifest look like a matching one.
+    constexpr std::uint64_t kMaxFrameCount = std::numeric_limits<std::uint64_t>::max();
+    const std::uint64_t orderCount = capture.jc_captureOrderEvents.size();
+    const std::uint64_t tradeCount = capture.jc_tradeEvents.size();
+    if (orderCount > kMaxFrameCount - tradeCount ||
+        orderCount + tradeCount > kMaxFrameCount - capture.actualControlFrameCount) {
+        return Result<ValidatedCapture, ValidationError>::failure(
+            ValidationError::frame_count_mismatch);
+    }
     const std::uint64_t actualFrameCount =
-        capture.jc_captureOrderEvents.size() + capture.jc_tradeEvents.size() +
-        capture.actualControlFrameCount;
+        orderCount + tradeCount + capture.actualControlFrameCount;
     if (actualFrameCount != declared.declaredFrameCount) {
         return Result<ValidatedCapture, ValidationError>::failure(
             ValidationError::frame_count_mismatch);
