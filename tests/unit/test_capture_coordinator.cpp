@@ -65,14 +65,14 @@ TEST(CaptureCoordinator, ReportsMatchingCheckpoint) {
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
         "checkpoint": "checkpoint-0000.snapshot",
-        "payload_bytes": 100,
-        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "frames_bytes": 50,
-        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-        "frames": 4,
-        "order_events": 2,
-        "trade_events": 1,
-        "control_frames": 1,
+        "payload_bytes": 0,
+        "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames_bytes": 0,
+        "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames": 0,
+        "order_events": 0,
+        "trade_events": 0,
+        "control_frames": 0,
         "chain_valid": true
       }]
     })");
@@ -107,14 +107,14 @@ TEST(CaptureCoordinator, ReportsWrongQuantityAsMismatch) {
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
         "checkpoint": "checkpoint-0000.snapshot",
-        "payload_bytes": 100,
-        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "frames_bytes": 50,
-        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-        "frames": 4,
-        "order_events": 2,
-        "trade_events": 1,
-        "control_frames": 1,
+        "payload_bytes": 0,
+        "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames_bytes": 0,
+        "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames": 0,
+        "order_events": 0,
+        "trade_events": 0,
+        "control_frames": 0,
         "chain_valid": true
       }]
     })");
@@ -147,14 +147,14 @@ TEST(CaptureCoordinator, ReportsUnexpectedActualLevel) {
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
         "checkpoint": "checkpoint-0000.snapshot",
-        "payload_bytes": 100,
-        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "frames_bytes": 50,
-        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-        "frames": 4,
-        "order_events": 2,
-        "trade_events": 1,
-        "control_frames": 1,
+        "payload_bytes": 0,
+        "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames_bytes": 0,
+        "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames": 0,
+        "order_events": 0,
+        "trade_events": 0,
+        "control_frames": 0,
         "chain_valid": true
       }]
     })");
@@ -185,14 +185,14 @@ TEST(CaptureCoordinator, LeavesCheckpointComparisonEmptyWhenCheckpointIsAbsent) 
         "payload": "segment-0000.jsonl",
         "frame_index": "segment-0000.frames.jsonl",
         "snapshot": "segment-0000.snapshot",
-        "payload_bytes": 100,
-        "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "frames_bytes": 50,
-        "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-        "frames": 4,
-        "order_events": 2,
-        "trade_events": 1,
-        "control_frames": 1,
+        "payload_bytes": 0,
+        "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames_bytes": 0,
+        "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames": 0,
+        "order_events": 0,
+        "trade_events": 0,
+        "control_frames": 0,
         "chain_valid": true
       }]
     })");
@@ -220,14 +220,14 @@ TEST(CaptureCoordinator, ProcessesEverySegmentIndependently) {
           "payload": "segment-0000.jsonl",
           "frame_index": "segment-0000.frames.jsonl",
           "snapshot": "segment-0000.snapshot",
-          "payload_bytes": 100,
-          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "frames_bytes": 50,
-          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-          "frames": 4,
-          "order_events": 2,
-          "trade_events": 1,
-          "control_frames": 1,
+          "payload_bytes": 0,
+          "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "frames_bytes": 0,
+          "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "frames": 0,
+          "order_events": 0,
+          "trade_events": 0,
+          "control_frames": 0,
           "chain_valid": true
         },
         {
@@ -235,14 +235,14 @@ TEST(CaptureCoordinator, ProcessesEverySegmentIndependently) {
           "payload": "segment-0001.jsonl",
           "frame_index": "segment-0001.frames.jsonl",
           "snapshot": "segment-0001.snapshot",
-          "payload_bytes": 100,
-          "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "frames_bytes": 50,
-          "frames_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-          "frames": 4,
-          "order_events": 2,
-          "trade_events": 1,
-          "control_frames": 1,
+          "payload_bytes": 0,
+          "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "frames_bytes": 0,
+          "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "frames": 0,
+          "order_events": 0,
+          "trade_events": 0,
+          "control_frames": 0,
           "chain_valid": true
         }
       ]
@@ -294,6 +294,43 @@ TEST(CaptureCoordinator, RejectsManifestAndSpecMismatch) {
     ASSERT_FALSE(result.hasValue());
     ASSERT_NE(result.errorIf(), nullptr);
     EXPECT_EQ(*result.errorIf(), te::CaptureCoordinatorError::manifest_spec_mismatch);
+}
+
+TEST(CaptureCoordinator, RejectsCaptureWhoseDeclaredByteCountExceedsWhatWasActuallyWritten) {
+    const TempCaptureDirectory capture{"te_capture_coordinator_truncated_payload"};
+    writeTextFile(capture.path() / "manifest.json", R"({
+      "format_version": 2,
+      "venue": "bitstamp",
+      "instrument": "btcusd",
+      "segments": [{
+        "index": 0,
+        "payload": "segment-0000.jsonl",
+        "frame_index": "segment-0000.frames.jsonl",
+        "snapshot": "segment-0000.snapshot",
+        "payload_bytes": 5,
+        "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames_bytes": 0,
+        "frames_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frames": 0,
+        "order_events": 0,
+        "trade_events": 0,
+        "control_frames": 0,
+        "chain_valid": true
+      }]
+    })");
+    writeTextFile(capture.path() / "segment-0000.snapshot",
+                  R"({"microtimestamp":"1000","bids":[],"asks":[]})");
+    // Manifest declares 5 payload bytes; the payload file actually written is empty -- the
+    // truncated-capture scenario the loader-completeness check exists to catch. loadSegment()
+    // still succeeds (0 payload lines, 0 frame-index lines is internally consistent), so this
+    // exercises validateCapture()'s rejection specifically, not a load failure.
+    writeEmptyStreams(capture, "segment-0000");
+
+    const auto result = te::captureCoordinator(capture.path(), btcUsd());
+
+    ASSERT_FALSE(result.hasValue());
+    ASSERT_NE(result.errorIf(), nullptr);
+    EXPECT_EQ(*result.errorIf(), te::CaptureCoordinatorError::capture_validation_failure);
 }
 
 TEST(CaptureCoordinator, GoldenCaptureMatchesIndependentCheckpoint) {

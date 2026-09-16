@@ -8,7 +8,9 @@ namespace te {
 
 enum class ValidationError {
     payload_size_mismatch,
+    payload_hash_mismatch,        
     frame_index_size_mismatch,
+    frame_index_hash_mismatch,
     frame_count_mismatch,
     order_event_count_mismatch,
     trade_event_count_mismatch,

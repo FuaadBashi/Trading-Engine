@@ -15,7 +15,8 @@ enum class CaptureCoordinatorError {
     manifest_failure,
     manifest_spec_mismatch,
     segment_load_failure,
-    replay_failure
+    replay_failure,
+    capture_validation_failure,
 };
 
 struct CheckpointComparison {

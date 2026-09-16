@@ -1,5 +1,6 @@
 
 #include "te/capture/capture_coordinator.hpp"
+#include "te/capture/capture_validator.hpp"
 #include "te/capture/manifest_reader.hpp"
 #include "te/capture/segment_loader.hpp"
 #include <te/feed/bitstamp/replay.hpp>
@@ -8,12 +9,11 @@
 
 namespace te {
 
-    
 Result<CaptureReplayReport, CaptureCoordinatorError> captureCoordinator(const std::filesystem::path& captureDirectory, InstrumentSpec spec)
 {
     bitstamp::Replay replay;
     CaptureReplayReport captureReplayReport;
-    
+
     const auto manifestResult = manifestReader(captureDirectory);
     if (!manifestResult.hasValue()) {
         return Result<CaptureReplayReport, CaptureCoordinatorError>::failure(
@@ -28,59 +28,61 @@ Result<CaptureReplayReport, CaptureCoordinatorError> captureCoordinator(const st
     }
 
     for (const SegmentDescription& segment : captureManifest.segments){
-        std::uint64_t cutoff{};
         SegmentReplayReport segmentReport;
-        const auto loadResult = loadSegment(segment, spec);
 
+        Result<JoinedCapture, JoinedCaptureError> loadResult = loadSegment(segment, spec);
         if (!loadResult.hasValue()) {
             return Result<CaptureReplayReport, CaptureCoordinatorError>::failure(
                 CaptureCoordinatorError::segment_load_failure);
         }
-        const JoinedCapture& joinedCapture = *loadResult.valueIf();
-        cutoff = joinedCapture.seed.microtimestamp;
-        if (joinedCapture.checkpoint.has_value()) {
-            cutoff = joinedCapture.checkpoint->microtimestamp;
+
+        const Result<ValidatedCapture, ValidationError> validated =
+            validateCapture(std::move(*loadResult.valueIf()), segment);
+        if (!validated.hasValue()) {
+            return Result<CaptureReplayReport, CaptureCoordinatorError>::failure(
+                CaptureCoordinatorError::capture_validation_failure);
+        }
+
+        const JoinedCapture& capture = validated.valueIf()->capture();
+
+        std::uint64_t cutoff = capture.seed.microtimestamp;
+        if (capture.checkpoint.has_value()) {
+            cutoff = capture.checkpoint->microtimestamp;
         } else {
-            
-          if (!joinedCapture.jc_captureOrderEvents.empty()) {
-            cutoff = std::max(
-                cutoff,
-                joinedCapture.jc_captureOrderEvents.back()
-                    .event.venue_timestamp_us);
+            if (!capture.jc_captureOrderEvents.empty()) {
+                cutoff = std::max(
+                    cutoff,
+                    capture.jc_captureOrderEvents.back().event.venue_timestamp_us);
+            }
+            if (!capture.jc_tradeEvents.empty()) {
+                cutoff = std::max(
+                    cutoff,
+                    capture.jc_tradeEvents.back().event.venue_timestamp_us);
+            }
         }
 
-        if (!joinedCapture.jc_tradeEvents.empty()) {
-            cutoff = std::max(
-                cutoff,
-                joinedCapture.jc_tradeEvents.back()
-                    .event.venue_timestamp_us);
-        }
-        }
-
-         Result<bitstamp::ReplayResult, bitstamp::ReplayError> replayResults = replay.replay (
-            joinedCapture.seed, 
-            joinedCapture.jc_captureOrderEvents, 
-            joinedCapture.jc_tradeEvents,
+        Result<bitstamp::ReplayResult, bitstamp::ReplayError> replayResults = replay.replay(
+            capture.seed,
+            capture.jc_captureOrderEvents,
+            capture.jc_tradeEvents,
             cutoff
         );
-        if (!replayResults.hasValue()){
+        if (!replayResults.hasValue()) {
             return Result<CaptureReplayReport, CaptureCoordinatorError>::failure(
                 CaptureCoordinatorError::replay_failure);
         }
         const bitstamp::ReplayResult& replayed = *replayResults.valueIf();
         const OrderBook& replayedBook = replayed.book;
 
-        if (joinedCapture.checkpoint.has_value()){
+        if (capture.checkpoint.has_value()) {
             CheckpointComparison checkpointComparison;
             std::unordered_map<Price, Qty, PriceHash> expectedBids;
             std::unordered_map<Price, Qty, PriceHash> expectedAsks;
 
-
-            for (const bitstamp::SnapshotOrder& order : joinedCapture.checkpoint->orders) {
-                if (order.side == Side::buy){
+            for (const bitstamp::SnapshotOrder& order : capture.checkpoint->orders) {
+                if (order.side == Side::buy) {
                     expectedBids[order.price].units += order.quantity.units;
-
-                } else if (order.side == Side::sell){
+                } else if (order.side == Side::sell) {
                     expectedAsks[order.price].units += order.quantity.units;
                 }
             }
@@ -88,25 +90,21 @@ Result<CaptureReplayReport, CaptureCoordinatorError> captureCoordinator(const st
             checkpointComparison.actualLevelCount = replayedBook.levelCount();
 
             for (const auto& [price, expectedQuantity] : expectedBids) {
-                const Qty actualQuantity =
-                    replayedBook.qtyAt(Side::buy, price);
-           
+                const Qty actualQuantity = replayedBook.qtyAt(Side::buy, price);
+
                 if (actualQuantity.units != 0) {
                     ++checkpointComparison.expectedLevelsPresent;
                 }
-
                 if (actualQuantity != expectedQuantity) {
                     ++checkpointComparison.mismatchedExpectedLevels;
                 }
             }
             for (const auto& [price, expectedQuantity] : expectedAsks) {
-                const Qty actualQuantity =
-                    replayedBook.qtyAt(Side::sell, price);
+                const Qty actualQuantity = replayedBook.qtyAt(Side::sell, price);
 
                 if (actualQuantity.units != 0) {
                     ++checkpointComparison.expectedLevelsPresent;
                 }
-
                 if (actualQuantity != expectedQuantity) {
                     ++checkpointComparison.mismatchedExpectedLevels;
                 }
@@ -122,16 +120,12 @@ Result<CaptureReplayReport, CaptureCoordinatorError> captureCoordinator(const st
             segmentReport.checkpointComparison = checkpointComparison;
         }
 
-
         segmentReport.cutoffMicros = cutoff;
         segmentReport.replayStats = replayed.stats;
         segmentReport.segmentIndex = segment.index;
         segmentReport.finalBookDigest = replayed.book.digest();
         captureReplayReport.segments.push_back(segmentReport);
-        
-    };
-
-
+    }
 
     return Result<CaptureReplayReport, CaptureCoordinatorError>::success(captureReplayReport);
 }
