@@ -1,0 +1,8 @@
+# Pinned by exact version, same reasoning as ADR 0001's C++ dependency pins: the version lives
+# with its declaration, not in CI config or a developer's global environment.
+#
+# Only test_dump_raw_ws_bitstamp.py needs this, and only at import time -- it registers a fake
+# websockets module in sys.modules before importing the capture script, so the real package's
+# behavior is never exercised. The pin exists so "pip install" is reproducible, not because the
+# tests touch the network library itself.
+websockets==15.0.1

@@ -24,8 +24,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Test architecture guards
-        run: python3 tests/python/test_architecture_guards.py
+      # Pinned to match the version the Python tests are actually verified against locally
+      # (.venv/pyvenv.cfg records 3.9.6). Same reasoning as the C++ dependency pins in
+      # cmake/dependencies.cmake: an explicit version, not whatever the runner image ships today.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install Python test dependencies
+        run: pip install -r tests/python/requirements.txt
+
+      # Runs all four tests/python/test_*.py files, not just test_architecture_guards.py -- the
+      # recorder and capture-checker tests (test_audit_book_bootstrap, test_dump_raw_ws_bitstamp,
+      # test_validate_joined_capture) previously never ran in CI and could break unnoticed.
+      - name: Run Python tests
+        run: python3 -m unittest discover -s tests/python -p "test_*.py" -v
 
       - name: Enforce architecture guards
         run: python3 scripts/check_architecture_guards.py
@@ -42,6 +56,24 @@ jobs:
             export CC=gcc CXX=g++
           fi
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DTE_SANITIZE=address,undefined
+
+      - name: Build
+        run: cmake --build build --parallel 2
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  release:
+    runs-on: ubuntu-24.04
+
+    # Debug's own checks (assert()-based structural validation, sanitizers) go silent under
+    # NDEBUG. This job is the only thing that builds and tests what actually ships.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build --parallel 2
