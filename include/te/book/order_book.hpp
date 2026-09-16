@@ -62,7 +62,10 @@ public:
     // Every rejected event has a reason; callers decide whether it means bad input or resync.
     [[nodiscard]] Result<ApplyOutcome, ApplyError> apply(const OrderEvent& orderEvent);
 
-    // Debug assertions for index, locator, level, and aggregate invariants.
+    // Debug-only: every check inside is assert(), which NDEBUG (release builds) compiles out
+    // entirely. Calling this from code that also runs in release still walks the whole book for
+    // zero effect -- guard the call site with #ifndef NDEBUG, as order_book.cpp's own apply()
+    // does, rather than relying on this function to protect itself.
     void validateStructure() const;
 
     // Empty side is absence, never a sentinel price.

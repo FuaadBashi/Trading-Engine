@@ -172,7 +172,12 @@ Result<ReplayResult, ReplayError> Replay::replay(BookSnapshot seed,
     replayStats.orderEventsAfterCutoff = cursor.ordersAfterCutoff();
     replayStats.tradeEventsAfterCutoff = cursor.tradesAfterCutoff();
 
+    // Debug-only, like order_book.cpp's own per-apply() call: every check inside validateStructure
+    // is assert(), so it is a silent no-op under NDEBUG. Guarding the call means release builds
+    // skip the walk entirely instead of paying for a check that verifies nothing.
+#ifndef NDEBUG
     orderBook.validateStructure();
+#endif
     replayStats.reconciler = tradeReconciler.stats();
     return Result<ReplayResult, ReplayError>::success(
         ReplayResult{.book = std::move(orderBook), .stats = replayStats});
