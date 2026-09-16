@@ -41,10 +41,18 @@ Freshly verified on **2026-09-15**: a clean out-of-tree configure and build pass
 tests**. Two cautions from that run:
 
 - The checked-in `build/` directory no longer configures (`FindThreads only works if either C or CXX
-  language is enabled`). The source is fine; the cache is stale. Configure a fresh build directory
-  rather than trusting `build/`. Still true as of 2026-09-16 — not yet repaired.
+  language is enabled`). The source is fine; the cache is stale. **Rediagnosed and repaired
+  2026-09-16 — the cause was not a stale cache.** iCloud had written 33 conflict-duplicate entries
+  into the build trees (`CMakeFiles 2`, `_deps 2`, `README 2.md`, and a stray
+  `compile_commands 2.json` at the repo root), which is what corrupted the cache. By 2026-09-16 the
+  old directory did configure again, but took 135 s (57 s configure + 78 s generate) because iCloud
+  was materializing those duplicates. `build/` and `build-asan/` were deleted and rebuilt clean.
+  **This will recur** while build output lives inside the iCloud-synced Desktop tree — see TODO
+  section A.
 - The corpus tests depend on gitignored capture data that macOS had evicted to iCloud
-  (`ls -lO` showed `dataless`; reads returned empty). `brctl download` restored it.
+  (`ls -lO` showed `dataless`; reads returned empty). `brctl download` restored it. **Re-verified
+  2026-09-16: `find data -type f -flags +dataless` returns nothing, 470 MB materialized locally.**
+  An off-iCloud backup copy of `data/` has still not been verified to exist.
 
 Freshly verified on **2026-09-16** (same out-of-tree build directory, not the stale checked-in
 `build/`): **325 of 325 tests**. The loader-completeness gap noted above is now closed —
@@ -91,6 +99,26 @@ used at every `Result<T,E>` call site. This time verified against real `gcc-15`/
 Homebrew) and clang locally, in both Debug+sanitizers and Release, before pushing — then confirmed
 green in CI itself. **Lesson: a CI config change needs the same real-compiler local verification as
 a source change — AppleClang alone had already missed two real gcc-only failures this session.**
+
+A review pass then caught three things the above had wrong, fixed in `0046609` / `6af332d`:
+the coordinator overflow guard had been put on the level-**count** sum while the quantity
+**accumulation** it was meant to protect (`expectedBids[price].units +=`) stayed open — that one now
+refuses with a named `checkpoint_quantity_overflow` rather than saturating; the two tests the
+done-when lines asked for (forcing the checkpoint overflow, forcing the reconciler's saturation
+branch) did not exist and now do; and `capture_validator.hpp` still carried a
+`TODO(fuaad): write this yourself` plus a comment claiming `Replay::replay()` should take
+`ValidatedCapture`, contradicting the deliberate choice of coordinator-side enforcement.
+
+**ADR 0015 (2026-09-16) settles allocation-failure policy**, which had been decided twice by
+accident in code and never written down. Heap exhaustion is now **fatal to the process**: no
+`catch`, no rollback, and `ApplyError::allocation_failure` is removed so `ApplyError` stays scoped
+to bad market input as ADR 0012 requires. This is explicitly an **interim** position whose whole
+correctness argument is that *nothing anywhere catches `std::bad_alloc`* — verified true at the time
+of writing (zero `catch` blocks in `src/`, `include/`, `apps/`, `tests/`). The first `catch (...)`
+added above `apply()` on the stack turns this into a ghost-book bug. Moving to the safe-object form
+(RAII rollback, exception still propagates) is planned; ADR 0015 lists the exact triggers that
+should force it, and notes `noexcept` on `apply()` as the cheapest way to enforce today's
+assumption rather than trust it.
 
 The trust/shape interface changes, glossary and ADR 0014 (proposed at the time) formerly listed here
 as uncommitted were committed in `6b5c0ab`. `d00e244` also clears the prior failure reason when
@@ -156,13 +184,15 @@ now closed: all eight ADR 0014 questions are answered and recorded as D1-D8, rev
 accepted on 15 September 2026. Do not restart the operational-state discussion (D1) or any of D2-D8
 without first reading the ADR — the reasoning behind each is written there, not just the conclusion.
 
-Engine implementation now waits only on section C's one remaining foundation repair: the order
-book's allocation rollback gap (`order_book.cpp:57,125` / `price_level.cpp:15` — a thrown
-`std::bad_alloc` during insertion skips the existing rollback, which only runs on the normal-return
-path). Needs a decision first: is out-of-memory recoverable or fatal here? Everything else in
-section C — capture admission, the two unguarded aggregations, the skip-vs-fail test, CI Python
-coverage, the release-mode structural check — is done as of 2026-09-16 (above). The older progress
-guide is explanatory background, not authority over the new list.
+**Section C is closed as of 2026-09-16.** Capture admission, the overflow guards, the skip-vs-fail
+test, CI Python coverage, the release-mode structural check, and the allocation-failure policy
+(ADR 0015) are all done. Engine implementation — section D, starting with the money tracker — is no
+longer blocked. The older progress guide is explanatory background, not authority over the new list.
+
+Two caveats carried forward rather than closed: ADR 0015's fatal-process position is interim and
+rests on nothing catching `std::bad_alloc`, and the `applyModify` price-change path has a second
+exposure (a throw between the destination insert and the source `removeOrder()` leaves the order in
+two levels) that only the safe-object form fixes.
 
 ## Stage 5 versus Stage 9 scope
 

@@ -17,6 +17,9 @@ struct ApplyOutcome {
     bool removedLevel{};
 };
 
+// Reasons an event was rejected. Every value here is BAD MARKET INPUT (ADR 0012). Heap exhaustion
+// is deliberately absent: ADR 0015 makes it fatal to the process, so it propagates as an exception
+// rather than becoming an ApplyError a caller might mistake for a recoverable bad event.
 enum class ApplyError {
     duplicate_order_id,
     unknown_order_id,
@@ -26,7 +29,6 @@ enum class ApplyError {
     level_quantity_overflow,
     invalid_side,
     invalid_event_kind,
-    allocation_failure,
 };
 
 // Observable top-of-book shape. This reports market state, not whether the feed is trustworthy.

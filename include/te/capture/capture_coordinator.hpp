@@ -18,6 +18,7 @@ enum class CaptureCoordinatorError {
     replay_failure,
     capture_validation_failure,
     checkpoint_quantity_overflow,
+    
 };
 
 struct CheckpointComparison {

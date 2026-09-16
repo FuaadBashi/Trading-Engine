@@ -1,6 +1,5 @@
 #include <cassert>
 #include <te/book/order_book.hpp>
-#include <new>
 
 namespace te {
 
@@ -53,23 +52,20 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyAdd(const OrderEvent& orderEven
         return Result<ApplyOutcome, ApplyError>::failure(ApplyError::invalid_price);
     }
 
+    // Allocation failure is deliberately NOT handled here: ADR 0015 makes heap exhaustion fatal to
+    // the process, not a market-data error. A throw from addOrder() or orderIndex_.emplace()
+    // propagates out of apply(), and this OrderBook may be left with an empty price level -- which
+    // is only safe because nothing catches std::bad_alloc, so the book always dies with the stack.
+    // If a caller ever starts catching it, this becomes a ghost-book bug: an empty level IS the
+    // best price (bestBid/bestAsk read the map, not quantity) and digest() skips zero-quantity
+    // levels, so the book would lie about top-of-book while hashing identically.
     auto& levels = (orderEvent.side == Side::buy) ? bids_ : asks_;
     auto [levelIt, createdLevel] = levels.try_emplace(orderEvent.price);
-    std::optional<OrderHandle> orderHandle;
-    try {
-        orderHandle = levelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
-    } catch (const std::bad_alloc&) {
-        // addOrder() only mutates the level after its own insert succeeds (price_level.cpp), so a
-        // throw here never leaves the level itself in a partial state -- the only thing to roll
-        // back is a level try_emplace created solely for this call, same shape as the
-        // orderIndex_.emplace() catch below.
-        if (createdLevel) {
-            levels.erase(levelIt);
-        }
-        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::allocation_failure);
-    }
+    const std::optional<OrderHandle> orderHandle =
+        levelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
     if (!orderHandle.has_value()) {
-        // Roll back a level created solely for this failed insertion.
+        // Roll back a level created solely for this failed insertion. This is the graceful
+        // quantity-overflow path (a normal return), not the throw path above.
         if (createdLevel) {
             levels.erase(levelIt);
         }
@@ -81,18 +77,7 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyAdd(const OrderEvent& orderEven
         .price = orderEvent.price,
         .order_pos = *orderHandle,
     };
-    try {
     orderIndex_.emplace(orderEvent.order_id, orderLocator);
-    } catch (const std::bad_alloc&) {
-        levelIt->second.removeOrder(*orderHandle);
-
-        if (createdLevel) {
-            levels.erase(levelIt);
-        }
-
-        return Result<ApplyOutcome, ApplyError>::failure(
-            ApplyError::allocation_failure);
-    }
 
     return Result<ApplyOutcome, ApplyError>::success(
         ApplyOutcome{.createdLevel = createdLevel});
@@ -137,20 +122,15 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderE
         return Result<ApplyOutcome, ApplyError>::success(ApplyOutcome{});
     }
 
-    // Insert at the destination first. If it overflows or allocation fails, the original order
-    // is untouched -- oldLevelIt/locator aren't touched until after this succeeds.
+    // Insert at the destination first, so a graceful overflow leaves the original order untouched.
+    // Allocation failure is fatal and unhandled here for the same reason as applyAdd -- see ADR
+    // 0015. Note this path has a second exposure applyAdd does not: between the destination insert
+    // succeeding and the source removeOrder() below, a throw would leave the order resting in two
+    // levels with the index still naming the old one. Harmless while nothing catches bad_alloc;
+    // it is one of the reasons the safe-object option exists.
     auto [targetLevelIt, createdLevel] = levels.try_emplace(orderEvent.price);
-    std::optional<OrderHandle> newOrderHandle;
-    try {
-        newOrderHandle = targetLevelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
-    } catch (const std::bad_alloc&) {
-        // Same reasoning as applyAdd's identical guard: addOrder() can't leave the level partially
-        // mutated, so only a level try_emplace created solely for this call needs rolling back.
-        if (createdLevel) {
-            levels.erase(targetLevelIt);
-        }
-        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::allocation_failure);
-    }
+    const std::optional<OrderHandle> newOrderHandle =
+        targetLevelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
     if (!newOrderHandle.has_value()) {
         if (createdLevel) {
             levels.erase(targetLevelIt);

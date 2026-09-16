@@ -15,10 +15,13 @@ questions are answered (D1-D8), **ADR 0014 is reviewed and accepted (15 Septembe
 is committed and pushed, and **the loader now checks capture completeness (16 September 2026,
 commit `aef6fc3`, pushed)**.
 
-Nothing is flagged urgent right now. Section A still has two open small jobs (commit the remaining
-uncommitted docs, delete the broken `build/` folder) and section C has a few foundation repairs left
-(the order book's undo path, and whether the iCloud fix actually held) before section D's engine work
-can start — see below.
+**Section C is closed as of 16 September 2026** — allocation-failure policy settled in ADR 0015, the
+`build/` folder repaired, and capture eviction re-verified clean. Section D (the engine, starting
+with the money tracker) is no longer blocked.
+
+Two things carried forward rather than finished: no off-iCloud backup of `data/` has been confirmed,
+and build output still lives in the iCloud-synced tree, so the duplicate-file corruption that broke
+`build/` will recur until that changes. Both are in section A below.
 
 ## A. Protect what you have
 
@@ -26,7 +29,13 @@ Small jobs. Do them first because they stop you losing work.
 
 ### Protect your capture files from being wiped
 
-- [ ] **HIGH | NEW | NO DEADLINE**
+- [ ] **HIGH | NEW | NO DEADLINE** — partly verified 16 September 2026
+
+Eviction check is clean: `find data -type f -flags +dataless` returns nothing and 470 MB is
+materialized locally, so the 13 previously-hollow files are all back. **Still open:** no off-iCloud
+backup copy of `data/` has been confirmed to exist, which is the other half of this task's
+done-when. Note the same iCloud mechanism separately corrupted `build/` (see below), so the risk
+here is live, not historical.
 
 Your project sits in ~/Desktop, which syncs to iCloud. iCloud removes the contents of big files it thinks you are not using, and leaves an empty shell behind. That is what happened to your capture data. The files looked normal but read as empty.
 
@@ -80,7 +89,18 @@ Suggested split: one commit for the review-driven document updates, one for the 
 
 ### Delete the broken build folder
 
-- [ ] **LOW | NEW | NO DEADLINE**
+- [x] **LOW | NEW | NO DEADLINE** — done 16 September 2026
+
+Rediagnosed first: the cause was **not** a stale cache. iCloud had written 33 conflict-duplicate
+entries into the build trees — `CMakeFiles 2`, `_deps 2`, `README 2.md`, plus a stray
+`compile_commands 2.json` at the repo root. `build/` and `build-asan/` were deleted and rebuilt.
+Configure went from 135 seconds to 4.3, and `ctest --test-dir build` passes 327 of 327 from the
+project's own build directory again.
+
+**This will recur** while build output lives inside the iCloud-synced Desktop tree — the duplicates
+come back every time iCloud sees concurrent writes to the same paths. A permanent fix means keeping
+build output out of the synced tree (build to a path outside ~/Desktop, or exclude the build dirs
+from sync). Left as a decision rather than done unilaterally, since it changes your build workflow.
 
 The build/ folder in your project no longer works. It fails before it starts with FindThreads only works if either C or CXX language is enabled. Your source code is fine — only the saved build settings are broken.
 
@@ -278,7 +298,24 @@ Copy the pattern already in `src/book/price_level.cpp:11`.
 
 ### Finish the order book's undo path
 
-- [ ] **MEDIUM | UPDATED | NO DEADLINE**
+- [x] **MEDIUM | UPDATED | NO DEADLINE** — decided and recorded 16 September 2026, ADR 0015
+
+Resolved by **deciding the policy rather than adding more rollback**: heap exhaustion is fatal to
+the process (option 1 of the three below). All three `catch (const std::bad_alloc&)` blocks and
+`ApplyError::allocation_failure` are removed, so `ApplyError` stays scoped to bad market input as
+ADR 0012 requires, and a `bad_alloc` propagates out of `apply()` and ends the process.
+
+Explicitly interim. The entire correctness argument is that **nothing anywhere catches
+`std::bad_alloc`** — verified true when ADR 0015 was written (zero `catch` blocks in `src/`,
+`include/`, `apps/`, `tests/`). The first `catch (...)` added above `apply()` on the stack turns
+this back into a ghost-book bug. ADR 0015 lists the exact triggers that should force the move to
+the safe-object form, and notes `noexcept` on `apply()` as the cheapest way to enforce today's
+assumption instead of trusting it.
+
+Also still true and documented there: `applyModify`'s price-change path has a second exposure
+`applyAdd` does not — a throw between the destination insert and the source `removeOrder()` leaves
+the order resting in two levels with the index naming the old one. Only the safe-object form fixes
+that.
 
 When adding an order, the book first creates a new price level, then adds the order to it. If the second step runs out of memory and throws, the cleanup code never runs, because that cleanup only sits on the normal return path. An empty price level is left behind, and the error escapes as an exception instead of the error value the function promises.
 
@@ -490,6 +527,23 @@ I did not guess at any of these. Answer them and I will fold them in.
 Finished work, newest first. Kept short.
 
 ### This week
+
+- [x] Settled allocation-failure policy in **ADR 0015**: heap exhaustion is fatal to the process,
+  not an `ApplyError`. Removed all three `catch (const std::bad_alloc&)` blocks and
+  `ApplyError::allocation_failure`. Interim by design — the argument rests on nothing catching
+  `bad_alloc`, which ADR 0015 records along with the triggers that should force the safe-object
+  form. 16 Sep
+
+- [x] Repaired `build/`. The "stale cache" diagnosis was wrong: iCloud had written 33
+  conflict-duplicate entries into the build trees. Deleted and rebuilt; configure 135 s → 4.3 s,
+  327 of 327 passing from the project's own build directory. 16 Sep
+
+- [x] Re-verified capture eviction is clean — no `dataless` files, 470 MB materialized. 16 Sep
+
+- [x] Fixed a review-caught error in the previous overflow pass: the guard had been put on the level
+  **count** sum while the quantity **accumulation** it was meant to protect stayed open. Added the
+  two tests the done-when lines had asked for and that did not exist. Cleared three stale claims in
+  `capture_validator.hpp`. Commits `0046609`, `6af332d`. 16 Sep
 
 - [x] CI now runs all four Python test files (was one) and pins Python, websockets, and both
   cmake/dependencies.cmake downloads. Added a release-mode CI job. Made validateStructure()'s
