@@ -235,7 +235,11 @@ The silent-success line is `segment_loader.cpp:101`.
 
 ### Fix the test that should skip but fails instead
 
-- [ ] **MEDIUM | NEW | NO DEADLINE**
+- [x] **MEDIUM | NEW | NO DEADLINE** — done 16 September 2026, commit `e2cc1ff`
+
+`RealCaptureReplaysToCheckpointWithNoResiduals` now parses the manifest, then checks the payload
+file it points at actually exists and is non-empty (`std::filesystem::file_size`) before deciding
+to run. An evicted or truncated payload skips with a named reason instead of failing hard.
 
 One test is meant to skip quietly when your private capture data is missing. It only checks that manifest.json exists. That small file survived; the big data file it points to did not. So the test ran anyway and reported a hard failure.
 
@@ -247,7 +251,19 @@ File: tests/unit/test_bitstamp_joined_capture.cpp, lines 349–354
 
 ### Guard the two unchecked sums
 
-- [ ] **MEDIUM | UPDATED | NO DEADLINE**
+- [x] **MEDIUM | UPDATED | NO DEADLINE** — done 16 September 2026, commits `e2cc1ff` and `c43acc0`
+
+Three adds are now guarded, not two — the first pass guarded the wrong one in the coordinator.
+
+- `trade_reconciler.cpp` (fill credits at one timestamp): checks before adding, **saturates** rather
+  than refusing. `observe()` returns `void`, so there is no channel for a named error without an API
+  change. Safe because `reconcile()` only ever consumes `min(shortfall, credit)` — a saturated
+  credit caps at what the trade needs and can never over-credit. Test forces the branch.
+- `capture_coordinator.cpp` checkpoint **quantity** aggregation (`expectedBids[price].units +=`):
+  this is the one the original TODO named and the first pass missed. Now gets `PriceLevel`'s real
+  contract — check, refuse, named `checkpoint_quantity_overflow`, state unchanged. Test forces it.
+- `capture_coordinator.cpp` level **count** sum, plus `capture_validator.cpp`'s frame-total:
+  checked for consistency; both can only overflow on a machine that could not hold the containers.
 
 Two places add numbers together without first checking the result will fit. Everywhere else in your code checks first. In C++, a whole number going past its limit is undefined behaviour — the compiler is allowed to assume it cannot happen, so the result is not simply a wrong number.
 
@@ -274,11 +290,47 @@ Same gap exists when an order changes price.
 
 The throwing line is `src/book/price_level.cpp:15`.
 
-**Decide First**
+**Decide First — and note the code already voted, twice**
 
-Is running out of memory something to recover from, or something to stop on? Today the code promises a recoverable error but does not always deliver one. Pick one and make it consistent.
+`ApplyError::allocation_failure` and a `catch (const std::bad_alloc&)` around `orderIndex_.emplace`
+have been in `applyAdd` since `22bc074`. A later pass (`c43acc0`, committed, **not pushed**) added
+the same catch around the `addOrder()` calls in both `applyAdd` and `applyModify`, closing the
+empty-level leak. Both passes picked **Recoverable** without the decision ever being written down.
+Before pushing `c43acc0`, settle whether that is actually the intended policy.
 
-**Done when:** a failed add or price change leaves the book exactly as it was, with no leftover empty level, and a test forces the failure.
+This is two questions, not one:
+
+1. **Process policy** — if the heap is exhausted, does this process keep running?
+2. **Object safety** — if an allocation throws, is *this* `OrderBook` still a valid object?
+
+They are independent, giving three real options:
+
+- **Fatal process, unsafe object.** Let it throw, leave the empty level. Only safe if the book dies
+  with the stack and nothing ever catches. Fragile — any logger or test that catches `bad_alloc`
+  keeps a corrupt book.
+- **Fatal process, safe object.** RAII rollback guard, then rethrow or terminate. The book is never
+  observable with a ghost level; `Result` stays for market errors only. Closest to ADR 0012, which
+  explicitly calls internal invariant failure "a programming/system failure, not bad market input"
+  and rejected exceptions for the hot path.
+- **Recoverable `ApplyError`.** RAII rollback, return `allocation_failure`. Matches `apply()`'s
+  signature. Owes a test that genuinely injects `bad_alloc`, and owes every caller a policy —
+  `replay.cpp` treats any `apply()` failure other than one specific tolerated `unknown_order_id` as
+  a hard replay failure, so "recoverable at the book" is still fatal at the only real caller today.
+
+Why the empty level is worse than "a level with quantity 0": `bestBid()`/`bestAsk()` read the map,
+not quantity, so an empty level **is** the best price; `qtyAt()` returns 0 behind it; and `digest()`
+skips zero-quantity levels, so the digest is unchanged. That is a book that lies about top-of-book
+while hashing identically — not merely an extra node.
+
+Also note `allocation_failure` puts a system failure into `ApplyError`, which ADR 0012 scoped to bad
+market input. That may be the right call, but it is a contract change, not a local catch.
+
+**Done when:** a failed add or price change leaves the book exactly as it was, with no leftover
+empty level, the chosen policy is written into ADR 0012 (or a new ADR) rather than only into code,
+and a test forces the failure. Note the quantity-overflow tests prove the `nullopt` rollback path,
+**not** the throw path — they are different control flow and must not be treated as covering it.
+Forcing a real `bad_alloc` needs a test seam or an injectable allocator;
+`std::set_new_handler` is process-global and fights ASan.
 
 ### Run the Python tests in CI and pin the downloads
 
