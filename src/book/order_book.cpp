@@ -96,7 +96,14 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderE
     }
 
     auto orderIt = orderIndex_.find(orderEvent.order_id);
-    assert(orderIt != orderIndex_.end());
+    // apply()'s own orderIndex_.contains() guard already makes this unreachable for modify/remove,
+    // but that guard is a separate lookup the optimizer can't connect to this one across the
+    // assert()-strips-in-release boundary -- gcc's -O2 flags the dereference as a potential null
+    // deref (-Wnull-dereference) with nothing but an assert() standing between them. A real branch
+    // fixes the warning and adds defense-in-depth instead of trusting a second, independent lookup.
+    if (orderIt == orderIndex_.end()) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::unknown_order_id);
+    }
     OrderLocator& locator = orderIt->second;
     if (orderEvent.side != locator.side) {
         return Result<ApplyOutcome, ApplyError>::failure(ApplyError::side_mismatch);
@@ -144,7 +151,12 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderE
 
 Result<ApplyOutcome, ApplyError> OrderBook::applyRemove(const OrderEvent& orderEvent) {
     auto orderIt = orderIndex_.find(orderEvent.order_id);
-    assert(orderIt != orderIndex_.end());
+    // Same reasoning as applyModify's identical guard: apply()'s orderIndex_.contains() check
+    // already makes this unreachable, but gcc's -O2 -Wnull-dereference can't see across the
+    // assert()-strips-in-release boundary between that check and this independent lookup.
+    if (orderIt == orderIndex_.end()) {
+        return Result<ApplyOutcome, ApplyError>::failure(ApplyError::unknown_order_id);
+    }
     const OrderLocator& locator = orderIt->second;
     if (orderEvent.side != locator.side) {
         return Result<ApplyOutcome, ApplyError>::failure(ApplyError::side_mismatch);
