@@ -7,10 +7,12 @@
 namespace te {
 
 enum class ValidationError {
-    // TODO(fuaad): name one variant per way a loaded capture can fail to match what the
-    // manifest declared. Candidates from the design discussion: payload size mismatch, payload
-    // hash mismatch, frame index size/hash mismatch, declared vs. actual frame/order/trade
-    // count mismatch, chain_valid false. Decide per-field granularity vs. one generic mismatch.
+    payload_size_mismatch,
+    frame_index_size_mismatch,
+    frame_count_mismatch,
+    order_event_count_mismatch,
+    trade_event_count_mismatch,
+    control_frame_count_mismatch,
 };
 
 // Proves a JoinedCapture matches what its own manifest declared. The private constructor means
@@ -23,7 +25,7 @@ public:
 
 private:
     friend Result<ValidatedCapture, ValidationError> validateCapture(
-        JoinedCapture capture, const SegmentDescription& declared);
+                                    JoinedCapture capture, const SegmentDescription& declared);
 
     explicit ValidatedCapture(JoinedCapture capture) : capture_(std::move(capture)) {}
 

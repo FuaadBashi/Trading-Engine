@@ -40,6 +40,7 @@ target_sources(te_core PRIVATE
     # Core and utilities
     src/core/text_to_int.cpp
     src/core/time.cpp
+    src/core/sha256.cpp
     src/util/byte_buffer.cpp
     src/util/intrusive_list.cpp
 

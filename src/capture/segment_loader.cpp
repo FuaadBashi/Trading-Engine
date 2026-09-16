@@ -1,9 +1,12 @@
 #include "te/capture/segment_loader.hpp"
 
+#include <filesystem>
 #include <fstream>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 #include "simdjson/ondemand.h"
@@ -11,6 +14,7 @@
 #include "simdjson/padded_string.h"
 #include "simdjson/padded_string_view-inl.h"
 #include "simdjson/padded_string_view.h"
+#include "te/core/sha256.hpp"
 #include "te/feed/bitstamp/decoder.hpp"
 #include "te/feed/bitstamp/trade_decoder.hpp"
 
@@ -27,6 +31,23 @@ Result<std::string, JoinedCaptureError> readTextFile(
     std::ostringstream contents;
     contents << file.rdbuf();
     return Result<std::string, JoinedCaptureError>::success(contents.str());
+}
+
+// Reads the whole file as raw bytes and hashes exactly what is on disk. Deliberately not folded
+// into the payload/frame-index getline() loop below: getline() strips the newline delimiter from
+// each line it returns, so hashing the reconstructed lines would hash a different byte sequence
+// than the file actually contains -- and a different sequence than the recorder hashed when it
+// wrote payload_sha256/frames_sha256 into the manifest. This costs a second read of each file;
+// correctness of the comparison matters more than saving one pass over an offline capture file.
+Result<std::string, JoinedCaptureError> hashFile(
+    const std::filesystem::path& path, JoinedCaptureError unreadableError) {
+    const auto contents = readTextFile(path, unreadableError);
+    if (!contents.hasValue()) {
+        return Result<std::string, JoinedCaptureError>::failure(*contents.errorIf());
+    }
+    const std::string& text = *contents.valueIf();
+    return Result<std::string, JoinedCaptureError>::success(
+        sha256Hex(std::as_bytes(std::span{text.data(), text.size()})));
 }
 
 Result<bitstamp::BookSnapshot, JoinedCaptureError> loadSnapshot(
@@ -86,6 +107,34 @@ Result<JoinedCapture, JoinedCaptureError> loadSegment(
     if (!frameIndexInput) {
         return Result<JoinedCapture, JoinedCaptureError>::failure(
             JoinedCaptureError::frame_index_unreadable);
+    }
+
+    // Exact on-disk size, not a running total reconstructed from getline()'d lines -- that would
+    // be off by one per line depending on trailing newline and line-ending convention. Both
+    // ifstreams above already proved these paths exist, so a stat failure here would mean the
+    // file vanished in the moment between opening it and this call; that race is not currently
+    // surfaced as its own error and simply leaves the count at zero.
+    std::error_code sizeError;
+    const auto payloadSize = std::filesystem::file_size(segment.payloadPath, sizeError);
+    if (!sizeError) {
+        joinedCapture.actualPayloadBytes = payloadSize;
+    }
+    const auto frameIndexSize = std::filesystem::file_size(segment.frameIndexPath, sizeError);
+    if (!sizeError) {
+        joinedCapture.actualFrameIndexBytes = frameIndexSize;
+    }
+
+    // Same soft-fail posture as the size lookup above: both ifstreams already proved these paths
+    // are readable, so a failure here is the same vanishingly rare TOCTOU race, not a new error
+    // path. Left empty on failure rather than surfaced as a hard error.
+    const auto payloadHash = hashFile(segment.payloadPath, JoinedCaptureError::payload_unreadable);
+    if (payloadHash.hasValue()) {
+        joinedCapture.actualPayloadSha256 = *payloadHash.valueIf();
+    }
+    const auto frameIndexHash =
+        hashFile(segment.frameIndexPath, JoinedCaptureError::frame_index_unreadable);
+    if (frameIndexHash.hasValue()) {
+        joinedCapture.actualFrameIndexSha256 = *frameIndexHash.valueIf();
     }
 
     simdjson::ondemand::parser frameParser;
@@ -149,7 +198,9 @@ Result<JoinedCapture, JoinedCaptureError> loadSegment(
             }
             joinedCapture.jc_tradeEvents.push_back(
                 CapturedTradeEvent{*decodedTrade.valueIf(), captureOrdinal});
-        } else if (streamKind != "control") {
+        } else if (streamKind == "control") {
+            ++joinedCapture.actualControlFrameCount;
+        } else {
             return Result<JoinedCapture, JoinedCaptureError>::failure(
                 JoinedCaptureError::unknown_stream_kind);
         }

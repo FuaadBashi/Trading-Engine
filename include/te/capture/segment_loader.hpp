@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "te/capture/manifest_reader.hpp"
@@ -31,6 +33,17 @@ struct JoinedCapture {
     std::optional<bitstamp::BookSnapshot> checkpoint;
     std::vector<CapturedOrderEvent> jc_captureOrderEvents;
     std::vector<CapturedTradeEvent> jc_tradeEvents;
+
+    // What loadSegment actually measured while streaming the payload and frame index files --
+    // facts about what was read, not a judgment about whether they match the manifest. That
+    // comparison is validateCapture()'s job, not this struct's.
+    std::uint64_t actualPayloadBytes{};
+    std::uint64_t actualFrameIndexBytes{};
+    std::uint64_t actualControlFrameCount{};
+
+    // TODO(fuaad): populate once a SHA-256 approach is chosen. See loadSegment's comment.
+    std::string actualPayloadSha256;
+    std::string actualFrameIndexSha256;
 };
 
 // One segment is one replay epoch; callers load later manifest segments separately.
