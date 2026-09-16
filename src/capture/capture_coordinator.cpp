@@ -5,6 +5,7 @@
 #include "te/capture/segment_loader.hpp"
 #include <te/feed/bitstamp/replay.hpp>
 #include <algorithm>
+#include <limits>
 #include <unordered_map>
 
 namespace te {
@@ -86,7 +87,12 @@ Result<CaptureReplayReport, CaptureCoordinatorError> captureCoordinator(const st
                     expectedAsks[order.price].units += order.quantity.units;
                 }
             }
-            checkpointComparison.expectedLevelCount = expectedBids.size() + expectedAsks.size();
+            // Same check-before-adding shape as price_level.cpp's addOrder. A real book can never
+            // approach SIZE_MAX price levels, but consistency with the project's own standard.
+            checkpointComparison.expectedLevelCount =
+                (expectedBids.size() > std::numeric_limits<std::size_t>::max() - expectedAsks.size())
+                    ? std::numeric_limits<std::size_t>::max()
+                    : expectedBids.size() + expectedAsks.size();
             checkpointComparison.actualLevelCount = replayedBook.levelCount();
 
             for (const auto& [price, expectedQuantity] : expectedBids) {

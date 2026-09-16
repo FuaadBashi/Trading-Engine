@@ -365,7 +365,18 @@ TEST(BitstampJoinedCapture, RealCaptureReplaysToCheckpointWithNoResiduals) {
     const auto manifest = te::manifestReader(capture);
     ASSERT_TRUE(manifest.hasValue());
     ASSERT_FALSE(manifest.valueIf()->segments.empty());
-    const auto loaded = te::loadSegment(manifest.valueIf()->segments.front(), btcUsd());
+
+    // manifest.json is small and survives iCloud eviction; the payload file it points to is the
+    // one that gets hollowed out. Checking only the manifest's existence let this test run against
+    // an evicted (dataless) payload and fail hard instead of skipping -- check the actual data file.
+    const te::SegmentDescription& segment = manifest.valueIf()->segments.front();
+    std::error_code payloadSizeError;
+    const auto payloadBytes = std::filesystem::file_size(segment.payloadPath, payloadSizeError);
+    if (payloadSizeError || payloadBytes == 0) {
+        GTEST_SKIP() << "OPTIONAL EVIDENCE NOT RUN: manifest.json survived but its payload file\n                        did not (commonly iCloud eviction leaving an empty shell). The committed\n                        golden fixture still proves the pipeline. Missing/empty: " << segment.payloadPath;
+    }
+
+    const auto loaded = te::loadSegment(segment, btcUsd());
     ASSERT_TRUE(loaded.hasValue());
     const te::JoinedCapture& joinedCapture = *loaded.valueIf();
     ASSERT_TRUE(joinedCapture.checkpoint.has_value());

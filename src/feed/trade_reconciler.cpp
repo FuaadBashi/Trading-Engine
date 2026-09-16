@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <limits>
 #include <te/feed/trade_reconciler.hpp>
 
 namespace te {
@@ -23,7 +24,17 @@ void TradeReconciler::observe(const OrderEvent& event, Qty amountTraded) {
 
             AmountTradeInfo& info = ledgerIt->second;
             if (info.timestamp == event.venue_timestamp_us) {
-                info.quantity.units += amountTraded.units;
+                // Same overflow-before-adding shape as price_level.cpp's addOrder: two credits at
+                // the same timestamp for the same order can never realistically sum this high, but
+                // check rather than let it silently wrap. Saturating (not rejecting) is safe here --
+                // reconcile() only ever consumes min(shortfallUnits, credit.quantity.units), so a
+                // saturated credit still caps out at whatever the trade actually needs.
+                if (info.quantity.units >
+                    std::numeric_limits<std::int64_t>::max() - amountTraded.units) {
+                    info.quantity.units = std::numeric_limits<std::int64_t>::max();
+                } else {
+                    info.quantity.units += amountTraded.units;
+                }
             } else {
                 if (info.quantity.units > 0) {
                     ++stats_.staleFillsDiscarded;

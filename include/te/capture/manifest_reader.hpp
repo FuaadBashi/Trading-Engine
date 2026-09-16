@@ -32,9 +32,9 @@ struct SegmentDescription {
 
     
     std::uint64_t declaredPayloadBytes{};
-    std::string declaredPayloadSha256;
+    std::string declaredPayloadSha256{};
     std::uint64_t declaredFrameIndexBytes{};
-    std::string declaredFrameIndexSha256;
+    std::string declaredFrameIndexSha256{};
     std::uint64_t declaredFrameCount{};
     std::uint64_t declaredOrderEventCount{};
     std::uint64_t declaredTradeEventCount{};
