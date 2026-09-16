@@ -10,15 +10,14 @@ No deadlines are set. The old list had none, and you have not given me any. See 
 
 ## Do these first
 
-Six jobs from the original list are now done: capture files are protected, all eight ADR 0014
-questions are answered (D1-D8), **ADR 0014 is reviewed and accepted (15 September 2026)**, and the
-work is committed and pushed.
+Seven jobs from the original list are now done: capture files are protected, all eight ADR 0014
+questions are answered (D1-D8), **ADR 0014 is reviewed and accepted (15 September 2026)**, that work
+is committed and pushed, and **the loader now checks capture completeness (16 September 2026,
+commit `aef6fc3`, not yet pushed)**.
 
-One remains:
-
-1. **Make the loader check the capture file is complete.** Right now a damaged or empty capture
-   loads silently and replay runs on it. This is the biggest correctness risk, and with the ADR
-   accepted it's also the last thing blocking engine work in section D.
+Nothing is flagged urgent right now. Section A still has two open small jobs (commit the remaining
+uncommitted docs, delete the broken `build/` folder) and section C has several foundation repairs
+left before section D's engine work can start — see below.
 
 ## A. Protect what you have
 
@@ -174,7 +173,26 @@ This was item 2a on the old list. This week gave it real evidence and exact loca
 
 ### Make the loader check the capture file is complete
 
-- [ ] **HIGH | UPDATED | NO DEADLINE**
+- [x] **HIGH | UPDATED | NO DEADLINE** — done 16 September 2026, commit `aef6fc3`
+
+`validateCapture()` compares the manifest's declared payload/frame-index size, hash, and frame/order/
+trade/control counts against what was actually loaded, returning a named `ValidationError` on any
+mismatch. `capture_coordinator.cpp` — the one production path from a capture directory to `replay()`
+— now checks `loadSegment()`'s result before touching it, validates immediately after, and reads
+`replay()`'s inputs, the cutoff, and the checkpoint comparison from the validated capture only. There
+is no remaining path for an unvalidated capture to reach replay. A dedicated test proves a capture
+that declares more payload bytes than it actually contains is rejected with
+`CaptureCoordinatorError::capture_validation_failure` before replay runs.
+
+`Replay::replay()` itself was deliberately left unchanged — it has 18+ existing direct call sites in
+`test_bitstamp_replay.cpp`/`test_bitstamp_joined_capture.cpp` that test pure merge-ordering logic with
+synthetic data and have nothing to do with capture files. The enforcement point is the coordinator,
+the only real caller, not the primitive.
+
+Not fully covered: `chain_valid` is read into the manifest (`declaredChainValid`) but `validateCapture()`
+does not compare it against anything yet, and the recorder's `status` field isn't read into the
+manifest struct at all. Left for a follow-up if a gap the byte/hash/count checks miss turns out to
+need it.
 
 Your recorder already writes down exactly what it produced. The C++ loader reads none of it. So a damaged, empty or half-written capture loads without complaint, and replay runs on it.
 
@@ -407,6 +425,12 @@ I did not guess at any of these. Answer them and I will fold them in.
 Finished work, newest first. Kept short.
 
 ### This week
+
+- [x] Wired capture validation into the coordinator: `capture_coordinator.cpp` now checks
+  `loadSegment()`'s result before use, validates it against the manifest immediately after, and
+  reads every downstream value (cutoff, replay inputs, checkpoint comparison) from the validated
+  capture only, so an unvalidated capture has no remaining path to `replay()`. Commit `aef6fc3`,
+  not yet pushed. 16 Sep
 
 - [x] Recovered the capture data. It was not lost — iCloud had emptied the files. One command brought it back. 15 Sep
 

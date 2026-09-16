@@ -1,7 +1,7 @@
 # Status handoff
 
 Use this file to start a fresh assistant session. Source and Git state were rechecked on
-**2026-09-15** at `HEAD d00e244`. This was a documentation refresh, not a fresh C++ build/test run.
+**2026-09-16** at `HEAD aef6fc3` (local only — one commit ahead of `origin/main`, not yet pushed).
 Verify before trusting it with the commands at the end.
 
 Long-range scope and gates: `docs/project-plan-v4.md`
@@ -41,11 +41,19 @@ tests**. Two cautions from that run:
 
 - The checked-in `build/` directory no longer configures (`FindThreads only works if either C or CXX
   language is enabled`). The source is fine; the cache is stale. Configure a fresh build directory
-  rather than trusting `build/`.
+  rather than trusting `build/`. Still true as of 2026-09-16 — not yet repaired.
 - The corpus tests depend on gitignored capture data that macOS had evicted to iCloud
-  (`ls -lO` showed `dataless`; reads returned empty). `brctl download` restored it. Nothing in the
-  loader detects this: the manifest records `payload_bytes`/`payload_sha256` and frame counts, and
-  the C++ reader parses none of them. See TODO section C.
+  (`ls -lO` showed `dataless`; reads returned empty). `brctl download` restored it.
+
+Freshly verified on **2026-09-16** (same out-of-tree build directory, not the stale checked-in
+`build/`): **325 of 325 tests**. The loader-completeness gap noted above is now closed —
+`validateCapture()` compares the manifest's declared payload/frame-index size, hash, and
+frame/order/trade/control counts against what `loadSegment()` actually read, and
+`capture_coordinator.cpp` is now the single enforced path: it checks the load result before use,
+validates immediately after, and reads `replay()`'s inputs, the cutoff, and the checkpoint
+comparison from the validated capture only. Commit `aef6fc3`. Not yet checked: `chain_valid`
+(read into the manifest but not compared) and the recorder's `status` field (not read at all) —
+see TODO section C for the open note.
 
 The trust/shape interface changes, glossary and ADR 0014 (proposed at the time) formerly listed here
 as uncommitted were committed in `6b5c0ab`. `d00e244` also clears the prior failure reason when
@@ -67,6 +75,9 @@ do not discard local work based on an old handoff inventory.
   comparison are implemented.
 - A segment seed must overlap the captured stream; capture refuses a snapshot older than the first
   buffered order event.
+- `validateCapture()` checks a loaded capture against its manifest's declared payload/frame-index
+  size, hash, and frame/order/trade/control counts before `capture_coordinator.cpp` will replay it;
+  a mismatch returns a named `ValidationError` instead of silently replaying incomplete data.
 
 ### Replay and reconstruction
 
@@ -106,9 +117,10 @@ now closed: all eight ADR 0014 questions are answered and recorded as D1-D8, rev
 accepted on 15 September 2026. Do not restart the operational-state discussion (D1) or any of D2-D8
 without first reading the ADR — the reasoning behind each is written there, not just the conclusion.
 
-Engine implementation now waits only on section C's foundation repairs (capture admission, the two
-unguarded aggregations, the allocation rollback gap). The older progress guide is explanatory
-background, not authority over the new list.
+Engine implementation now waits only on section C's remaining foundation repairs (the two unguarded
+aggregations, the allocation rollback gap, the skip-vs-fail test, CI Python coverage, the
+release-mode structural check). Capture admission is done as of 2026-09-16 (above). The older
+progress guide is explanatory background, not authority over the new list.
 
 ## Stage 5 versus Stage 9 scope
 
@@ -141,9 +153,10 @@ runbooks and the external paper adapter.
   equivalence remain open until Stage 8 creates a measured need.
 - Full structural validation is intentionally absent from the release per-event hot path. Cheap
   always-on local checks are specified but not yet implemented as a complete production policy.
-- The review found capture-admission/validator mismatches, unchecked aggregate arithmetic and
-  incomplete allocation rollback. The required repairs are tracked in TODO section C; "implemented
-  foundation" does not mean every failure path has been proved safe.
+- The review found capture-admission/validator mismatches (fixed 2026-09-16, commit `aef6fc3`),
+  unchecked aggregate arithmetic and incomplete allocation rollback. The remaining repairs are
+  tracked in TODO section C; "implemented foundation" does not mean every failure path has been
+  proved safe.
 - The guide's industry recheck adds proposed Stage 5 detail for information availability, outstanding
   exposure, partial-fill/cancel races, a fill journal, run manifests and reproducible scenario traces.
   These remain unimplemented. Information availability specifically is now settled in ADR 0014 D4
