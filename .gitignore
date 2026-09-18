@@ -1,7 +1,8 @@
 build*/
 tmp/
 .cache/
-compile_commands.json
+# Glob, not the exact name: iCloud sync writes conflict duplicates as "compile_commands 2.json".
+compile_commands*.json
 .DS_Store
 *.o
 *.so
