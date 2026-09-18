@@ -63,6 +63,29 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+      # A green sanitized suite only means something if a finding can actually fail it. UBSan
+      # recovers by default: it prints the diagnostic and exits 0, so real UB would sit in the log
+      # of a passing run. This builds a deliberate signed-overflow probe (never part of the
+      # ordinary suite -- TE_BUILD_UB_PROBE is OFF by default) and requires it to die.
+      #
+      # Asserts nonzero, not a specific status: SIGABRT surfaces differently across platforms and
+      # shells, and pinning 134 would make this fragile for no added strictness.
+      - name: Verify sanitizer findings fail the build
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            export CC=clang CXX=clang++
+          else
+            export CC=gcc CXX=g++
+          fi
+          cmake -S . -B build-ubprobe -DCMAKE_BUILD_TYPE=Debug \
+                -DTE_SANITIZE=address,undefined -DTE_BUILD_UB_PROBE=ON
+          cmake --build build-ubprobe --target ub_probe --parallel 2
+          if ./build-ubprobe/tests/ub_probe; then
+            echo "::error::UB probe exited 0 - sanitizer findings are NOT failing the build."
+            exit 1
+          fi
+          echo "UB probe terminated nonzero as required."
+
   release:
     runs-on: ubuntu-24.04
 

@@ -33,6 +33,18 @@ function(te_add_test name source)
     )
 endfunction()
 
+# Proves sanitizer findings actually fail, rather than printing and exiting 0. OFF by default so
+# no deliberate UB is ever built into the ordinary suite -- this is not a te_add_test and is not
+# registered with CTest. CI builds it in its own directory and asserts a nonzero exit; see the
+# "Verify sanitizer findings fail the build" step in .github/workflows/ci.yml.
+#
+# No te_set_warnings: -Werror would reject the UB this file exists to contain.
+option(TE_BUILD_UB_PROBE "Build the deliberate-UB probe that verifies sanitizer enforcement" OFF)
+if(TE_BUILD_UB_PROBE)
+    add_executable(ub_probe ub_probe.cpp)
+    te_enable_sanitizers(ub_probe)
+endif()
+
 te_add_test(test_types unit/test_types.cpp unit)   # start here: one trivial assertion, green in CI
 te_add_test(test_events unit/test_events.cpp unit)
 te_add_test(test_instrument unit/test_instrument.cpp unit)

@@ -1,605 +1,235 @@
-# Trading Engine — To-Do List
+# Trading Engine - active checklist
+
+Updated **18 September 2026**, following the source review at `6c2f2f6`.
+This is the single active task list. [Plan v4](docs/project-plan-v4.md) owns long-range
+scope; [the guide](docs/project-progress-guide.md) explains the work and effort estimates.
+
+[TODO.pdf](TODO.pdf) is an export of this checklist. The originally supplied
+[new-todo-list.pdf](new-todo-list.pdf) is historical input, not the current plan.
+Documentation edits do not complete the code tasks below. No deadlines are agreed.
+
+## Start here
+
+**Next learning task: D1, agree the accounting examples; then D2, implement Portfolio.**
+The original foundation repair batch closed on 16 September. ADR 0014 was accepted on
+15 September; do not reopen all eight decisions. The review found a narrower D5 accounting
+gap and additional hardening work, listed separately below.
+
+Recommended impact/effort order: ~~C1 sanitizer enforcement~~ (done 18 September),
+**D1 accounting rules next**, then C2 capture admission, C3 tape preconditions, then the
+complete D2-D7 engine path.
+In-memory Portfolio work can proceed while capture hardening remains open.
+C2 gates trusted capture-to-engine results; C3 gates tape use.
+
+Fuaad chooses domain rules and writes the first learning-critical implementation.
+The assistant writes all tests against agreed examples and explains their purpose.
+Tests must not silently select open accounting or simulation policy.
+
+## A. Preserve data and reproducibility
+
+- [x] **Capture recovery/backup:** user reports the backup task complete. Earlier recovery
+  checks found no remaining `dataless` files. An independent byte comparison of the backup
+  was not performed; do not turn that distinction into a repeated blocker.
+- [x] **Broken build directories:** repaired on 16 September. The recorded cause was
+  iCloud conflict duplicates. Do not repeat the old deletion instructions.
+- [ ] **Build outside the synced Desktop tree.** Choose and document one configure/build/test
+  workflow, then verify the actual GCC/Clang configurations.
+  **Done when:** the chosen build path is outside sync and a clean build plus mandatory tests pass.
+  Effort: 1-2 hours. Build location remains to be chosen.
+- [x] **Previously pending work:** present in history at the review baseline; the checkout
+  was clean before this documentation update. New changes remain uncommitted until requested.
 
-Updated 15 September 2026. Replaces the previous list.
+## B. Design status
+
+- [x] **ADR 0014 D1-D8 accepted, 15 September.** Stage 5 decision inputs are book trust
+  and market shape; operational state belongs to Stage 9.
+- [x] **ADR 0015 accepted, 16 September:** fatal allocation failure, unsafe object,
+  explicitly interim. This does not mean rollback has been implemented.
+- [ ] **Complete D5's signed-position accounting policy** through D1 below.
+  The 18 September ADR correction identifies the missing policy; it does not choose it.
+- [ ] **Choose Strategy dispatch when implementing the seam.** Compare runtime and static
+  alternatives in ADR 0009. Do not assume templates or `std::function` are inherently faster.
+
+## C. Additional hardening from the 18 September review
+
+### C1. Make sanitizer findings fail CI
 
-> Source: the supplied [new-todo-list.pdf](TODO.pdf), imported on 15 September 2026. This replaces the previous checklist. Wording, priorities, decisions and completion claims below are the supplied document's record; this import did not execute its commands, rerun tests, commit work, or update/accept ADR 0014.
+- [x] **Done 18 September 2026.** `cmake/sanitizers.cmake` now adds
+  `-fno-sanitize-recover=undefined` whenever `TE_SANITIZE` includes `undefined`.
+
+  The gap was measured, not assumed. A signed-overflow probe built under the previous
+  configuration printed `runtime error: signed integer overflow` and **exited 0**; with the flag
+  it terminates nonzero before reaching its own `printf`. So UBSan was detecting real UB and
+  letting the run stay green — detection without enforcement.
 
-How to read this. Every job from the old list is still here. Jobs you have finished are in Done at the end. NEW means the job is not on the old list. UPDATED means the job changed because of what we found this week.
+  A compile/link flag rather than `UBSAN_OPTIONS=halt_on_error`: the environment variable binds
+  only where it is exported, so local sanitized builds would have kept recovering silently.
+
+  `tests/ub_probe.cpp` holds the deliberate UB. It is guarded by `TE_BUILD_UB_PROBE` (OFF by
+  default), is not registered with CTest, and is never linked into `te_core` or any app, so no
+  intentional UB enters the ordinary suite. A CI step builds it separately per compiler and fails
+  if it exits 0, asserting **nonzero** rather than a specific status, since SIGABRT surfaces
+  differently across platforms.
 
-No deadlines are set. The old list had none, and you have not given me any. See Questions for me.
+  **Scope limit worth remembering:** this covers UBSan's checks, which include *signed* overflow.
+  Unsigned wraparound is well-defined in C++, is not UB, and is **not** caught — the explicit
+  boundary tests in `trade_reconciler`, `capture_coordinator` and `price_level` remain the only
+  guard there.
+
+  Verified: 327/327 under UBSan with enforcement active (no latent signed-overflow UB in the
+  codebase), and 327/327 Release with real `gcc-15` (unaffected, the guard skips non-sanitized
+  builds). The ASan+UBSan suite could not be run locally — `gtest_discover_tests` fails against
+  ASan-instrumented binaries on this macOS host, a pre-existing limitation; CI covers that config.
+
+### C2. Align Python and C++ capture admission
+
+- [ ] **Significant; 1-3 days.** Byte/hash/count checks exist. C++ still does not enforce
+  `status` or `chain_valid`. Agree on continuity, ordinals, seed coverage and control boundaries
+  across `manifest_reader`, `segment_loader`, `capture_validator` and the Python validator.
+  **Done when:** shared valid/invalid fixtures receive consistent decisions; interrupted,
+  failed and gapped intervals are rejected or explicitly quarantined under a documented policy.
+  They must never silently become a trusted continuous segment.
+
+### C3. Validate tape inputs before opening output
+
+- [ ] **Significant; 2-4 hours.** Ordinary replay checks timestamp ordering; the writer does not.
+  Check both streams, seed/cutoff order and header/capture/supplied-seed agreement under the API contract.
+  **Done when:** timestamps [30, 10] with cutoff 20 and inconsistent metadata are rejected
+  before creating output. Do not silently sort a broken stream to conceal a continuity failure.
 
-## Do these first
+### C4. Preserve useful errors
 
-Seven jobs from the original list are now done: capture files are protected, all eight ADR 0014
-questions are answered (D1-D8), **ADR 0014 is reviewed and accepted (15 September 2026)**, that work
-is committed and pushed, and **the loader now checks capture completeness (16 September 2026,
-commit `aef6fc3`, pushed)**.
+- [ ] **Minor now; 4-8 hours.** Keep detailed loader/validator/replay causes plus segment/location
+  through `captureCoordinator`; format them at the application boundary.
+  **Done when:** a corrupt fixture reports what failed and where without debugging into the loader.
 
-**Section C is closed as of 16 September 2026** — allocation-failure policy settled in ADR 0015, the
-`build/` folder repaired, and capture eviction re-verified clean. Section D (the engine, starting
-with the money tracker) is no longer blocked.
+### C5. Refresh the supported toolchain contract
 
-Two things carried forward rather than finished: no off-iCloud backup of `data/` has been confirmed,
-and build output still lives in the iCloud-synced tree, so the duplicate-file corruption that broke
-`build/` will recur until that changes. Both are in section A below.
-
-## A. Protect what you have
-
-Small jobs. Do them first because they stop you losing work.
-
-### Protect your capture files from being wiped
-
-- [ ] **HIGH | NEW | NO DEADLINE** — partly verified 16 September 2026
-
-Eviction check is clean: `find data -type f -flags +dataless` returns nothing and 470 MB is
-materialized locally, so the 13 previously-hollow files are all back. **Still open:** no off-iCloud
-backup copy of `data/` has been confirmed to exist, which is the other half of this task's
-done-when. Note the same iCloud mechanism separately corrupted `build/` (see below), so the risk
-here is live, not historical.
-
-Your project sits in ~/Desktop, which syncs to iCloud. iCloud removes the contents of big files it thinks you are not using, and leaves an empty shell behind. That is what happened to your capture data. The files looked normal but read as empty.
-
-Your capture files are not in git (they are too big), so git cannot bring them back.
-
-**Steps**
-
-1. Choose one: move the whole project out of ~/Desktop, or move just the data/ folder somewhere iCloud does not sync.
-
-2. Copy the data/ folder to a second place — an external drive or a backup service that is not iCloud.
-
-3. Turn off "Optimise Mac Storage" in System Settings → Apple Account → iCloud, if you keep the project where it is.
-
-4. Check nothing is still hollow.
-
-**Commands You Will Need**
-
-```bash
-# list files iCloud has emptied out
-find data -type f -flags +dataless
-```
-
-```bash
-# pull one back
-brctl download data/raw/<capture>/segment-0000.jsonl
-```
-
-13 files under data/ were still hollow after the last check. Biggest at risk: data/rawOld/btcusd-live-orders.jsonl (126 MB). "dataless" is the macOS flag meaning "contents are not on this laptop".
-
-**Done when:** find data -type f -flags +dataless returns nothing, and a full copy of data/ exists somewhere outside iCloud.
-
-### Commit the work sitting on your laptop
-
-- [ ] **HIGH | NEW | NO DEADLINE**
-
-There are code fixes, document updates and two new PDFs that are not saved to git.
-
-**What Is Waiting**
-
-- Six small code and comment fixes (listed in Done).
-
-- Updated README.md, TODO.md, status.md and docs/project-progress-guide.md.
-
-- docs/TradingEngine-DeepDive.pdf — the 54-page code manual.
-
-- This list, once you are happy with it.
-
-Suggested split: one commit for the review-driven document updates, one for the code fixes, one for the PDFs.
-
-**Done when:** git status is clean, and the test suite still passes 304 of 304.
-
-### Delete the broken build folder
-
-- [x] **LOW | NEW | NO DEADLINE** — done 16 September 2026
-
-Rediagnosed first: the cause was **not** a stale cache. iCloud had written 33 conflict-duplicate
-entries into the build trees — `CMakeFiles 2`, `_deps 2`, `README 2.md`, plus a stray
-`compile_commands 2.json` at the repo root. `build/` and `build-asan/` were deleted and rebuilt.
-Configure went from 135 seconds to 4.3, and `ctest --test-dir build` passes 327 of 327 from the
-project's own build directory again.
-
-**This will recur** while build output lives inside the iCloud-synced Desktop tree — the duplicates
-come back every time iCloud sees concurrent writes to the same paths. A permanent fix means keeping
-build output out of the synced tree (build to a path outside ~/Desktop, or exclude the build dirs
-from sync). Left as a decision rather than done unilaterally, since it changes your build workflow.
-
-The build/ folder in your project no longer works. It fails before it starts with FindThreads only works if either C or CXX language is enabled. Your source code is fine — only the saved build settings are broken.
-
-```bash
-rm -rf build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build -j
-```
-
-**Done when:** cmake --build build -j works from a clean start and ctest --test-dir build passes 304 of 304.
-
-## B. Finish the design decision — DONE, ADR 0014 accepted 15 September 2026
-
-This was the gate. No engine code could be written until ADR 0014 was accepted; now it can, once
-section C's foundation repairs are also done. An "ADR" is a short document recording one design
-decision and why you made it. Kept here for the record of how the five sessions got there.
-
-### Save this week's five answers into ADR 0014
-
-- [x] **HIGH | NEW | NO DEADLINE** — done 15 September 2026
-
-Written into the ADR as **D1-D5**, each with its reasoning. The open list is now three items,
-renumbered. The hand-worked timeline runs to T11. Status line updated to
-"proposed — 5 of 8 open questions resolved (D1-D5); 3 remain".
-
-Two consequential edits followed from D1: the Stage 5 working scope no longer asks for a gate
-combining "trust, shape and a minimal replay operational state", and the consequences section no
-longer claims operational state is observable at Stage 5.
-
-**D4's availability assumption is now settled, not just flagged.** Ordering stays venue-time-only.
-Separately, measuring `localWallTimestampNanos - venueTimestampMicros` over 189,375 real order
-frames and 789 trades gave a 75.1 ms median delay (33.2 ms floor, 1382.7 ms worst case) — so zero
-market-data delay was not a safe silent assumption. D4 now defines three named, swappable
-availability policies (`zero`, `fixed` at 80 ms, `recorded`), stamped per run, with the same
-"implement more than one and report the spread" reasoning ADR 0008 already uses for cancel
-assumptions. `fixed`'s 80 ms constant is a declared round number, not a claimed measurement — open
-to revision.
-
-You settled five of the eight open questions in conversation. The ADR previously listed all eight as open.
-
-**The Five Answers To Write Down**
-
-1. Operational state: do not build it yet. At this stage there is no operator, no kill switch, and a file cannot disconnect — so it could only ever hold one value and no test could prove it works. The decision gate checks two things for now: is the data trustworthy, and is the market a shape you can trade.
-
-2. Latency queue: an order only joins the queue after both the decision gate and the risk check say yes. The queue models travel time to the exchange, not thinking time. A rejected order never enters it.
-
-3. First fill: an order can fill the moment it arrives, using the book as it stands at that exact moment.
-
-4. Time order: use the exchange's own timestamp only — never the time your machine received it, because that changes with your network speed. If a real market event and your own order share a timestamp, the real event goes first. If two of your own orders share one, the one submitted first goes first.
-
-5. Money order: confirm the fill, work out the fee, then — when buying, add the price and fee into a new average cost; when selling, use the old average cost to work out profit, and take the fee off that profit. Update cash, position, average cost and profit together, so nothing ever sees half an update. Selling part of a holding does not change the average cost of what is left.
-
-File: `docs/decisions/0014-event-loop-causality-and-decision-authority.md`
-
-Status today: proposed. It becomes accepted once all eight are answered.
-
-**Done when:** the ADR lists these five as decided, not open, and the "still to decide" list has only three items left.
-
-### Answer the last three design questions
-
-- [x] **HIGH | UPDATED | NO DEADLINE** — answered 15 September 2026
-
-All eight questions are now answered in ADR 0014, as D1-D8. The three answered this session:
-
-1. **Does the decision gate still get asked when the data is untrusted?** Yes, always. Skipping it
-   would mean nothing else could produce the "N blocked, reason: untrusted" count your own evidence
-   rule requires. (D6)
-
-2. **Which rejection reasons become permanent promises?** Only the ones a committed test checks by
-   name. Anything untested stays free to rename — same rule that already killed `OperationalState`.
-   Naming and testing the actual reasons is TODO item 3's job, not this ADR's. (D7)
-
-3. **How long must the market look wrong before you stop trusting the book?** No number yet — none
-   may be invented without evidence, and there isn't any. Every crossed period is blocked from
-   trading regardless (via market shape), and its duration gets logged in the replay report so a
-   real threshold can be set once the corpus shows how long crossings actually last. (D8)
-
-**Reviewed and accepted 15 September 2026.** Reading D1-D8 side by side against the rest of the
-document surfaced five stale spots written before D6-D8 existed — a status line still claiming "3
-remain," a `DecisionGate` diagram still showing three Stage 5 inputs instead of two, a leftover "the
-threshold remains open" line, an intro paragraph, and a timeline heading that said "D1-D5." All five
-fixed. Nothing else contradicted.
-
-**Done when:** the ADR lists all eight as decided, its status line reads accepted, all eight
-questions are answered, deferred scope is stated, a hand-worked timeline exists, and every block has
-a named reason. All true as of 15 September 2026.
-
-## C. Repair the foundation
-
-This was item 2a on the old list. This week gave it real evidence and exact locations. Do this before building more on top.
-
-### Make the loader check the capture file is complete
-
-- [x] **HIGH | UPDATED | NO DEADLINE** — done 16 September 2026, commit `aef6fc3`
-
-`validateCapture()` compares the manifest's declared payload/frame-index size, hash, and frame/order/
-trade/control counts against what was actually loaded, returning a named `ValidationError` on any
-mismatch. `capture_coordinator.cpp` — the one production path from a capture directory to `replay()`
-— now checks `loadSegment()`'s result before touching it, validates immediately after, and reads
-`replay()`'s inputs, the cutoff, and the checkpoint comparison from the validated capture only. There
-is no remaining path for an unvalidated capture to reach replay. A dedicated test proves a capture
-that declares more payload bytes than it actually contains is rejected with
-`CaptureCoordinatorError::capture_validation_failure` before replay runs.
-
-`Replay::replay()` itself was deliberately left unchanged — it has 18+ existing direct call sites in
-`test_bitstamp_replay.cpp`/`test_bitstamp_joined_capture.cpp` that test pure merge-ordering logic with
-synthetic data and have nothing to do with capture files. The enforcement point is the coordinator,
-the only real caller, not the primitive.
-
-Not fully covered: `chain_valid` is read into the manifest (`declaredChainValid`) but `validateCapture()`
-does not compare it against anything yet, and the recorder's `status` field isn't read into the
-manifest struct at all. Left for a follow-up if a gap the byte/hash/count checks miss turns out to
-need it.
-
-Your recorder already writes down exactly what it produced. The C++ loader reads none of it. So a damaged, empty or half-written capture loads without complaint, and replay runs on it.
-
-This week proved it: the capture file was empty, the loader returned "success, zero events", and the real problem only appeared much later as a confusing test failure.
-
-**What The Recorder Already Records, And Nobody Checks**
-
-- payload_bytes, payload_sha256 — size and fingerprint of the data file
-
-- frames_bytes, frames_sha256 — same for the index file
-
-- frames, order_events, trade_events, control_frames — expected counts
-
-- chain_valid — whether the recorder saw any gaps
-
-- status — whether the recording finished properly
-
-Example: the 22 August capture declares 14,684,968 bytes and 29,490 frames.
-
-**Steps**
-
-1. Decide where the check lives. Three options, in the Questions section.
-
-2. Read the size and count fields in manifest_reader.cpp. It currently reads only file paths.
-
-3. Compare them against the real files before handing any events to replay.
-
-4. Give every mismatch its own named error, so the message says what was wrong.
-
-5. Make an empty capture a named failure instead of a silent success.
-
-6. Add a test with a deliberately truncated capture.
-
-Files: `src/capture/manifest_reader.cpp`, `src/capture/segment_loader.cpp`
-
-The silent-success line is `segment_loader.cpp:101`.
-
-**Done when:** a capture with a wrong size, wrong count or empty payload is rejected with a named reason, and replay cannot run on it.
-
-### Fix the test that should skip but fails instead
-
-- [x] **MEDIUM | NEW | NO DEADLINE** — done 16 September 2026, commit `e2cc1ff`
-
-`RealCaptureReplaysToCheckpointWithNoResiduals` now parses the manifest, then checks the payload
-file it points at actually exists and is non-empty (`std::filesystem::file_size`) before deciding
-to run. An evicted or truncated payload skips with a named reason instead of failing hard.
-
-One test is meant to skip quietly when your private capture data is missing. It only checks that manifest.json exists. That small file survived; the big data file it points to did not. So the test ran anyway and reported a hard failure.
-
-Check the data file is present and not empty, not just the manifest.
-
-File: tests/unit/test_bitstamp_joined_capture.cpp, lines 349–354
-
-**Done when:** deleting or emptying the capture data makes the test skip with a clear message, not fail.
-
-### Guard the two unchecked sums
-
-- [x] **MEDIUM | UPDATED | NO DEADLINE** — done 16 September 2026, commits `e2cc1ff` and `c43acc0`
-
-Three adds are now guarded, not two — the first pass guarded the wrong one in the coordinator.
-
-- `trade_reconciler.cpp` (fill credits at one timestamp): checks before adding, **saturates** rather
-  than refusing. `observe()` returns `void`, so there is no channel for a named error without an API
-  change. Safe because `reconcile()` only ever consumes `min(shortfall, credit)` — a saturated
-  credit caps at what the trade needs and can never over-credit. Test forces the branch.
-- `capture_coordinator.cpp` checkpoint **quantity** aggregation (`expectedBids[price].units +=`):
-  this is the one the original TODO named and the first pass missed. Now gets `PriceLevel`'s real
-  contract — check, refuse, named `checkpoint_quantity_overflow`, state unchanged. Test forces it.
-- `capture_coordinator.cpp` level **count** sum, plus `capture_validator.cpp`'s frame-total:
-  checked for consistency; both can only overflow on a machine that could not hold the containers.
-
-Two places add numbers together without first checking the result will fit. Everywhere else in your code checks first. In C++, a whole number going past its limit is undefined behaviour — the compiler is allowed to assume it cannot happen, so the result is not simply a wrong number.
-
-Real market sizes are far too small to trigger this. The point is consistency with your own standard.
-
-- `src/feed/trade_reconciler.cpp:26` — adding up fills at the same timestamp
-- `src/capture/capture_coordinator.cpp:81` and `:84` — adding up checkpoint sizes
-
-Copy the pattern already in `src/book/price_level.cpp:11`.
-
-**Done when:** both places check before adding, return a named error instead of overflowing, and a test proves it.
-
-### Finish the order book's undo path
-
-- [x] **MEDIUM | UPDATED | NO DEADLINE** — decided and recorded 16 September 2026, ADR 0015
-
-Resolved by **deciding the policy rather than adding more rollback**: heap exhaustion is fatal to
-the process (option 1 of the three below). All three `catch (const std::bad_alloc&)` blocks and
-`ApplyError::allocation_failure` are removed, so `ApplyError` stays scoped to bad market input as
-ADR 0012 requires, and a `bad_alloc` propagates out of `apply()` and ends the process.
-
-Explicitly interim. The entire correctness argument is that **nothing anywhere catches
-`std::bad_alloc`** — verified true when ADR 0015 was written (zero `catch` blocks in `src/`,
-`include/`, `apps/`, `tests/`). The first `catch (...)` added above `apply()` on the stack turns
-this back into a ghost-book bug. ADR 0015 lists the exact triggers that should force the move to
-the safe-object form, and notes `noexcept` on `apply()` as the cheapest way to enforce today's
-assumption instead of trusting it.
-
-Also still true and documented there: `applyModify`'s price-change path has a second exposure
-`applyAdd` does not — a throw between the destination insert and the source `removeOrder()` leaves
-the order resting in two levels with the index naming the old one. Only the safe-object form fixes
-that.
-
-When adding an order, the book first creates a new price level, then adds the order to it. If the second step runs out of memory and throws, the cleanup code never runs, because that cleanup only sits on the normal return path. An empty price level is left behind, and the error escapes as an exception instead of the error value the function promises.
-
-An empty price level is a problem on its own: it can become the "best price" with nothing actually for sale behind it.
-
-Same gap exists when an order changes price.
-
-`src/book/order_book.cpp:57` (add) and `:125` (price change)
-
-The throwing line is `src/book/price_level.cpp:15`.
-
-**Decide First — and note the code already voted, twice**
-
-`ApplyError::allocation_failure` and a `catch (const std::bad_alloc&)` around `orderIndex_.emplace`
-have been in `applyAdd` since `22bc074`. A later pass (`c43acc0`, committed, **not pushed**) added
-the same catch around the `addOrder()` calls in both `applyAdd` and `applyModify`, closing the
-empty-level leak. Both passes picked **Recoverable** without the decision ever being written down.
-Before pushing `c43acc0`, settle whether that is actually the intended policy.
-
-This is two questions, not one:
-
-1. **Process policy** — if the heap is exhausted, does this process keep running?
-2. **Object safety** — if an allocation throws, is *this* `OrderBook` still a valid object?
-
-They are independent, giving three real options:
-
-- **Fatal process, unsafe object.** Let it throw, leave the empty level. Only safe if the book dies
-  with the stack and nothing ever catches. Fragile — any logger or test that catches `bad_alloc`
-  keeps a corrupt book.
-- **Fatal process, safe object.** RAII rollback guard, then rethrow or terminate. The book is never
-  observable with a ghost level; `Result` stays for market errors only. Closest to ADR 0012, which
-  explicitly calls internal invariant failure "a programming/system failure, not bad market input"
-  and rejected exceptions for the hot path.
-- **Recoverable `ApplyError`.** RAII rollback, return `allocation_failure`. Matches `apply()`'s
-  signature. Owes a test that genuinely injects `bad_alloc`, and owes every caller a policy —
-  `replay.cpp` treats any `apply()` failure other than one specific tolerated `unknown_order_id` as
-  a hard replay failure, so "recoverable at the book" is still fatal at the only real caller today.
-
-Why the empty level is worse than "a level with quantity 0": `bestBid()`/`bestAsk()` read the map,
-not quantity, so an empty level **is** the best price; `qtyAt()` returns 0 behind it; and `digest()`
-skips zero-quantity levels, so the digest is unchanged. That is a book that lies about top-of-book
-while hashing identically — not merely an extra node.
-
-Also note `allocation_failure` puts a system failure into `ApplyError`, which ADR 0012 scoped to bad
-market input. That may be the right call, but it is a contract change, not a local catch.
-
-**Done when:** a failed add or price change leaves the book exactly as it was, with no leftover
-empty level, the chosen policy is written into ADR 0012 (or a new ADR) rather than only into code,
-and a test forces the failure. Note the quantity-overflow tests prove the `nullopt` rollback path,
-**not** the throw path — they are different control flow and must not be treated as covering it.
-Forcing a real `bad_alloc` needs a test seam or an injectable allocator;
-`std::set_new_handler` is process-global and fights ASan.
-
-### Run the Python tests in CI and pin the downloads
-
-- [x] **MEDIUM | UPDATED | NO DEADLINE** — done 16 September 2026, commit `8111763`
-
-CI now discovers and runs all four `tests/python/test_*.py` files via `unittest discover`, not just
-`test_architecture_guards.py` — the recorder and capture-checker tests
-(`test_audit_book_bootstrap`, `test_dump_raw_ws_bitstamp`, `test_validate_joined_capture`) had never
-run in CI before. All 13 cases were run locally first to confirm they actually pass.
-
-Python is pinned to 3.9 (matching `.venv/pyvenv.cfg`, the version these tests are actually verified
-against), and `tests/python/requirements.txt` pins `websockets==15.0.1`. Both `cmake/dependencies.cmake`
-downloads (simdjson v3.9.1, googletest v1.14.0) now have a `URL_HASH`, computed from a fresh download
-and confirmed against a clean configure — ADR 0001 asked for this and it had never been done.
-
-### Make the release-mode safety check real, or say it is not
-
-- [x] **LOW | NEW | NO DEADLINE** — done 16 September 2026, commit `c3e195a`
-
-Chose "say it is not" over making the checks real in release. `validateStructure()`'s per-apply()
-call in `order_book.cpp` was already correctly guarded with `#ifndef NDEBUG`; only the one-time
-end-of-replay call in `replay.cpp` wasn't, so release builds walked the whole book checking nothing.
-That call is now guarded the same way, and both the header declaration and the call site say plainly
-that every check inside is a no-op under NDEBUG.
-
-Deliberately did not make the checks real in release: that's a design decision (what should a release
-build do when it finds a corrupt book — abort, or propagate an error through `Replay`'s `Result`-based
-API?), not a mechanical fix, and `status.md` already documents the per-event hot-path exclusion as
-intentional. Flag if you want the other option instead.
-
-Also added a `release` CI job (plain `Release` build, no sanitizers) so anything that only differs
-under NDEBUG gets built and tested going forward, not just Debug+ASan/UBSan.
-
-**The release job itself then failed in CI** (never tested locally against real gcc before pushing)
-— fixed 16 September 2026, commit `cd9171c`. Two distinct causes: `applyModify`/`applyRemove` in
-`order_book.cpp` each `assert()`ed the looked-up order existed instead of checking; the assert
-strips under `NDEBUG`, so GCC's `-O2 -Wnull-dereference` couldn't see any guard between the lookup
-and the dereference. Turned both into real `ApplyError::unknown_order_id` checks — genuine
-defense-in-depth, not just a warning fix, since it no longer depends on a separate check in
-`apply()` to hold. The remaining ~9 flagged sites were all the core `Result<T,E>` idiom itself
-(`if (!x.hasValue()) return failure(*x.errorIf());`, same object, adjacent lines) — provably safe,
-confirmed by hand at each one, and clang never raises it at any optimization level. Scoped
-`-Wno-null-dereference` to GCC only in `cmake/warnings.cmake` rather than rewrite the error-handling
-idiom used at every `Result<T,E>` call site in the codebase. Verified against real gcc-15 and clang,
-Debug+sanitizers and Release, 325/325 each; confirmed green in CI itself afterward.
-
-## D. Build the trading engine
-
-Unchanged from the old list except where marked. Do these in order — each one uses the one before. Do not start until ADR 0014 is accepted and section C is done.
-
-### Build the money tracker, tests first
-
-- [ ] **HIGH | NO DEADLINE**
-
-Track cash, position, average cost, profit taken, profit on paper, and fees. Use whole numbers only — never decimals, which drift.
-
-Write a buy, a partial sell, a final sell and fees out by hand first. Then build the class to match your arithmetic.
-
-Also settle: currency scales, how cost is worked out, how you value open positions, rounding, and checked arithmetic in the middle of a calculation. Record every fill and fee with its own identity, so replaying the list rebuilds the account and the same fill cannot be counted twice.
-
-**Done when:** tests reproduce every hand calculation exactly, tell taken profit apart from paper profit, cover long, flat and short, and refuse numbers that are too big without half-changing anything.
-
-### Name the order types and rejection reasons
-
-- [ ] **MEDIUM | NO DEADLINE**
-
-Add only the small value types the accepted ADR needs: the order request, the operational state, the reason a decision was blocked, and the reason an order was rejected.
-
-Keep three ideas separate: seeing the market, being allowed to decide, and being allowed to trade. Do not add an interface until something really needs it.
-
-**Done when:** tests show that untrusted data, each untradeable market shape, and each scripted block produce their own distinct reason.
-
-### Add the venue seam and a pretend exchange
-
-- [ ] **MEDIUM | NO DEADLINE**
-
-Start with submit, accept, reject, partial fill, full fill and cancel. A cancel that has been asked for is not a cancel that has happened — test an order filling while its cancel is still in flight.
-
-The risk check looks at size, value and the position you would end up with. It must count orders already accepted but not yet filled, and check the worst case in both directions without assuming opposite orders fill at the same time.
-
-The pretend exchange checks safety again before accepting, and records why. Build the no-delay version first. Add the delay queue only as the ADR says.
-
-Rate limits, loss limits, the production kill switch and live recovery stay out. Do not add empty stand-ins that always say yes.
-
-**Done when:** submit, accept, reject, fill and cancel can each be tested on their own, a rejection changes nothing, and a strategy cannot skip the risk check.
-
-### Add the strategy seam and a do-nothing strategy
-
-- [ ] **MEDIUM | NO DEADLINE**
-
-Keep watching the market separate from deciding to trade. A strategy gets a read-only view of the book that it must not keep, and returns order requests. It never gets the real book or the ability to trade directly.
-
-**Done when:** the do-nothing strategy sees every event, asks for nothing, builds against the real interface, and can be tested without the engine.
-
-### Build the engine loop
-
-- [ ] **MEDIUM | NO DEADLINE**
-
-Wire together the feed, clock, strategy, decision gate, risk check, venue, order book, health tracker and money tracker. One thread. Follow the order the ADR sets before making anything faster.
-
-**Done when:** a made-up timeline proves the book updates before the strategy sees it, watching continues while trading is blocked, decisions are gated, timing order is repeatable, and the money maths after a fill is exact. Test scenarios can be reused and can point at the first event where two runs differ.
-
-### Pass the Stage 5 proof tests
-
-- [ ] **MEDIUM | NO DEADLINE**
-
-Section C must already pass. Then prove the whole path:
-
-- The do-nothing strategy changes no counts, cash, position or profit over a real capture.
-
-- One scripted strategy places a real order, and your hand-worked fill, fee and profit match end to end.
-
-- At least one real risk rule rejects an order and changes nothing. A rule that always says yes does not count.
-
-- Ten identical runs produce identical fingerprints for events, book, decisions, orders, cash, position and profit.
-
-- Every blocked decision and rejected order is counted by name.
-
-- Partial fills, cancel races, outstanding exposure and duplicate fills all have saved test cases. Replaying the fill and fee list rebuilds the account.
-
-- Mid-run comparisons catch differences that identical totals would hide.
-
-**Done when:** every one of these passes from a fresh copy of the project, without needing your private capture files.
-
-### Ship the replay program and refresh the documents
-
-- [ ] **LOW | NO DEADLINE**
-
-Connect apps/replay_main.cpp to the build. It runs the saved capture through the real engine with the do-nothing strategy and prints a short report: where the data came from, counts, health, market shapes, decisions, orders, money and fingerprints.
-
-Include a run record: input fingerprints, which commit and build, whether the project had uncommitted changes, instrument scales, settings, what was left out, policy versions and result fingerprints. Keep detailed step-by-step tracing optional.
-
-Then update plan v4, the README, the handoff notes, and the placeholder comments so nothing still calls a finished module unfinished.
-
-**Done when:** the build produces the replay program, its report comes out the same every time, and no current document calls a built module a placeholder.
-
-## Questions for me
-
-I did not guess at any of these. Answer them and I will fold them in.
-
-1. Your message had an empty placeholder: "[paste new tasks, deadlines or changes]". Nothing was pasted, so I added nothing from it. Do you have tasks or changes to add?
-
-2. Do you want any deadlines? There are no dates anywhere in the project, and you have not given me any, so every task says "No deadline". Tell me the dates and I will add them.
-
-3. Where should the capture completeness check live? Three options. (a) Inside loadSegment — simplest, but then loading and checking are the same job. (b) A separate check that produces its own type, which replay is the only thing able to accept — this makes it impossible to replay unchecked data, but is the most work. (c) A step in the coordinator — cheap, but people can still call the loader directly and skip it. I would pick (b), because the mistake you just hit was exactly "something used data nobody checked".
-
-4. Should the capture check get its own ADR? It is a contract decision, like ADR 0013 was. It could be ADR 0015, or it could just live inside the section C task. I lean towards its own ADR, because three separate programs have to agree on the same rules.
-
-5. Move the whole project out of iCloud, or just the data/ folder? Moving everything is simplest and safest. Moving only data/ keeps your code backed up by iCloud, which is useful, but leaves the split to remember.
-
-6. Is running out of memory recoverable, or fatal? Needed before the order book undo path can be finished properly. Right now the code half-promises recovery. Either answer is fine; it just has to be one of them.
-
-7. Should the 54-page code manual be committed to the repository? It is at docs/TradingEngine-DeepDive.pdf and not yet in git. It is 2.3 MB.
-
-## Done
-
-Finished work, newest first. Kept short.
-
-### This week
-
-- [x] Settled allocation-failure policy in **ADR 0015**: heap exhaustion is fatal to the process,
-  not an `ApplyError`. Removed all three `catch (const std::bad_alloc&)` blocks and
-  `ApplyError::allocation_failure`. Interim by design — the argument rests on nothing catching
-  `bad_alloc`, which ADR 0015 records along with the triggers that should force the safe-object
-  form. 16 Sep
-
-- [x] Repaired `build/`. The "stale cache" diagnosis was wrong: iCloud had written 33
-  conflict-duplicate entries into the build trees. Deleted and rebuilt; configure 135 s → 4.3 s,
-  327 of 327 passing from the project's own build directory. 16 Sep
-
-- [x] Re-verified capture eviction is clean — no `dataless` files, 470 MB materialized. 16 Sep
-
-- [x] Fixed a review-caught error in the previous overflow pass: the guard had been put on the level
-  **count** sum while the quantity **accumulation** it was meant to protect stayed open. Added the
-  two tests the done-when lines had asked for and that did not exist. Cleared three stale claims in
-  `capture_validator.hpp`. Commits `0046609`, `6af332d`. 16 Sep
-
-- [x] CI now runs all four Python test files (was one) and pins Python, websockets, and both
-  cmake/dependencies.cmake downloads. Added a release-mode CI job. Made validateStructure()'s
-  debug-only nature explicit instead of silently checking nothing in release. Also fixed the CI
-  build itself (broken since `59fc9ae`, a missing default initializer under -Werror), a test that
-  should skip on missing capture data but failed instead, and two unguarded sums. Commits `e2cc1ff`,
-  `8111763`, `c3e195a`, pushed.
-
-- [x] The new release CI job itself then failed (never tested locally against real gcc first): a
-  real hardening gap in `order_book.cpp` (assert instead of a check, invisible to GCC's optimizer
-  once NDEBUG strips it) plus ~9 instances of a GCC-only false positive on the core `Result<T,E>`
-  idiom, scoped out for GCC only rather than rewritten everywhere. Verified against real gcc-15 and
-  clang before pushing this time; confirmed green in CI. Commit `cd9171c`, pushed. 16 Sep
-
-- [x] Wired capture validation into the coordinator: `capture_coordinator.cpp` now checks
-  `loadSegment()`'s result before use, validates it against the manifest immediately after, and
-  reads every downstream value (cutoff, replay inputs, checkpoint comparison) from the validated
-  capture only, so an unvalidated capture has no remaining path to `replay()`. Commit `aef6fc3`,
-  pushed. 16 Sep
-
-- [x] Recovered the capture data. It was not lost — iCloud had emptied the files. One command brought it back. 15 Sep
-
-- [x] Confirmed the test suite passes 304 of 304 from a clean build. 15 Sep
-
-- [x] Removed dead code in the order book — a duplicate line that could never run. 15 Sep
-
-- [x] Corrected the fingerprint comments. The code says "FNV-1a" but uses a slightly different starting number. The comment now says so, and warns not to change it — every saved fingerprint depends on it. 15 Sep
-
-- [x] Corrected the "order-independent" label on the applied-event fingerprint. It is order-sensitive, and that is deliberate. 15 Sep
-
-- [x] Fixed the swapped labels in ADR 0008. "Cancels ahead of you" is the optimistic case, not the pessimistic one. 15 Sep
-
-- [x] Tidied two mismatched function names in the replay code. 15 Sep
-
-- [x] Recorded the fresh test result and the broken build folder in the handoff notes. 15 Sep
-
-- [x] Wrote the 54-page code manual tracing one market message from raw bytes to finished book state. 15 Sep
-
-- [x] Answered five of the eight open design questions — operational state, latency queue, first fill, time ordering and money ordering. 14–15 Sep
-
-- [x] Fixed the health tracker so restarting from a corrupted state clears the old failure reason. Commit d00e244
-
-- [x] Regenerated the old to-do PDF to match the eight-item list. Commit ad0f0a7
-
-### Earlier foundation work
-
-- [x] Merged the two decoders into one pass, keeping the old order-only decoder for the legacy recorder.
-
-- [x] Turned on the CI guards for clock use and decimal numbers, with tests that deliberately break to prove they work.
-
-- [x] Split the order book's internal checks from its market-shape reporting.
-
-- [x] Separated "is the data trustworthy" from "what shape is the market", with both written down in CONTEXT.md.
-
-- [x] Made the order book handle each event type properly, leaving state unchanged when an ordinary event is rejected, and checking itself after every successful change in debug builds.
-
-- [x] Passed 303 tests after the trust and shape rework. 9 Sep
-
-Working agreement: CLAUDE.md. Active checklist: TODO.md. Plain-language guide: docs/project-progress-guide.md. Refresh this list when a task closes or when reality disagrees with it.
+- [ ] **Minor; 2-4 hours plus compatibility work.** Move local/CI Python from EOL 3.9 to a
+  supported interpreter and run all Python tests. Keep deliberate archive hashes and dependency pins.
+  **Done when:** the documented local and CI environments agree and pass.
+  Add a local websocket integration test before treating mocks as proof of library behavior.
+
+### C6. Enforce allocation policy before recovery or bindings
+
+- [ ] **Integration gate; hours to 3 days.** Read ADR 0015 before adding a catching engine
+  wrapper, Python binding or recovery loop. Choose an enforced fatal boundary or exception-safe
+  rollback with explicit process behavior.
+  **Done when:** injected failures prove the chosen behavior; no retained book can be reused
+  corrupt. Quantity-overflow tests do not cover allocation failure.
+
+### C7. Extend financial guards alongside accounting
+
+- [ ] **Part of D2; 1-2 hours.** The float guard covers selected headers and
+  `include/te/book/`, not future portfolio/risk implementation files.
+  **Done when:** deliberately invalid financial implementation code is detected.
+  Keep floating point available for probabilities, statistics and presentation.
+
+## D. Build the Stage 5 engine
+
+### D1. Agree the money rules using examples
+
+- [ ] **Next learning task; 4-8 focused hours.** Define money/price/quantity units, signed
+  position, basis representation, gross versus net reporting, fee source, partial-close
+  rounding and residual handling. Total basis is a candidate, not a selected policy.
+
+  Hand-work open/add long, partial/final close, open/add short, partial/final cover,
+  long-to-short by selling and short-to-long by buying. Include fees, a fractional average
+  such as 302/3, duplicate execution identity and overflow rejection.
+
+  **Done when:** each row has exact cash, position, basis, realized PnL and fees.
+  Unrealized PnL uses a separate explicit mark. Reversal fee handling is defined.
+  Record the selected rules in ADR 0014 D5 before converting the examples into assertions.
+
+### D2. Implement Portfolio and its fill journal
+
+- [ ] The assistant writes tests from D1; Fuaad writes the first implementation.
+  Use distinct signed exact types and checked wider multiplication before rescaling.
+  Calculate a candidate update before committing state; record execution and fee identities.
+  **Done when:** long/flat/short/reversal cases pass; failed and duplicate fills cannot half-change
+  state; journal replay rebuilds the account exactly. Complete C7. Fill accounting does not
+  obtain a mark price or wall clock.
+
+### D3. Define intentions, reasons and the strategy boundary
+
+- [ ] Add only required value types and read-only, lifetime-bounded book access.
+  Strategy observation consumes successfully processed inputs; decisions return intentions
+  without execution authority. Do not introduce Stage 9's `OperationalState`.
+  **Done when:** trust/shape blocks have distinct tested reasons and `NoopStrategy` uses the
+  real interface without producing an order. Settle ADR 0009 when the seam needs it.
+
+### D4. Build the simulated venue and real admission checks
+
+- [ ] Support submit, accept, reject, partial/full fill, cancel request and acknowledgement.
+  Count accepted outstanding orders in worst-case exposure; do not assume opposing orders fill together.
+  Implement quantity, notional and resulting absolute-position limits.
+  **Done when:** transitions are independently testable, rejection cannot mutate venue/portfolio
+  state, and a fill can correctly race a pending cancellation.
+
+### D5. Implement scheduling and information availability
+
+- [ ] Keep one thread and inject feed/clock/strategy/venue dependencies.
+  Preserve metadata for zero, fixed (80 ms) and recorded availability policies.
+  Specify ties and how delayed/out-of-order observations preserve a valid strategy view.
+  **Done when:** timelines prove apply-before-observe, no future information, market-before-own-arrival
+  ties, submission-sequence ties and arrival-time fill eligibility.
+  Stored receipt time is deterministic input, not a calibrated network-delay measurement.
+
+### D6. Pass the complete engine proof
+
+- [ ] Wire feed, book, health, strategy, gate, admission, venue and portfolio.
+  Close C2 before trusted capture runs and C6 before exception recovery.
+  **Done when:** no-op conservation, a hand-calculated scripted fill, a real unchanged-state risk
+  rejection and ten repeated runs pass. Save partial-fill, outstanding-exposure, duplicate-fill
+  and cancel-race cases. Compare intermediate event/order/account state, not only final totals.
+
+### D7. Ship the replay executable and run record
+
+- [ ] Connect `apps/replay_main.cpp` to the build and actual engine.
+  **Done when:** one command runs a mandatory fixture without private data and reports counts,
+  trust, shape, blocks/rejections, orders, accounting and fingerprints.
+  Record input hashes, commit/build and dirty state, scales, policies, configuration,
+  exclusions and result hashes. Detailed traces are optional.
+  Refresh this checklist and handoff with actual build/test evidence.
+
+## E. After Stage 5: learning and research gates
+
+Planned, not implemented; detailed requirements live in plan v4.
+
+- [ ] **L3 evidence before Stage 6/8 claims:** compare order IDs/quantities at intermediate
+  checkpoints, and priority only where known. Keep the L2 digest for depth checks. Effort: 1-3 days.
+- [ ] **Tape equivalence before replacing raw replay:** resolve pre-seed classifier warm-up,
+  bind source lineage and preserve or explicitly reject unavailable timing policies.
+  Prove raw/tape equivalence for each supported policy. Effort: 2-4 days; format work may add time.
+- [ ] **Stage 6:** observed-order labels, explicit cancellation/ambiguity/censoring,
+  availability-safe features and transparent baselines.
+- [ ] **Stage 7:** chronological sessions, label-interval leakage protection, frozen evaluation,
+  calibration, block uncertainty and sensitivity to assumptions.
+- [ ] **Stage 8:** equivalent optimized book, controlled profiles and allocation/cache measurements.
+  Compare bounded SPSC with a mutex queue after the single-thread baseline.
+  Add relevant fuzzing, fault injection and concurrency checks.
+- [ ] **Stage 9:** read-only live feed, recovery, paper lifecycle, operational risk,
+  bounded telemetry and shutdown/failure runbooks. No real-money trading.
+- [ ] **Stage 10:** thin dashboard, ownership-safe C++/Python boundary, reproducible
+  correctness/performance/research reports and a five-minute demonstration.
+
+Advanced techniques may be contained learning experiments. Promotion to the main engine requires
+correctness equivalence and measured value. A measured non-improvement still teaches something.
+
+## F. Completed foundation evidence
+
+Historical observations, not new test results from this documentation update:
+
+- [x] Exact types/parsing, clock seam, byte codecs and portable v3 segment I/O.
+- [x] Move-only reference book, ordinary-error atomicity and trust/shape separation.
+- [x] Joined capture, merge/reconciliation, mandatory synthetic fixture and input accounting.
+- [x] Reported joined checkpoint agreement: 0 of 4,533 price levels differed.
+  This does not prove every order's identity or priority.
+- [x] Coordinator byte/hash/count admission, overflow guards and optional-corpus skip repair.
+- [x] All four Python test files in CI, hashed C++ archives, GCC/Clang Debug sanitizer
+  builds, a Release job and explicit debug-only structural validation.
+- [x] ADRs 0014/0015 and prior build-directory repair. Historical logs report 325-case
+  toolchain runs and a later 327-case local run on 16 September; cite configuration/date.
+
+[The guide](docs/project-progress-guide.md) explains the work and conditional timeframe.
+[The handoff](docs/handoff/status.md) records current source limitations.
