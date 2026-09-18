@@ -93,7 +93,14 @@ std::string sha256Hex(std::span<const std::byte> data) {
     // big-endian bit length. Needs a second block if the tail plus that padding does not fit.
     std::array<std::uint8_t, 128> tail{};
     const std::size_t remaining = data.size() - offset;
-    std::memcpy(tail.data(), bytes + offset, remaining);
+    // memcpy declares src nonnull, so passing an empty span's data() -- which is permitted to be
+    // nullptr -- is undefined even when the length is zero. Harmless on every real libc, but the
+    // compiler may infer from the nonnull attribute that bytes cannot be null and drop a later
+    // check on that basis. UBSan flagged this on the empty-input case as soon as
+    // -fno-sanitize-recover=undefined made findings fail the build.
+    if (remaining > 0) {
+        std::memcpy(tail.data(), bytes + offset, remaining);
+    }
     tail[remaining] = 0x80;
 
     const std::size_t tailBlocks = (remaining + 1 + 8 <= 64) ? 1 : 2;
