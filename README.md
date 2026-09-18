@@ -12,6 +12,11 @@ observation and local paper-order experiments. See the current
 
 ## Status
 
+Source review: **18 September 2026, `6c2f2f6`**. The project is entering Stage 5:
+accounting examples, Portfolio, then a complete deterministic engine path. ADR 0014 is
+accepted; its D5 signed-position policy still needs completion. Documentation alignment
+does not implement the open review findings or establish a fresh test result.
+
 For a plain-language explanation of what exists, diagrams, and why the next steps are ordered as
 they are, read [Trading Engine: your next milestone](docs/project-progress-guide.md)
 or its [PDF edition](output/pdf/trading-engine-progress-guide.pdf).
@@ -20,9 +25,9 @@ The table below uses historical slice numbers; the guide and active planner use 
 | Slice | Weeks | State |
 |---|---|---|
 | 0 Foundations | 0 | complete |
-| 1 Data contract + recorder | 1 to 3 | capture and portable v3 file I/O implemented; reviewed admission/validation repairs remain |
+| 1 Data contract + recorder | 1 to 3 | capture/v3 I/O and byte/hash/count admission exist; semantic admission and tape equivalence remain |
 | 2 L3 book + reconciliation | 3 to 5 | merge controller built and its gate met; joined replay reproduces the venue checkpoint exactly (0 of 4,533 levels differ) |
-| 3 Deterministic replay + accounting | after joined replay | causality/authority design in progress; implementation not started |
+| 3 Deterministic replay + accounting | after joined replay | ADR 0014 accepted; complete D5 examples, then implement Stage 5 |
 | 4 Queue labels + execution model | after replay core | not started |
 | 5 Held-out corpus validation | after label-quality gate | not started |
 | 6 Performance laboratory | after deterministic correctness | not started |
@@ -41,7 +46,8 @@ Only three things vary between backtest and live:
 
 If any file outside those six implementations calls the system clock or knows what a WebSocket
 is, the design has leaked. The injected clock boundary exists, and CI now enforces direct-clock and
-exact-financial-type source guards with focused deliberately-broken tests.
+selected financial-header guards with focused deliberately-broken tests. Financial implementation
+files need explicit guard coverage as Portfolio/risk are added; the current guard is not comprehensive.
 
 ## Layout
 
@@ -83,13 +89,15 @@ cannot exactly verify a Bitstamp book.
 
 ## Current order of attack
 
-Never do these in parallel. The live sequence and its exact completion gates are in
+The live sequence and its exact completion gates are in
 [TODO.md](TODO.md); long-range reasoning remains in [Project Plan v4](docs/project-plan-v4.md).
 
-The checklist was replaced on 15 September 2026 with the supplied new to-do list, available as
-[TODO.pdf](TODO.pdf). Start with its **Do these first** section, then follow sections A-D.
-It supersedes the earlier checklist and the progress guide's suggested sequence. The guide remains
-background explanation; TODO owns current priorities, recorded design answers and open questions.
+The checklist was aligned with the source review on 18 September 2026; [TODO.pdf](TODO.pdf)
+exports it. Start with **Start here**. The supplied `new-todo-list.pdf` is historical input.
+The guide explains the learning/research path; TODO owns priorities and completion criteria.
+In-memory accounting can proceed independently of capture hardening, but integration must meet
+its named prerequisites. The guide PDF is a local export under gitignored `output/`;
+older plan and deep-dive PDFs are historical snapshots, not current status authorities.
 
 Done before this list: the mandatory committed golden fixture; timestamp and ID contract fixes;
 portable v3 encoding/segment I/O; CI architecture guards; joined order/trade capture under one
@@ -115,6 +123,8 @@ hour contains a real chain break. It must not be treated as one replayable conti
 
 ## Notes on measurement
 
-Latency figures in this repo are **internal tick-to-order on macOS**, not end-to-end network
-latency and not sub-microsecond claims. Methodology, hardware, and what is actually being
-measured go in `docs/latency_methodology.md` before any number is quoted anywhere.
+No current engine latency result is established by this documentation update. Distinguish
+internal processing time from simulated availability and receipt-minus-venue clock differences.
+Methodology, hardware, sample size and uncertainty go in `docs/latency_methodology.md` before
+making a performance claim. The reference book remains the oracle; advanced C++ learning
+variants enter the main engine only after correctness and measurement justify them.

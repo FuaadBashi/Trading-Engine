@@ -1,7 +1,7 @@
 # ADR 0014: Event-loop causality and decision authority
 
-- **Status:** accepted — all 8 open questions resolved (D1-D8), reviewed together 2026-09-15
-- **Date:** 2026-09-09, amended 2026-09-15
+- **Status:** accepted 2026-09-15; D5 accounting completion required as recorded below
+- **Date:** 2026-09-09, amended 2026-09-15 and corrected 2026-09-18
 - **Stage:** 5 (with explicitly deferred Stage 9 controls)
 
 ## Context
@@ -23,7 +23,12 @@ None of these alone grants permission to trade. Treating trust and shape as one 
 ever-growing cross-product; treating either one as the final permission check would allow an
 open-but-untrusted or trusted-but-one-sided book to drive an order.
 
-## Proposed decision
+## Accepted decision
+
+The 18 September source review corrected status, clock and accounting overstatements.
+The authority/order contract remains accepted. These are requirements for the future engine,
+not a claim that Strategy, DecisionGate, Portfolio or ExecutionVenue is implemented.
+D5 now identifies the signed-position policy that must be completed before Portfolio.
 
 ### Apply before observe
 
@@ -77,8 +82,9 @@ the same provenance and deterministic ordering discipline as market inputs.
 
 ### Structural failure is not poor market health
 
-Debug builds run the full `validateStructure()` sweep after every successful mutation. Release
-replay may run it at declared checkpoints. A future production hot path must use cheap always-on
+Debug builds run the full `validateStructure()` sweep after every successful mutation.
+The current function uses assertions and provides no Release validation. Any future
+always-on checkpoint validator must be implemented and tested explicitly. A future production hot path must use cheap always-on
 local checks for the exact node, locator, quantity and arithmetic touched by a mutation; it must not
 scan the full book after every event.
 
@@ -124,8 +130,8 @@ absent and explicitly deferred.
 
 ## Decisions settled after the first draft
 
-All eight open questions below were resolved in design sessions on 2026-09-14/15 and are recorded
-here as D1-D8. This ADR stays **proposed** until D1-D8 are reviewed together and signed off.
+D1-D8 were reviewed and accepted on 2026-09-15. The 2026-09-18 correction identifies
+an incomplete generalization in D5 and clarifies D4; it does not reopen all eight decisions.
 
 ### D1. Stage 5 has no operational-state type (was open question 1)
 
@@ -159,10 +165,10 @@ reported.
 
 ### D4. Ordering uses venue time only; availability is a separate, measured, declared policy (was open question 4)
 
-1. **Venue timestamp is the only ordering clock.** Receipt timestamps are not used for ordering.
-   Receipt time varies with local network and machine conditions, so ordering by it would make the
-   same input replay differently on different runs — the standard event-time versus processing-time
-   distinction from stream processing.
+1. **Venue timestamp orders market reconstruction**, with the order-before-trade exact-tie
+   policy from ADR 0013. Receipt timestamps do not replace that reconstruction key.
+   Stored receipt timestamps are deterministic inputs too; only reading fresh ambient clock
+   values during replay would introduce run-dependent timing. Availability is a separate schedule.
 2. **A real market event precedes a synthetic order arrival** at an equal timestamp, so an
    engine-generated order can never be sequenced ahead of history that actually happened.
 3. **Two of the engine's own orders break ties by submission sequence number**, lowest first — a
@@ -171,9 +177,9 @@ reported.
 
 #### Ordering time and availability time are separate contracts
 
-Ordering by venue time says *when an event happened*. It does not say *when the strategy could have
-known about it*. Conflating the two silently assumes zero market-data delay, which the capture data
-disproves.
+Venue ordering uses the venue's occurrence timestamps. It does not establish when the
+strategy could have known an event. A zero-delay model is an explicit simplifying assumption,
+not an inference of physical simultaneity from these captures.
 
 **Measured, 2026-09-15**, over five capture segments — `localWallTimestampNanos` minus
 `venueTimestampMicros`, per frame:
@@ -183,52 +189,81 @@ disproves.
 | orders | 189,375 | 33.2 ms | 75.1 ms | 154.9 ms | 249.0 ms | 1382.7 ms |
 | trades | 789 | 33.0 ms | 76.2 ms | 173.2 ms | 210.3 ms | 244.4 ms |
 
-Per-segment medians range 53-96 ms across sessions a week apart. **Zero negative values** across
-190,164 samples, so the local clock is not running ahead of the venue's.
+Per-segment medians range 53-96 ms. No negative differences were reported in 190,164
+samples. That observation does not establish clock alignment or the sign of clock offset.
 
-Caveat: this is delay **plus unknown clock skew**; the capture alone cannot separate them. The shape
-of the distribution is trustworthy; the absolute floor carries whatever constant offset exists
-between the two clocks.
-
-Feeding events to a strategy at venue timestamp would grant it roughly 75 ms of lookahead — reacting
-before the message could physically have arrived. For a short-horizon strategy that is most of the
-opportunity, so results would flatter the strategy for reasons that have nothing to do with it.
+These measurements combine delivery/processing delay with unknown inter-clock offset and
+possible clock variation. Without synchronization evidence, neither the absolute floor nor
+the 75 ms median is a calibrated network delay. Constant offset preserves within-run shape;
+clock drift or adjustments can change it. Compare declared scenarios and report sensitivity
+rather than claiming a measured amount of lookahead bias.
 
 **Decision: availability is a declared, swappable policy, kept separate from ordering.**
 
 | Policy | Delay source | Applies to |
 |---|---|---|
-| `zero` | none | Baseline. Comparing against it measures the lookahead bias directly. |
+| `zero` | none | Explicit baseline; comparison measures sensitivity to the declared availability assumptions. |
 | `fixed` | one declared constant, **80 ms** | Everything, including synthetic scenarios with no recorded delay. |
-| `recorded` | `localWallTimestampNanos` per frame | Real captures only. Faithful, keeps the tail, still fully deterministic because it replays recorded data. |
+| `recorded` | retained receipt metadata per frame | Deterministic recorded observations; cross-clock mapping, ties and inconsistent timing need an explicit policy. |
 
 `fixed` exists because `recorded` cannot serve hand-written test timelines — they have no capture
 metadata. Running one scenario under more than one policy and reporting the spread follows the
 precedent ADR 0008 already sets for cancel assumptions: where an assumption cannot be settled by
 evidence, implement several and report how far the answer moves.
 
-80 ms was chosen over the measured 75 ms median as a declared round number with a small safety
-margin above it, not a claim of measured accuracy — revisit if evidence says otherwise.
+80 ms remains the accepted round-number scenario. It is neither a measured delay nor a safety bound.
 
 The active policy **must be recorded alongside every result**, mirroring
 `kOrderingPolicyOrderWinsTie` in the v3 segment header: a result whose assumptions are not stamped
-cannot be compared against another. This folds into the planned run manifest (TODO section E).
+cannot be compared against another. This folds into the planned run manifest (TODO D7).
 
-### D5. Fill accounting order, committed atomically (was open question 5)
+Current C++ envelopes and v3 records do not retain all required receipt metadata. Before
+implementing recorded availability, specify metadata preservation, cross-clock mapping,
+delivery order and strategy-view lifetime. Delaying a callback must not expose a newer book
+containing other unavailable events. Market reconstruction ordering does not by itself solve
+this scheduling problem.
 
-On a confirmed fill:
+### D5. Atomic fill accounting; signed-position policy must be completed
 
-1. The venue confirms the fill (price, quantity).
-2. Compute the fee.
-3. **Buy:** fold execution price and fee into a new weighted-average entry price.
-   **Sell:** use the **existing** average entry price to compute realized PnL on the quantity sold;
-   the fee reduces that realized PnL. A partial sale does **not** change the average entry price of
-   the remaining position, and realizes PnL only on the quantity actually sold.
-4. Commit cash, signed position, average entry price and PnL **together**, so no observer can see a
-   partially updated portfolio.
+**Correction, 2026-09-18:** the earlier "Buy establishes basis; Sell realizes PnL" rule
+described opening/closing a long only. It is not a complete specification for TODO's
+long, flat, short and reversal requirements. No Portfolio implementation exists yet.
 
-Reasoning: acquisition costs belong in cost basis; disposal costs reduce proceeds. The atomicity
-requirement matches the failure atomicity `OrderBook` already guarantees for rejected mutations.
+The accepted atomicity requirement remains: calculate and validate the entire candidate
+fill update before committing cash, signed position, basis, realized PnL and fee records.
+An arithmetic error or duplicate execution cannot leave a partial update.
+
+Classify a fill against the **existing signed position**, not direction alone:
+
+| Existing position and fill | Economic action |
+|---|---|
+| Flat/long plus buy | Open/increase long |
+| Long plus sell up to its size | Reduce/close long |
+| Flat/short plus sell | Open/increase short |
+| Short plus buy up to its size | Reduce/close short |
+| Sell larger than the current long | Close long, then open remaining short |
+| Buy larger than the current short | Close short, then open remaining long |
+
+The original convention capitalized opening fees into long basis and deducted closing
+fees from realized PnL. Under a corresponding short convention, opening fees reduce
+opening proceeds; blindly adding them to short basis is wrong. A gross-PnL convention
+with separately reported fees is an alternative, not interchangeable arithmetic.
+
+**Required decisions before Portfolio assertions are written:**
+
+- money units and checked rescaling from price ticks times quantity units;
+- basis representation and exact partial-close rounding/residual handling;
+- selected gross/net reporting and fee source;
+- fee allocation between closing and opening portions of a reversal when basis carries fees;
+- execution/fee identity and duplicate behavior.
+
+Total basis plus quantity is a candidate; it still requires partial-close allocation rules.
+No representation or fee schedule is selected by this correction. Complete TODO D1 using
+agreed long/short/reversal examples, then record the chosen policy here.
+The assistant writes the tests; Fuaad chooses the domain rules.
+
+Unrealized PnL is derived from an explicit mark, position and basis. A fill may change it
+through position/basis; the mark itself is not part of the confirmed-fill input.
 
 ### D6. `DecisionGate` is invoked at every checkpoint, trusted or not (was open question 6a)
 
@@ -243,9 +278,10 @@ already establishes for `DecisionGate`) or simply not count those blocks at all.
 keeps one place responsible for every named reason, at negligible cost (an enum comparison per
 checkpoint).
 
-The remaining half of open question 6 — behaviour during `disconnected`, `gapped` and
-`resynchronizing` specifically — stays out of scope, per D1: those states do not exist at Stage 5,
-since replay has no live connection to lose.
+Live disconnect detection and operator control remain Stage 9 work. Recorded gaps,
+invalid segments and reseeding still affect replay trust at Stage 5; a finite file can
+contain evidence of discontinuity. Integrate the existing BookHealth states and the
+admission/segment policy without introducing a placeholder OperationalState.
 
 ### D7. A reason becomes a permanent contract only once a test asserts it by name (was open question 7)
 
@@ -258,7 +294,7 @@ applies in D1 to reject a premature `OperationalState`. A name nothing depends o
 for free; a name a test checks against cannot. The trigger is deliberately checkable — a test exists
 or it does not — rather than a matter of memory or convention.
 
-Consequence: the actual reason taxonomy (naming and testing each value) is TODO item 3's job, not
+Consequence: the actual reason taxonomy (naming and testing each value) is TODO D3's job, not
 this ADR's. This ADR fixes only the rule for when a name becomes permanent.
 
 ### D8. No crossed-to-corrupted threshold yet; measure first (was open question 8)
@@ -266,13 +302,13 @@ this ADR's. This ADR fixes only the rule for when a name becomes permanent.
 No duration threshold is set for escalating a persistently crossed safe checkpoint to
 `BookHealth::corrupted`. None may be invented without evidence, and none currently exists.
 
-This does not leave crossed markets unhandled: `DecisionGate` already blocks every decision when
+This contract requires the future `DecisionGate` to block every decision when
 `marketShape()` reports `crossed`, via D6, independent of duration. The open question is narrower —
 only when a crossed book is corrupted enough to demand resynchronization, not whether it may be
 traded.
 
-Decision: **start recording evidence now, decide the threshold later.** Every crossed safe checkpoint's
-duration is logged in the replay report (folding into the run manifest, TODO item 8). No escalation
+Decision: **instrument Stage 5, decide the threshold later.** Its replay report must record crossed
+safe-checkpoint durations (folding into the run manifest, TODO D7). This telemetry is not yet implemented. No escalation
 logic is implemented until the corpus shows how long real transient crossings actually last. This
 mirrors flap-damping in network monitoring (BGP route flapping, Kubernetes liveness-probe failure
 thresholds): the debounce window is measured, not assumed.
@@ -296,15 +332,19 @@ T9  accepted intent enters the outbound-latency queue           [D2: only after 
 T10 arrival at the simulated venue; eligible to fill at this instant   [D3]
       - a real market event at the same timestamp applies first        [D4.2]
       - two own orders order by submission sequence number             [D4.3]
-T11 fill -> fee -> average price or realized PnL -> atomic commit      [D5]
+T11 identified fill -> fee/basis/realized calculation -> atomic account commit      [D5]
 ```
 
-Ordering throughout uses venue timestamps only (D4.1).
+This is a logical dependency trace, not yet a complete timestamped scheduler example.
+Market reconstruction uses venue time; strategy delivery uses availability and own-order
+arrival uses outbound delay. Expand the trace into concrete delayed-observation examples
+before implementing the scheduler.
 
-## Open decisions required before acceptance
+## Remaining implementation specifications
 
-None. All eight plan-v4 causality questions are answered above (D1-D8), reviewed together against
-the rest of this document on 2026-09-15, and accepted.
+Acceptance of the original D1-D8 authority/order decisions stands. Complete D5's accounting
+rules and D4's metadata/delayed-view scheduling details before their respective implementations.
+These are scoped completion tasks, not a reason to restart the entire ADR.
 
 ## Consequences
 

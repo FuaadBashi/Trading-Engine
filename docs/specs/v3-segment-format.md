@@ -117,8 +117,9 @@ starts with a cold classifier and may classify differently.
 
 This blocks the identical-hash claim Stage 8 depends on. Options, cheapest first:
 
-1. **Measure whether it matters.** If classifier state never survives the seed boundary in practice,
-   the gap closes with evidence and no code. Testable against the existing corpus.
+1. **Measure whether it matters for the corpus.** A corpus with no surviving classifier state
+   supports only that corpus-specific claim. General substitution still requires carrying state,
+   warm-up records, preclassification, or enforcing/rejecting an explicit no-surviving-state precondition.
 2. **Carry warm-up records.** Write pre-seed order events too; a reader treats records at or before
    `seedTimestampMicros` as classifier-only and never applies them to the book. Self-sufficient tape,
    costs bytes.
@@ -132,6 +133,18 @@ Do not claim tape/raw replay equivalence until one of these lands.
 `captureOrdinal`, `localWallTimestampNanos`, `localSteadyTimestampNanos`, `runId` and `segmentId`
 exist in raw captures but are **not** stored in v3 segments. This is deliberate — see the
 derived-accelerator decision in ADR 0011.
+
+### Stage 5/8 integration gate - added 2026-09-18
+
+Recorded availability in ADR 0014 needs receipt metadata absent from these records. A caller must
+provide a provenance-bound sidecar/envelope or use a future version that carries it; otherwise reject
+that policy/tape combination. Do not silently substitute zero or fixed delay.
+
+Before publishing a tape, validate per-stream timestamp ordering, the replay window and seed/header
+consistency. The current writer does not enforce all these preconditions. Counts and hashes must
+bind the derived output to its source; the current bare segment reader has no completeness checksum.
+Raw/tape equivalence tests must include classifier initialization, supported availability policies
+and intermediate order-level state, not only aggregate final depth.
 
 ## Divergence from ADR 0011's original tables
 

@@ -1,9 +1,9 @@
 # Trading Engine Project Plan v4
 
 **Owner:** Fuaad Bashi  
-**Revised:** 2026-09-09
+**Revised:** 2026-09-18
 **Primary career target:** Quant developer, with credible C++ market-data and performance-engineering evidence  
-**Status:** Current source of truth
+**Status:** Current long-range scope and evidence gates; TODO.md owns active task status
 
 This plan supersedes `project-plan-v2.md` and `coding-plan-v3.md`. Those documents remain useful
 historical records of how the design changed, but this document controls current scope, ordering and
@@ -40,67 +40,29 @@ The target interview story is:
 > implementations, measured tail performance, and evaluated fill forecasts out of sample with
 > explicit uncertainty.
 
-## 2. Current verified baseline
+## 2. Current baseline and limits
 
-The status below reflects the working tree on **2026-09-09** at `HEAD 22bc074` plus the documented
-uncommitted trust/shape/causality changes. The full configured build passes **303 of 303 CTest
-cases**. The mandatory joined fixture is committed; larger private-corpus tests remain additional
-evidence rather than the only correctness gate.
+Source was reviewed at `6c2f2f6` on **18 September 2026**. The detailed, dated source
+baseline and historical validation evidence live in [the handoff](handoff/status.md);
+[TODO.md](../TODO.md) owns completion status. This documentation update did not rerun the engine suite.
 
-`docs/handoff/status.md` is the short companion to this table and is refreshed more often.
+Implemented foundations include exact parsing/types, the move-only sparse reference book,
+joined capture, per-segment loading, multi-segment coordination, byte/hash/count admission,
+merge/reconciliation, portable v3 codecs/I/O and mandatory synthetic fixtures.
+The built application remains the legacy recorder. Portfolio, strategy, venue and engine are placeholders.
 
-### Implemented and tested
+The project is entering Stage 5. ADR 0014 is accepted; D5's signed-position accounting
+detail needs completion. ADR 0015 is an accepted interim fatal-allocation policy.
 
-| Area | Existing implementation | Evidence |
-|---|---|---|
-| Build foundation | CMake C++20, `te_core`, thin application target, warnings, pinned dependencies | GCC and Clang Linux CI |
-| Runtime checking | AddressSanitizer and UndefinedBehaviorSanitizer configuration and learning laboratory | CI builds both compilers with ASan/UBSan |
-| Domain values | `Price`, `Qty`, `OrderId`, `Side`, `InstrumentSpec`, representation contracts | Unit and compile-time tests |
-| Exact parsing | Exact fixed-point decimal and unsigned integer parsing with boundary/overflow rejection | Decimal and integer test suites |
-| Venue decoding | Bitstamp L3 order decoder and trade decoder | Real-message and malformed-input tests |
-| Capture | Snapshot-backed Bitstamp order segments, manifests, validation, negative fault corpus | Python capture validator and measured captures |
-| Legacy recording | v2 `Record`, `Sink`, recorder counters, gap markers and byte round trips | Golden recorder tests |
-| Snapshot parsing | Bitstamp `group=2` L3 snapshot parser | Synthetic and real-snapshot tests |
-| Event filtering | Bitstamp zero-price lifecycle classifier | Reason-counted classifier tests |
-| Reference book | `PriceLevel`, move-only `OrderBook`, add/modify/remove, locators and invariants | Focused book tests |
-| Book trust | `BookHealth` state machine and reason-coded synchronization failures | Focused transition tests |
-| Market shape | `OrderBook::marketShape()` distinguishes empty, one-sided, locked, crossed and open | Focused shape tests |
-| Bootstrap | Seed a fresh `OrderBook` from a parsed venue snapshot | Bootstrap tests |
-| Venue checkpoint | Replay order events from one snapshot to a later independent snapshot | Real golden replay test |
-| Fill correction | `TradeEvent`, trade decoder, `TradeReconciler` fill ledger keyed by `(orderId, venueTimestamp)` | Partial/full fill lifecycle tests; ADR 0013 |
-| Joined capture loading | `loadJoinedCapture`: manifest + payload/frame positional join, decodes `amount_traded` and `captureOrdinal` | Synthetic fixture tests plus one real 29k-event capture |
-| Merge controller | `te::bitstamp::Replay`: two-pointer merge by venue time, order-wins-tie, full input accounting | 16 unit tests plus a real-corpus zero-residual test |
-| Determinism fingerprints | `OrderBook::digest()`, `ReplayStats::appliedEventDigest` | Route-independence and ten-run identical-digest tests |
-| Documentation | ADRs, learning notes and generated PDF deep dives | Repository documentation |
+Important limits remain: semantic C++ capture admission; tape ordering/window validation;
+receipt metadata and classifier warm-up for tape equivalence; order-level correctness evidence;
+diagnostic context; UBSan failure enforcement; supported Python and financial source-guard scope.
+These are open work, not closed by the earlier byte/hash/count repair.
 
-### Important work that is not complete
-
-| Gap | Why it matters |
-|---|---|
-| Correction path unreached on real data | 637 of 637 fills against a resting order were already reported by `live_orders`, so `TradeReconciler` has never fired on a real capture. Insurance, not a validated path -- ADR 0013. |
-| Three unexplained golden-replay orders | Previously assumed to be silent full fills. That explanation is now unlikely; they remain unexplained and cannot be diagnosed from an order-only historical capture. |
-| Book-health integration | `BookHealth` exists, but no engine yet owns its transitions or combines trust with market shape and operational state. |
-| Replay-side gap/reseed policy | The *capture* side now refuses a seed that predates its stream. What replay should do on meeting a gap is still undecided (ADR 0013, deliberately deferred). |
-| Multi-segment capture loading | `loadJoinedCapture` reads only the first segment, so a capture that reconnected is partly unreachable from C++. |
-| Nothing replays *from* a v3 tape | `writeEventTape` converts a joined capture into a segment (L1: merge order baked in, classification/book/reconciliation still run on read) — built 2026-09-02. `EventSegmentReader` decodes records but nothing feeds them into an `OrderBook`. Blocked on proving tape/raw replay equivalence: `Replay` warms a stateful classifier on pre-seed orders that a tape does not carry. See `docs/specs/v3-segment-format.md`, "Known gap: classifier warm-up". v3 is a derived accelerator over the raw capture, not the archive — ADR 0011, decided 2026-09-01. |
-| Same-venue L2/checkpoint suite | Replay compares one final checkpoint; captures carry a checkpoint per segment. |
-| Event-loop causality | ADR 0014 records settled authority/order rules but remains proposed until latency, fill, accounting and degraded-state ordering are decided. |
-| Replay, strategy, ledger, risk and venue interfaces | Stage 5 engine modules remain placeholders; do not implement them ahead of ADR 0014. |
-
-### Closed since this table was written
-
-| Was a gap | Closed by |
-|---|---|
-| One joined order/trade capture contract | `dump_raw_ws_bitstamp.py` + `validate_joined_capture.py`; seed must now cover stream start |
-| Production merge/reconciliation controller | `te::bitstamp::Replay`, ADR 0013 accepted |
-| Zero unexplained checkpoint residuals | Joined replay matches its S1 snapshot exactly: 0 of 4,533 levels, no hand-listed exceptions |
-| `id` and `id_str` agreement | `DecoderError::id_mismatch`, ADR 0005 satisfied |
-| Every input accounted for | `beforeSeed + read + afterCutoff == input size`, asserted on the real capture |
-| Deterministic digests | `OrderBook::digest()` and `ReplayStats::appliedEventDigest`; ten-run identical test |
-| Mandatory hermetic fixture | `tests/fixtures/joined-capture-golden/` exercises the real loader and replay path on every checkout |
-| Timestamp type contract | Receipt time is named/stored as nanoseconds and CI guards direct clock use |
-| Two invariant modes | Debug structural checks are separate from reason-coded safe-checkpoint market shape |
-| Decode merge | `segment_loader.cpp` uses `decodeCapturedOrder`; the obsolete separate fill decode path is removed |
+Previously reported real checkpoint agreement (0/4,533 price-level residuals) is aggregate
+evidence, not proof of all order identities or queue priority. The correction path has synthetic
+coverage but did not fire in the previously analyzed real joined sample. Three legacy order-only
+adjustments remain unexplained. Keep those limitations attached to results.
 
 ## 3. Role alignment
 
@@ -130,7 +92,9 @@ The authoritative C++ engine remains independent of files, sockets and user-inte
 
 The reference `std::map`/`std::list` book is permanent. It is the easy-to-reason-about correctness
 oracle. An optimized book may be added later, but it must consume the same normalized event tape and
-produce identical checkpoint and final-state hashes before its performance results are accepted.
+produce identical order-level state at intermediate checkpoints and at the end before performance
+results are accepted. Compare known queue priority too. Aggregate depth and input-event hashes remain
+useful separate checks, but cannot alone prove L3 implementation equivalence.
 
 Python may perform research, reporting and presentation. Python must not independently reconstruct
 the authoritative book, calculate fills, manage risk or maintain a second portfolio ledger.
@@ -139,17 +103,26 @@ the authoritative book, calculate fills, manage risk or maintain a second portfo
 
 ### Observed-order outcomes are primary
 
-For a real `order_created` event at time T, use only information available at or before T to predict
-whether that exact order fills within fixed horizons. Join Bitstamp order and trade streams by order
+For a real `order_created` event, declare prediction time and horizon origin under the availability
+policy. Use only information available to the predictor then. Keep venue occurrence and strategy
+availability distinct when predicting whether that exact order fills within fixed horizons. Join Bitstamp order and trade streams by order
 ID to classify later partial fills, complete fills, cancellations and censoring.
 
 Required targets include:
 
 - filled within 1 second, 5 seconds and 30 seconds;
 - time to first fill and complete fill where observable;
-- cancellation or censoring before the horizon;
+- cancellation, ambiguity and censoring before the horizon, with distinct definitions;
 - signed mid-price movement after fill;
 - opportunity cost when an order does not fill.
+
+Cancellation is an observed outcome; a recording ending is incomplete observation. Define the
+estimand before treating cancellation as a competing outcome or as censoring, and justify any
+censoring assumptions. Protect train/evaluation boundaries using label intervals, not just row order.
+
+Candidate research question: **how do information delay and queue-observation uncertainty change
+short-horizon fill-forecast accuracy?** This is a proposed study, not a claim of novelty or an accepted
+PhD topic. The PhD subject and weekly availability are not specified; require a literature review.
 
 ### Hypothetical orders are secondary
 
@@ -206,8 +179,8 @@ snapshot. Replay never crosses a gap or transport boundary while pretending the 
 ## 7. Deterministic merge and reconciliation contract
 
 **Built 2026-08-27** as `te::bitstamp::Replay` (`src/feed/bitstamp/replay.cpp`). It owns stream
-ordering, classification, book application, trade correction and reason counters. Health states are
-not implemented; see the deferred list at the end of this section.
+ordering, classification, book application, trade correction and reason counters. A separate
+`BookHealth` state machine exists; engine-owned health transitions are not integrated yet.
 
 The ADR this section required is `docs/decisions/0013-merge-ordering-and-fill-double-counting.md`,
 accepted. It settles tie-breaking and specifies how corrections avoid double-counting a fill the
@@ -246,13 +219,13 @@ The controller must have an ADR that defines:
 
 ### Book health
 
-```text
-unseeded -> warming -> valid -> stale_or_gapped -> resyncing -> valid
-```
+The implemented state names are `unseeded`, `synchronizing`, `valid`, `corrupted` and
+`fatal_failure`. Synchronization failures carry separate reasons; three consecutive failures
+lead to `fatal_failure`. Do not invent a second health enum in the engine.
 
-A strategy may make decisions only in `valid`. Structural book invariants may run after every
-mutation. Stable-market checks, such as an uncrossed decision-ready view, run only at declared safe
-checkpoints after classification and reconciliation.
+Trust is necessary but not sufficient for a decision: market shape must also permit it.
+Stage 5 combines those two inputs; Stage 9 adds operational state. Debug structural checks
+and safe-checkpoint market-shape checks answer different questions.
 
 ## 8. Reproducible run manifest
 
@@ -283,7 +256,7 @@ A stage closes when its gate passes, not when its estimated time has elapsed.
 | 1 | Joined capture | unified order/trade run with shared ordinal | validator proves one coherent segment |
 | 2 | Merge and reconciliation | deterministic controller and health counters | repeated final hash; zero silent failures |
 | 3 | Golden correctness | snapshot-to-checkpoint joined replay | zero unexplained residuals; no manual patches |
-| 4 | Durable corpus | portable v3 order/trade/snapshot format | cross-compiler semantic and byte golden tests |
+| 4 | Derived tape | portable v3 event format and source binding | byte/semantic tests; raw/tape equivalence before substitution |
 | 5 | Replay and accounting | single-thread engine, ledger, fees, simulated venue | hand-calculated conservation scenarios pass |
 | 6 | Queue labels and baselines | versioned labels, queue model and transparent baselines | leakage tests and label-quality report pass |
 | 7 | Held-out validation | chronological evaluation with uncertainty | frozen held-out report beats or explains baseline |
@@ -304,13 +277,13 @@ This lets the project become interview-usable before every product feature is co
 
 ### Deliverables
 
-- Make this plan and the README the only current status sources; label old plans historical.
+- Keep TODO as the single active checklist and the handoff as the dated source baseline; README and this plan link to them. Label old plans/PDFs historical.
 - Correct receipt timestamp type/name and document the three timestamp meanings.
 - Add `id` versus `id_str` mismatch rejection and tests.
 - Split structural and decision-ready validation contracts.
 - Activate narrowly scoped clock and floating-price CI guards instead of claiming commented TODOs
   are enforced.
-- Add CTest labels for unit, golden, corpus, sanitizer and benchmark categories.
+- Use unit/golden/corpus labels already present; add other categories only when real targets exist.
 - Create one small mandatory snapshot/order/trade/checkpoint fixture. Check venue redistribution terms
   before committing raw public data; otherwise use a deterministic download with a pinned hash plus
   a committed synthetic fixture.
@@ -350,12 +323,12 @@ segment, including exact counts and reasoned exclusions.
 
 - order earlier than trade;
 - trade earlier than order;
-- equal timestamp resolved by capture ordinal;
+- equal timestamp resolved order-before-trade, preserving stream order (ADR 0013); ordinal remains provenance;
 - partial and full fills;
 - redundant later delete after a trade correction;
 - unknown IDs and contradictory quantities;
 - late/backward timestamp according to policy;
-- gap invalidates health and blocks strategy delivery;
+- a gap invalidates trust and blocks decisions; do not silently omit otherwise successfully processed observations;
 - reseed restores a valid book;
 - repeated run produces identical digest.
 
@@ -368,9 +341,9 @@ over the same fixture produce identical event and final-book hashes.
 
 ### Required evidence
 
-- Replace the current hard-coded three-order checkpoint adjustment with joined trade reconciliation.
+- Keep the joined path free of hand-listed checkpoint adjustments. Isolate the three unexplained legacy order-only adjustments; do not call them proven fills.
 - Fail on unexpected `OrderBook::apply` results rather than ignoring them.
-- Compare several intermediate checkpoints where data is available, not only one final state.
+- Compare intermediate order IDs/quantities as well as level totals; compare queue priority only where observable. Final depth agreement alone is insufficient.
 - Commit or reproducibly obtain a small mandatory golden fixture.
 - Maintain a separate full-corpus validation command for large local captures.
 - Add model-based/property tests against a deliberately simple independent book oracle.
@@ -406,10 +379,10 @@ policy is baked into the bytes and stamped in the header. See ADR 0011 and
 
 - explicit little-endian headers and fields;
 - no whole-struct `memcpy` as the durable format contract;
-- order, trade, snapshot and declared boundary record kinds;
+- implemented order/trade event records; manifest-owned segment boundaries and fresh seeds, not competing in-stream gap records. The snapshot-row codec remains unimplemented;
 - exact field widths, versions and declared sizes;
 - manifest counts, byte sizes and SHA-256 bindings;
-- reader rejects unsupported version, bad magic, impossible sizes, truncation and hash mismatch;
+- reader rejects unsupported major versions, bad magic, impossible sizes and partial records; source/hash/completeness verification belongs to explicit surrounding admission, not an assumed reader checksum;
 - legacy v2 reader remains isolated and clearly labelled legacy;
 - semantic golden tests and exact-byte golden tests are separate.
 
@@ -417,6 +390,10 @@ policy is baked into the bytes and stamped in the header. See ADR 0011 and
 
 The same committed fixture decodes to identical semantic events under GCC/Clang and macOS/Linux.
 Exact golden bytes do not depend on `sizeof`, padding or host endianness.
+Before substituting tape for raw replay, validate writer preconditions, bind source lineage,
+resolve pre-seed classifier warm-up, and prove equivalence for every supported timing policy.
+The current v3 format does not support recorded availability by itself; supply preserved metadata
+or reject that combination explicitly. This does not block Stage 5 using raw captures.
 
 ## 15. Stage 5 - deterministic replay and accounting
 
@@ -424,11 +401,11 @@ Begin single-threaded. Concurrency is not allowed to complicate correctness.
 
 ### Engine contracts
 
-- normalized `MarketEvent` envelope with provenance;
+- normalized `MarketEvent` envelope retaining provenance and receipt metadata required by supported availability policies;
 - injected `Feed`, `Clock`, `Strategy` and `ExecutionVenue`;
 - explicit event-loop causality ADR;
 - immutable or lifetime-bounded `BookView` for strategies;
-- cash, position, average price, realized/unrealized PnL and fees;
+- distinct exact price/quantity/money units, selected basis and rounding policy, signed position, realized/unrealized PnL and identified fills/fees;
 - deterministic simulated/paper venue;
 - periodic state digests for locating divergence;
 - run manifest for every replay.
@@ -442,24 +419,21 @@ venue and accounting are load-bearing even though the no-op test does not exerci
 
 The Stage 5 admission/risk policy must have genuine tested behaviour—initially maximum order
 quantity/notional and maximum resulting absolute position. It must not be a `return true` stub.
+Admission includes worst-case outstanding accepted exposure; opposing orders need not fill together.
 Order-rate limits, drawdown limits, live pause/resume, production kill-switch wiring, heartbeat
 recovery and durable operational auditing remain Stage 9 implementation work.
 
-Book trust, market shape and operational state are independent inputs. They flow into one
-engine-owned decision gate; they never mutate one another. Strategies observe every successfully
-processed event but return intentions only when the engine requests a decision, and never receive
-direct venue authority. See proposed ADR 0014.
+Book trust and market shape are Stage 5's independent decision-gate inputs. Operational state joins
+only in Stage 9. These inputs never mutate one another. Strategies observe successfully processed
+events when available, return intentions only when asked, and never receive direct venue authority.
+See accepted ADR 0014 and its dated D5 correction.
 
-### Causality questions that must be answered
+### Remaining implementation specifications
 
-1. When does an input event become visible?
-2. When does the book mutate?
-3. When does the strategy receive the new view?
-4. When does a submitted order enter the latency queue?
-5. When can it first fill?
-6. When are fees, cash, position and PnL updated?
-7. How are equal timestamps ordered?
-8. What happens while the book is warming, stale, gapped or resyncing?
+The accepted ADR answers the original authority/order questions. Complete the narrower details:
+signed-position basis/fees/rounding (D5), availability metadata and delayed-view semantics (D4),
+and explicit segment/gap-to-health integration. Use hand-worked examples and tests; do not
+reopen all eight decisions or label the engine implemented because the ADR is accepted.
 
 ### Gate
 
@@ -468,7 +442,11 @@ direct venue authority. See proposed ADR 0014.
   order/fill/fee/PnL result;
 - at least one intention is rejected by a real admission rule without changing venue or portfolio
   state;
-- ten identical runs produce identical event, book, order, cash, position and PnL hashes.
+- ten identical runs produce identical event, book, order, cash, position and PnL hashes;
+- journal replay rebuilds the account; duplicate fills and overflow cannot partially change state;
+- partial fills, cancel races and outstanding exposure have explicit scenarios;
+- delayed observations cannot reveal future information;
+- admission, diagnostic and allocation-policy prerequisites in TODO are satisfied for exercised paths.
 
 ## 16. Stage 6 - queue model, labels and transparent baselines
 
@@ -486,8 +464,8 @@ ADR 0008 must be decided from measured joined data rather than generic L2 assump
 ### Versioned label dataset
 
 Each row records prediction time, instrument/session, features, queue evidence, label horizon, outcome,
-censor reason, data version and provenance. Tests must prove that no feature uses information after
-the prediction instant.
+censor reason, label interval, data version and provenance. Store occurrence and availability
+times where they differ. Tests must prove that no feature uses information unavailable at prediction.
 
 ### Required baselines before ML
 
@@ -511,6 +489,8 @@ censored counts, plus a data dictionary and leakage tests.
 
 - use capture session/day as the independence unit;
 - split chronologically, never randomly mix adjacent events across train and test;
+- exclude/purge training labels whose outcome intervals overlap evaluation; define time-based
+  separation for irregular events and audit feature/label availability at each boundary;
 - freeze label and exclusion policies before final evaluation;
 - tune only on training/validation sessions;
 - perform the final held-out evaluation once after choices are frozen;
@@ -540,7 +520,9 @@ No number appears in a README or CV until it is measured and reproducible.
 
 ## 18. Stage 8 - C++ performance laboratory
 
-Performance work begins only after deterministic correctness. The reference book is never deleted.
+Integrated performance work follows deterministic correctness. The reference book is never deleted.
+Contained learning variants are allowed under section 23; the SPSC experiment follows the stable
+single-thread Stage 5 baseline.
 
 ### Benchmark layers
 
@@ -575,12 +557,15 @@ Performance work begins only after deterministic correctness. The reference book
 - shared GitHub runners do not enforce nanosecond regression thresholds;
 - every optimized candidate must replay identically to the reference engine.
 
-Add a pool, intrusive layout, dense window or SPSC queue only when a profile identifies a relevant
-cost. After concurrency is introduced, run ThreadSanitizer and explicit delayed-consumer/burst tests.
+Promote a pool, intrusive layout, dense window or SPSC queue into the main engine only when
+equivalence and measurements justify it. Learning variants may explore these costs without promotion.
+Compare SPSC against a mutex queue; test wraparound, ordering, lifetime, saturation, shutdown,
+bursts and a delayed consumer. Explain acquire/release synchronization and cache sharing.
+Run ThreadSanitizer, while recognizing that it does not prove a lock-free algorithm correct.
 
 ### Gate
 
-Publish a reference-versus-optimized report with identical state hashes and a profile that explains
+Publish a reference-versus-optimized report with intermediate order-level/known-priority equivalence, separate depth/event hashes, and a profile that explains
 why each optimization exists. A speedup without semantic equivalence is a failed change.
 
 ## 19. Stage 9 - operational live and paper path
@@ -588,7 +573,7 @@ why each optimization exists. A speedup without semantic equivalence is a failed
 ### Health and recovery
 
 - read-only Bitstamp live feed first;
-- explicit `unseeded`, `warming`, `valid`, `stale`, `gapped` and `resyncing` states;
+- integrate the existing BookHealth states and named failure reasons; keep transport/operational lifecycle distinct rather than conflating it with trust or market shape;
 - heartbeat/staleness monitoring;
 - gap closes the decision path immediately;
 - reconnect requires new snapshot/bootstrap;
@@ -674,11 +659,12 @@ config and capture hashes accompany every plotted claim.
 ### Required on ordinary changes
 
 - GCC and Clang build/test;
-- Debug ASan and UBSan;
+- Debug ASan and UBSan with explicit failure-on-UB enforcement;
+- a Release build/test job and supported local/CI Python; all Python tests and pinned dependencies;
 - warnings as errors for project code;
 - mandatory small golden fixture;
 - deterministic fixture hash check;
-- narrowly scoped fixed-point and clock-boundary guards;
+- narrowly scoped fixed-point and clock-boundary guards covering financial implementation files as they are added;
 - formatting/static analysis only when configured to remain low-noise.
 
 ### Required when the relevant code exists
@@ -704,7 +690,7 @@ The following remain outside the critical path until the evidence above exists:
 - Kafka, Kubernetes or microservices for keyword value;
 - public hosting, accounts or remote execution control;
 - DPDK, FPGA or kernel bypass;
-- custom allocators, dense books or lock-free queues without profiling evidence;
+- unmeasured custom allocators, dense books or lock-free queues in the main engine (contained learning experiments are permitted);
 - many strategies;
 - a highly polished dashboard before the headless engine is validated.
 
@@ -723,12 +709,33 @@ This project exists to teach C++, finance and quantitative engineering. For lear
 
 1. State the behavior in plain English.
 2. Draw ownership, state or event ordering when it is not obvious.
-3. Write the smallest failing test.
+3. The assistant writes the smallest failing test from Fuaad's agreed rules/examples and explains it;
 4. Fuaad writes the first implementation attempt.
 5. Review correctness, lifetime, failure atomicity and complexity.
 6. Run focused tests, then the full suite and relevant sanitizer.
 7. Explain the compiler/runtime result in Fuaad's own words.
 8. Record the decision or lesson in the relevant ADR/learning note.
+
+The assistant owns all test writing, including new-feature tests. Fuaad owns domain choices and
+the first learning-critical implementation attempt. An assertion must not settle an open policy
+without saying so.
+
+### C++ learning map
+
+| Deliverable | Topics | Required evidence |
+|---|---|---|
+| Exact ledger | Strong types, checked arithmetic, invariants, atomic updates | Signed-position cases and journal reconstruction |
+| Event scheduler | Variants, state machines, ordering, injected dependencies | No-lookahead and arrival timelines |
+| Optimized book variant | Ownership, iterator validity, layout, allocators, cache costs | Order-level equivalence and profiles |
+| Queue experiment | Atomics, acquire/release, lifetime, cache sharing, backpressure | Mutex baseline, TSan and adversarial schedules |
+| Fuzz/fault harness | Malformed input, UB, failure atomicity, minimization | Saved small regressions |
+| C++/Python boundary | Array layout, copies, ownership, runtime coordination | One authoritative engine, valid view lifetimes |
+| Live-paper service | RAII, cancellation, shutdown and network state | Recovery and race scenarios |
+
+A learning experiment states a hypothesis, keeps a reference baseline, establishes correctness,
+measures the result and records the decision. A non-improvement may remain a useful lesson;
+it does not have to become production architecture. No language-version upgrade is required
+merely to accumulate features.
 
 At the end of each stage, Fuaad should be able to explain without the editor:
 
@@ -740,34 +747,27 @@ At the end of each stage, Fuaad should be able to explain without the editor:
 - what was measured and what was not;
 - the largest remaining limitation.
 
-## 24. Immediate next actions
+## 24. Immediate next actions and estimates
 
-The detailed current sequence and exit gates live only in `TODO.md`. In short:
-
-1. Finish and accept ADR 0014 through concrete latency, fill, accounting, timestamp and degraded-
-   state scenarios.
-2. Implement exact-integer portfolio/accounting tests and behaviour.
-3. Define order intentions and reason-coded decision/admission contracts.
-4. Implement the minimal simulated venue, genuine Stage 5 risk checks and strategy interface.
-5. Wire the single-thread deterministic engine and pass conservation, hand-calculated and repeated-
-   hash gates.
-6. Ship the replay executable and refresh implementation-status documentation.
-
-Do not start SPSC optimization or dashboard work before the deterministic Stage 5 gates close.
+Follow [TODO.md](../TODO.md), beginning with the accounting examples and targeted hardening.
+Do not restart accepted ADR decisions or allow unrelated advanced features to delay Stage 5.
+The guide's [planning ranges](project-progress-guide.md#6-remaining-work-and-planning-ranges)
+estimate 380-680 remaining focused hours for the full planned project, including learning.
+No deadline or weekly commitment is agreed. Re-estimate after Stage 5; PhD novelty work is variable.
 
 ## 25. Final definition of done
 
 The core project is complete only when all of the following are true:
 
-- raw and binary corpora are provenance-bound, versioned and verified;
+- raw archival captures and derived binary tapes are provenance-bound, versioned and verified;
 - replay refuses to cross gaps and recovers only through snapshot reseeding;
 - joined order/trade replay reaches independent venue checkpoints with zero unexplained residuals or
   a precisely quantified documented residual policy;
 - repeated runs yield identical semantic, book and accounting hashes;
 - a clean checkout runs mandatory end-to-end evidence without private local data;
-- observed-order labels and features pass event-time leakage tests;
+- observed-order labels/features pass availability and cross-split label-interval leakage tests;
 - held-out quantitative metrics include baselines, calibration and uncertainty;
-- optimized C++ results are identical to the reference and use a reproducible benchmark method;
+- optimized C++ results match reference order-level and known-priority behavior, with a reproducible benchmark method;
 - local paper execution has explicit states, risk controls, audit reasons and a kill switch;
 - live and replay modes use the same strategy/risk/accounting engine;
 - dashboard failure or slowness cannot affect engine correctness;

@@ -18,6 +18,8 @@ to become:
 
 - Fuaad writes the first implementation attempt. Plan v4 §23 is the binding process — follow its
   eight steps.
+- The assistant writes all tests, including tests for new features, from user-agreed examples and
+  explains what they establish. Test writing must not silently choose unresolved domain policy.
 - Explain the decision space and the consequences of each option; let him choose. Say which option
   you'd pick and why, but do not collapse the choice on his behalf.
 - Grill the design. Push back on drift between what a doc claims and what the code does.
@@ -42,7 +44,8 @@ Fast path — read these three before anything else in a new session:
 Deeper background, read only the relevant part as needed:
 
 4. `docs/project-plan-v4.md` — long-range scope, stage ordering, exit gates.
-5. `docs/decisions/` — ADRs 0001–0014. Read the relevant one before changing a contract it covers.
+5. `docs/decisions/` — ADR index and current amendments. Read the relevant decision before changing
+   its contract; accepted design does not mean implemented behavior.
 
 Older plans (`project-plan-v2.md`, `coding-plan-v3.md`, `slice-1-plan.md`) are historical.
 

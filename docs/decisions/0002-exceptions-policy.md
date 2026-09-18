@@ -4,6 +4,11 @@
 - **Date:** 2026-08-08
 - **Slice:** 0
 
+**Amendment reference, 2026-09-18:** ADR 0015 explicitly permits fatal allocation failure to
+propagate from the current reference book as an interim exception to the hot-path escape rule.
+It does not make allocation failure a recoverable market-data error. Read that ADR before adding
+catching wrappers; this general policy must not be used to claim the current book is noexcept.
+
 ## Context
 
 learncpp 27.8 and 27.9. Exceptions cost nothing when not thrown but they complicate the no-allocation guarantee and the noexcept contract on the SPSC queue. The network boundary genuinely has recoverable errors.

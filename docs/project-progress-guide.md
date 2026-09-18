@@ -1,448 +1,261 @@
-# Trading Engine: your next milestone
+# Trading Engine: where you are and what comes next
 
-## 1. The recommendation, rechecked
+Updated **18 September 2026** against source baseline `6c2f2f6`.
 
-**You are moving from market reconstruction into a trading simulator.** Keep the
-single-threaded, test-first direction. Strengthen the contracts connecting time,
-orders and money before adding more features.
+You have built the foundations for reconstructing a market. The next milestone is a
+complete, small trading run: one intention, a real risk check, a simulated fill and
+exact accounting. Then use that engine for quantitative research and measured C++ experiments.
 
-Checked against source at **d00e244 on 15 September 2026** and the primary references
-at the end. [TODO.md](../TODO.md) remains the only active checklist.
-[ADR 0014](decisions/0014-event-loop-causality-and-decision-authority.md) is still
-proposed. Recommendations here are not implemented features or accepted decisions.
+This guide explains the plan. [TODO.md](../TODO.md) alone owns task completion;
+[the handoff](handoff/status.md) records source status; [plan v4](project-plan-v4.md)
+defines the full scope. Recommendations and unchecked tasks are not implemented features.
 
-### Keep these parts of the plan
+## 1. Where you are
 
-- Decide event order before connecting engine modules.
-- Build Portfolio from hand-calculated examples.
-- Use a small simulated venue and a scripted strategy to prove the whole path.
-- Leave concurrency, advanced queue models and the dashboard for their later stages.
-
-### Strengthen these three parts
-
-**Timing:** define when information becomes available to the strategy. An exchange
-timestamp alone does not establish that. The previous example silently simplified
-market-data delay; make that assumption explicit.
-
-**Order risk:** include orders already waiting to fill. Checking each new order
-against the current position alone can admit more exposure than the limit allows.
-
-**Evidence:** close capture and state-integrity defects before engine integration.
-Then produce a repeatable scenario, a fill/fee journal and a trace explaining results.
-
-> Next milestone: one recorded scenario creates an intention, accepts it, simulates
-> a fill and produces an account balance you can verify by hand. A second intention
-> is rejected for a named reason. Repeat the run and obtain the same results.
-
-### How to use the guide
-
-Sections 2-3 show your position and sequence. Sections 4-6 explain time, money and
-orders. Sections 7-8 describe useful upgrades and proof. Section 9 is your next
-session worksheet. Sections 10-11 contain references and verification limits.
-
-## 2. What you have today
-
-Your implemented path reconstructs the market from a snapshot and later exchange
-messages. It does not yet simulate your own strategy's account.
-
-```mermaid
-flowchart LR
-    A[Capture and snapshot] --> B[Decode and order events]
-    B --> C[Reconcile and update book]
-    C --> D[Compare checkpoint and digests]
-```
-
-| Part | Current position |
+| Area | Current position |
 |---|---|
-| Capture, decoder and reference book | Implemented; specific failure and admission cases need repair. |
-| Order/trade replay | Implemented with deterministic merging and reconciliation. |
-| Book trust and market shape | Separate implemented concepts; the future engine must use them correctly. |
-| Portable v3 file format | Writer and reader exist. Current replay still consumes raw captures. |
-| Portfolio, Strategy, simulated venue and Engine | Headers remain placeholders. |
-| Replay application | Placeholder; its executable target is disabled in CMake. |
+| Capture, decoding and exact types | Implemented; semantic admission hardening remains |
+| Reference book and joined replay | Implemented; aggregate agreement is not full queue proof |
+| Portable binary tapes | Codecs and I/O exist; complete raw/tape replay equivalence remains open |
+| Engine, portfolio, strategy and simulated venue | Start of Stage 5; implementation remains |
+| Queue research and held-out evaluation | Planned, Stages 6-7 |
+| Optimized structures and concurrency | Planned, Stage 8 |
+| Live paper operation and dashboard | Planned, Stages 9-10 |
 
-**Snapshot:** a starting photograph. **Event:** a later change. **Checkpoint:**
-another photograph used to compare reconstruction. **Digest:** a compact fingerprint
-that helps detect differing outputs.
+The original foundation repair batch closed on 16 September. ADR 0014 is accepted;
+its accounting subsection still needs a signed-position policy before Portfolio is written.
+New review findings are follow-ups, not evidence that the earlier repairs never happened.
 
-A matching digest supports repeatability. It does not prove complete input or a
-realistic model. Matching price-level totals also does not prove individual order
-quantities or exchange queue priority.
+### The next complete path
 
-### Keep four questions separate
+1. Read an admitted market event and update the appropriate book state.
+2. Deliver only the information the strategy is allowed to know at that time.
+3. Ask the decision gate about trust and market shape.
+4. Let a permitted strategy return an intention.
+5. Check quantity, notional and worst-case outstanding exposure.
+6. Let the simulated venue accept, reject or fill at the declared arrival time.
+7. Apply the identified fill and fee atomically to the account.
+8. Produce a repeatable report with input, policy and result fingerprints.
 
-- **Trust:** is the book based on valid, continuous input?
-- **Shape:** is the visible market empty, one-sided, locked, crossed or open?
-- **Decision permission:** may the strategy propose an order now?
-- **Admission:** does this particular order satisfy the limits?
+Stage 5 uses one thread. Operator controls, production kill switches and live recovery
+belong to Stage 9. They must not appear as empty classes that always approve.
 
-A normal-looking spread can come from incomplete data. A trusted, open book can
-still be blocked by operating policy. An allowed decision can still produce an
-oversized order that admission rejects.
+## 2. Your first learning task: make the money rules concrete
 
-Evidence: [capture coordinator](../src/capture/capture_coordinator.cpp),
-[replay](../src/feed/bitstamp/replay.cpp), [glossary](../CONTEXT.md),
-[engine placeholder](../include/te/engine/engine.hpp), [CMake](../CMakeLists.txt).
+Prices in signed integer ticks are sensible. Cash, price and quantity still represent
+different things and need distinct units.
 
-## 3. The sequence I recommend
-
-### First: settle the behavior on paper
-
-Finish ADR 0014's open questions. Start with replay operating states, then complete
-the sequence from input to observation, intention, arrival, fill and accounting.
-Your output is a scenario table with unambiguous expected outcomes.
-
-### Second: make the account arithmetic exact
-
-Write a buy, partial sale, final sale and fee example. Decide currency scales, cost
-basis, rounding and failure behavior. Then write Portfolio tests and your first
-implementation. Section 5 gives a worked starting point.
-
-### Third: repair the foundation before connecting the engine
-
-Align recorder, validator and C++ admission. Close aggregate overflow and allocation
-rollback gaps. Run the Python capture suites in CI. Paper exercises can proceed
-first; these repairs belong before integration rather than at its final gate.
-
-### Fourth: build the smallest real order lifecycle
-
-Define intention and reason values. Add quantity/notional/position checks, including
-outstanding exposure. Build accept, reject, partial fill, fill and cancel behavior.
-Resolve timing through the ADR before implementing it.
-
-### Fifth: connect observation, decisions and accounting
-
-Add read-only strategy observation and NoopStrategy. Wire the single-threaded engine
-in the accepted order. Add a scripted strategy requesting a known order and a
-rejected order. Trace which state each callback sees.
-
-### Sixth: package the evidence
-
-Run committed scenarios, compare ten repeated runs and expose the replay application.
-Save input/configuration identities, results and an explanation of decisions and
-fills. Distinguish synthetic proof from real-corpus evidence.
-
-> Start the next session with section 9. Small scenarios determine class behavior;
-> additional class skeletons would not settle the open questions.
-
-## 4. Time: what did the strategy know?
-
-**A strategy can react only to information available to it.** Separate exchange
-event time, delivery to the strategy and arrival of its resulting order.
-NautilusTrader similarly distinguishes event and initialization timestamps and
-documents deterministic backtest ordering by initialization time [S1].
-
-This fictional scenario uses simulation milliseconds on an aligned time base.
-The delays are chosen test inputs, not measured latencies.
-
-```mermaid
-flowchart LR
-    A[100: exchange event] --> B[103: strategy receives event]
-    B --> C[105: decision submitted]
-    C --> D[110: order arrives]
-```
-
-An opportunity disappearing at 108 cannot fill an order arriving at 110. If a
-market event also occurs at 110, the scenario needs an explicit tie rule.
-
-### Rules to settle
-
-1. When can the strategy see a successfully processed market event?
-2. What simulated time is assigned to a submitted intention?
-3. Can it match at arrival, or only on a later eligible event?
-4. Which wins a tie: market update, arrival, cancellation or control?
-5. When do fill, fee and account changes become visible to the next callback?
-
-Do not blindly replace the venue-time merge used for book reconstruction. Strategy
-information availability is another contract. Preserve both concepts and required
-provenance in the Stage 5 event envelope. Raw clocks can have skew; receipt time
-minus exchange time is not automatically network latency.
-
-**Zero market-data delay is a valid first declared assumption.** It does not justify
-a latency-realism claim. Arrival matching and later-event matching make different
-assumptions. QuantConnect's fill-model guidance illustrates the need to specify
-fill rules and stale-price behavior [S2].
-
-Observe successfully processed events after the complete logical book update.
-The DecisionGate reads independent trust, shape and operating state. Rejected
-data, reseeding and fatal structural failure need their own explicit handling.
-
-## 5. Money: a result you can check by hand
-
-Portfolio turns fills into cash and holdings. Use whole units of a fictional asset
-first. Amounts below are displayed in dollars; code uses declared integer money
-units. On fill rows, execution price is the illustrative valuation mark.
-
-| Action | Cash | Units held | Total fees | Equity |
-|---|---:|---:|---:|---:|
-| Start | 1,000 | 0 | 0 | 1,000 |
-| Buy 2 at 100; fee 1 | 799 | 2 | 1 | 999 |
-| Mark price moves to 105 | 799 | 2 | 1 | 1,009 |
-| Sell 1 at 110; fee 1 | 908 | 1 | 2 | 1,018 |
-| Sell the final 1 at 90; fee 1 | 997 | 0 | 3 | 997 |
-
-**Cash** changes when money is spent or received. **Equity** also includes holdings:
-cash plus signed position multiplied by the mark price.
-
-The first sale realizes gross profit of 10. The last realizes gross loss of 10.
-Gross realized PnL ends at zero; fees explain the final loss of 3. At the 105 mark,
-the open position has unrealized profit of 10, which has not become cash.
-
-For this exercise, report gross PnL and fees separately:
+For example, with price in cents per BTC and quantity in hundred-millionths of BTC:
 
 ```text
-equity - starting equity
-    = realized gross PnL + unrealized PnL - fees
+notional in cents = price_ticks * quantity_units / 100,000,000
 ```
 
-This assumes no deposits or withdrawals. Fees are already deducted from cash;
-do not subtract them from equity again. These marking and fee conventions are
-teaching assumptions, not an accepted project accounting policy.
+The multiplication can overflow a 64-bit type before the final result is small enough.
+Use a checked wider intermediate, then the agreed rescaling and rounding rule.
+Some fills produce a fraction of a cent; choose the account's internal money precision
+and the boundary at which rounding happens.
 
-### Decide before coding
+### Decisions still needed
 
-- Name the currency/scale of cash and fees; price ticks are not money.
-- Choose cost-basis representation. Buying 1 at 100 and 2 at 101 gives average `302 / 3`.
-- Specify rounding for fractional quantities, notional and fees; check intermediate arithmetic.
-- Define shorts and crossing through flat.
-- Give executions identities so the same economic fill cannot post twice.
-- Reject unsafe arithmetic without partially changing the account.
+- Basis: rounded average, total basis plus quantity, or an exact rational representation.
+- Reporting: gross PnL with fees separate, or a fee-adjusted basis/net-realized convention.
+- Partial close: rounding and where the residual remains.
+- Reversal: divide one fill into closing the old position and opening the new one;
+  specify how fees are allocated if basis incorporates them.
+- Fees: explicit supplied fee versus a versioned fee policy; rebates if supported.
+- Execution identity: what makes a repeated fill a duplicate.
 
-NautilusTrader also uses fixed-point trading value types [S3]. That supports the
-direction; this project's scales and rounding remain explicit design choices.
+**Total basis is a recommendation to evaluate, not a decision already made.**
+It avoids repeatedly rounding a stored average, but partial closes still need a residual rule.
 
-## 6. Orders: acceptance is only the beginning
+### Work these cases by hand
 
-A state machine is a set of states and allowed transitions. This is a small
-teaching model, not a claim of FIX protocol compliance.
-
-```mermaid
-flowchart LR
-    A[Submitted] --> B[Working including partial fills]
-    A --> R[Rejected]
-    B --> F[Filled]
-    B --> P[Cancel pending]
-    P -->|confirmed| X[Canceled]
-    P -->|remaining quantity fills| F
-    P -->|cancel rejected| B
-```
-
-**A cancel request is not confirmed cancellation.** FIX explicitly distinguishes
-these states and includes executions occurring during pending cancellation [S4].
-Adopt the useful semantics; a FIX network adapter can wait.
-
-| Event for an order of 10 units | Filled so far | Still executable |
-|---|---:|---:|
-| Accepted | 0 | 10 |
-| Fill 4 | 4 | 6 |
-| Request cancellation | 4 | 6 |
-| Another fill of 2 before cancellation | 6 | 4 |
-| Cancellation confirmed for remainder | 6 | 0 |
-
-Cancellation does not undo the six units filled. For a working order, requested
-quantity equals filled plus remaining executable quantity. After cancellation,
-account for the canceled remainder separately. The exact representation remains
-a design decision.
-
-### Count orders that have not filled yet
-
-Suppose the maximum long position is 10, current position is zero, and an accepted
-buy for 6 is outstanding. Another buy for 6 creates potential exposure of 12.
-Checking only current position plus the new order misses this.
-
-Reserve exposure at the chosen admission point. Release it on fills or confirmed
-cancellation/rejection according to the lifecycle. Test positive and negative
-worst-case exposure separately; opposite orders need not fill together.
-
-NautilusTrader's locked/free balance model is a useful comparison [S5]. The specific
-position-limit calculation above is our recommendation, not a quoted universal rule.
-
-## 7. Five upgrades worth building
-
-These strengthen Stage 5 evidence. Detailed interfaces remain proposed until the
-relevant decisions are settled. Efforts assume the core engine already exists.
-
-### 1. A reusable scenario runner
-
-Express market events, control changes and expected outcomes as test data. Reuse
-the scenarios in tests and the eventual application. Name the first event that
-disagrees. Begin with existing GoogleTest and committed examples.
-**Rough effort: 1-2 days.**
-
-### 2. A fill and fee journal
-
-Record execution ID, order ID, quantity, price, fee and account changes. Replay it
-into a fresh Portfolio and reproduce the balances. Define duplicate-execution
-behavior. Start in memory with a small export; a database is unnecessary.
-**Rough effort: 1-2 days.**
-
-### 3. A reproducible run bundle
-
-Save input hashes, commit/build identity, dirty-tree state, instrument scales,
-configuration, optional random seed, exclusions and output digests. Include fee,
-rounding, fill, ordering and latency policy versions. Plan v4 already calls for
-this; make it a concrete deliverable. W3C PROV supplies a formal provenance model
-[S6], while a small JSON manifest is enough here. **Rough effort: 1 day.**
-
-### 4. A trace that explains the first difference
-
-Attach input ordinal, logical time, reason and before/after state summaries.
-Compare intermediate order/account states, not just final totals. Make detailed
-traces selectable so they do not dominate later benchmarks.
-**Rough effort: 1-2 days.**
-
-### 5. Adversarial scenarios that remain reproducible
-
-Preserve regression cases for gaps, duplicates, backward time, equal-time events,
-partial fills, cancel races and limits. Then add seeded generated sequences and
-an independent simple state model. Hypothesis describes model-based testing [S7];
-NautilusTrader describes seed-replayable simulation [S8]. Adapt the patterns before
-adding frameworks. **Initial effort: 1-2 days.**
-
-The estimates overlap and exclude engine implementation. They are focused
-engineering estimates, not learning deadlines.
-
-## 8. What counts as convincing evidence?
-
-### Repair input and mutation contracts first
-
-Before integration, require recorder, validator and C++ consumer to agree on
-snapshot coverage, continuity, interrupted segments and stream ordering. Corrupt
-input must produce a named rejection. Fix aggregate overflow and incomplete
-allocation rollback with direct regression cases.
-
-Run Python capture/validator suites in CI. Declare the Python environment and hash
-downloaded C++ archives, following PyPA and CMake guidance [S9, S10]. Include Release
-checks for behavior affected by disabled assertions.
-
-### Give each test a question
-
-| Test | What it establishes |
+| Case | What it teaches |
 |---|---|
-| NoopStrategy over committed input | Complete observation; unchanged cash and holdings. |
-| Scripted order plus hand calculation | Intention, admission, fill, fee and accounting work together. |
-| Oversized order with outstanding exposure | A real limit rejects without changing state. |
-| Partial fill followed by cancel race | Later fills and canceled remainder stay consistent. |
-| Duplicate execution | The same economic fill cannot post twice. |
-| Ten identical runs | Outputs repeat under the same inputs and policies. |
-| Intermediate order-level comparison | Equal price-level totals cannot hide different order state. |
-| Corrupt capture and allocation failure | Failure stops safely with a precise reason. |
+| Open/add long, partial/final sell | Weighted basis and realized versus unrealized PnL |
+| Open/add short, partial/final cover | Signed exposure and the correct fee direction |
+| Sell through zero into a short | Close the old long, then open the remainder |
+| Buy through zero into a long | Close the old short, then open the remainder |
+| Average 302/3 currency units | Repeats beyond cents; 201/2 currency units is exactly 100.50 |
+| Duplicate fill or arithmetic overflow | Rejection without partial state changes |
 
-Repeatability, internal correctness and market realism are different claims.
-A synthetic scenario proves a specified rule. An independent venue checkpoint
-provides different evidence. Neither alone establishes fill probability for a
-hypothetical order.
+Short example: sell one unit at 100 with fee 1, then cover at 90 with fee 1.
+Cash changes are +99 and -91, so the net gain is 8. With fee-adjusted basis,
+opening proceeds are reduced by the opening fee. Blindly adding that fee to short
+basis would give the wrong result.
 
-Do not infer exchange queue priority from snapshot row order. Keep later fill-model
-assumptions versioned and visible. Traces and sanitizers support correctness;
-performance claims need separately recorded optimized-build measurements.
+For each example show cash, signed position, basis, realized PnL and cumulative fees.
+Put unrealized PnL on a separate row with an explicit mark price. A fill can change
+unrealized PnL through position/basis even though the mark itself is not a fill input.
 
-## 9. Your next working session
+The earlier gross-PnL teaching example and D5's fee-adjusted example are different
+reporting conventions. Both can reconcile to the same equity if applied consistently.
+Do not subtract fees twice or mix assertions from the two conventions.
 
-**Deliverable: one page of behavior, then one complete event timeline.**
-Write outcomes for these situations before choosing enum names.
+**Learning agreement:** you choose the rules and attempt the implementation. The assistant
+writes all tests from the agreed examples, including new-feature tests, and explains them.
 
-| Situation | What to decide |
+## 3. What needs hardening and why
+
+The exact tasks and completion gates are in TODO section C.
+
+| Finding | Why it matters | When it must close |
+|---|---|---|
+| UBSan may recover after reporting UB | A test can appear successful despite a sanitizer report | Early tooling fix |
+| C++ admission omits status/chain validity | Matching bytes do not prove a usable continuous capture | Trusted capture-to-engine runs |
+| Tape writer lacks ordering/window checks | Eligible events can be silently omitted on invalid input | Before using generated tapes |
+| Receipt metadata is discarded by current envelopes | Recorded availability cannot be implemented from missing inputs | Stage 5 timing integration |
+| Tape omits classifier warm-up | Raw and tape classification can differ | Before raw/tape substitution |
+| Aggregate digest omits order identity/priority | Equal totals can hide different queue outcomes | Stage 6/8 evidence |
+| Allocation failure relies on callers not catching | Future recovery/bindings could retain a corrupt book | Before such integration |
+| Coordinator collapses error causes | Large corpus failures become hard to diagnose | Before scaling validation |
+| CI Python 3.9 is EOL | Reproducibility needs a supported baseline | Toolchain refresh |
+| Float guard excludes future financial .cpp files | Headers alone cannot enforce the accounting rule | Alongside Portfolio/risk |
+
+The sparse standard-library book, single-thread first engine, explicit byte serialization
+and separation of book trust from market shape remain defensible choices.
+
+Two distinct comparisons are involved: some findings violate this project's stated
+contracts; others are maintenance or testing gaps. Choosing virtual dispatch over templates,
+for example, is not a violation of a universal industry rule.
+
+### Keep time concepts separate
+
+- **Venue time:** the timestamp used for market reconstruction ordering.
+- **Availability:** when information may influence the strategy.
+- **Order arrival:** when an accepted intention reaches the simulated venue.
+
+A quote disappearing at time 108 cannot fill an order arriving at 110 just because
+the strategy saw it earlier. A delayed observation must not expose a current book
+containing other events the strategy has not received.
+
+Stored receipt timestamps can replay deterministically. Their difference from venue
+timestamps includes unknown clock offset as well as delay. The existing 80 ms scenario
+is a declared assumption, not a proven network latency or safety bound.
+
+## 4. Make the project teach substantial C++
+
+Use each feature to answer a concrete question and produce evidence.
+
+| Milestone | Topics to learn | Evidence |
+|---|---|---|
+| Accounting ledger | Strong types, checked arithmetic, invariants, atomic updates | Exact signed-position examples and journal reconstruction |
+| Event scheduler | Variants, state machines, ordering, dependency injection | Availability and arrival timelines with no lookahead |
+| Reference/optimized book | Ownership, iterator validity, layout, allocators, cache costs | Intermediate order-level equivalence and measured profiles |
+| Bounded queue experiment | Atomics, acquire/release, lifetime, cache sharing, backpressure | SPSC versus mutex baseline; burst and delayed-consumer tests |
+| Fuzz/fault laboratory | Parsing, undefined behavior, invariants, minimization | Small saved counterexamples and safe rejection |
+| C++/Python boundary | Array layout, copying, ownership, Python runtime coordination | Research consumes the C++ engine without a second ledger |
+| Live-paper service | RAII resources, cancellation, shutdown, network lifecycle | Disconnect/reseed and cancel/fill race scenarios |
+
+C++20 is enough for these lessons. Add a language feature because it solves a problem,
+not to maximize syntax coverage. A future C++23 migration or alternative error type is optional.
+
+A pool, intrusive list or static-dispatch variant may be a **contained learning experiment**.
+Record the hypothesis, baseline, correctness result and measurements. Promote it into
+the main engine only when it earns its place. A measured non-improvement is useful evidence.
+Concurrency experiments follow the stable single-thread Stage 5 baseline.
+
+For performance, start with actual profiles: repeated whole-file hashing, parser setup,
+container allocation and cache behavior are candidates to measure, not predeclared bottlenecks.
+Keep microbenchmarks separate from end-to-end replay. Measure tail latency, allocations,
+memory and throughput on controlled hardware; do not infer speed from container names.
+
+## 5. A focused research direction
+
+Candidate question:
+
+> How much do information delay and queue-observation uncertainty change the accuracy
+> of short-horizon fill predictions?
+
+This is a proposed research direction, not an accepted PhD thesis or a novelty claim.
+Your PhD topic and weekly availability are still unspecified.
+
+1. Predict outcomes of real observed orders first; treat hypothetical inserted orders as
+   separate counterfactual experiments.
+2. Define first fill, complete fill, cancellation, ambiguity and observation ending.
+   Cancellation is an observed event, not automatically the same as missing follow-up.
+   Choose censoring or competing-outcome treatment to match the estimand.
+3. Build only features available at prediction time.
+4. Split by chronological sessions and check label intervals. A training label must not
+   use events from the evaluation interval. Use time/interval boundaries for irregular events,
+   not a blindly chosen number of rows.
+5. Compare transparent baselines, calibration and regime breakdowns; report uncertainty
+   by session/time block and sensitivity to latency/queue assumptions.
+6. Freeze policies before final held-out evaluation. Bind reports to corpus hashes,
+   code/build identity, configuration and policy versions.
+
+A strong result may show that an apparently useful signal disappears under more realistic
+availability. That is still a valuable finding. Publishing a paper needs a literature-defined
+contribution in addition to sound engineering.
+
+## 6. Remaining work and planning ranges
+
+Git's first reachable foundation commit is 8 August 2026. At this review, 18 September,
+that is **41 calendar days**. Commit dates cannot establish active study hours or future speed.
+
+Most integration, research and operational work remains. Stage numbers are not percentages.
+
+| Remaining milestone | Focused hours |
 |---|---|
-| Trusted, open market; operation permits trading | When is observation complete and a decision requested? |
-| Trusted, open market; scripted operating block | Are new intentions blocked? What happens to existing orders? |
-| Trusted, one-sided market | Does observation continue for accepted events? What blocks decisions? |
-| Gap followed by synchronization | What is buffered/rejected, and what restores readiness? |
-| Arrival and cancellation share a logical time | Which happens first, and can a fill still occur? |
+| Essential contracts and hardening | 20-40 |
+| Complete Stage 5 engine and accounting | 80-140 |
+| Labels and research evaluation | 100-180 |
+| Performance and concurrency experiments | 80-140 |
+| Live-paper operation, dashboard and demonstration | 100-180 |
+| Total full planned project | 380-680 |
 
-Keep structural corruption separate from a data gap. Use a fatal internal failure
-rather than trying to repair broken C++ state with another snapshot. Block decisions
-at a crossed safe checkpoint; do not invent a lost-trust duration threshold without
-evidence.
+| Weekly commitment | Hardening plus Stage 5 | Full planned project |
+|---|---|---|
+| 10 hours | 10-18 weeks | About 9-16 months |
+| 20 hours | 5-9 weeks | About 4.5-8 months |
 
-Complete section 4's timeline and explain section 5's arithmetic in your own words.
-Resolve the ADR's open questions before implementation. For each module: behavior,
-small test, your first attempt, review, focused checks, then broader validation.
+These estimates include learning, implementation, tests and rework. They are not deadlines;
+novel PhD research and data-collection constraints may extend them substantially.
+Re-estimate after Stage 5 using observed effort. You can demonstrate useful intermediate
+results before the full dashboard is finished.
 
-### What can wait
+## 7. Evidence and references
 
-| Stage | Why it follows Stage 5 |
-|---|---|
-| 6: queue labels and execution baselines | Needs a stable lifecycle and explicit assumptions. |
-| 7: held-out quantitative evaluation | Needs trustworthy labels and leakage controls. |
-| 8: performance and v3 replay integration | Needs a correct reference, equivalent results and measurements. |
-| 9: live/paper operations | Adds external actions, recovery and advanced controls. |
-| 10: dashboard and showcase | Needs stable reports and useful engine evidence. |
+Source evidence for the current review:
 
-The next milestone is an explainable trading simulation. Profitable signals,
-multiple venues and lock-free queues are outside that milestone.
+- [Portfolio placeholder](../include/te/engine/portfolio.hpp),
+  [engine placeholder](../include/te/engine/engine.hpp), [active tasks](../TODO.md).
+- [Capture admission](../src/capture/capture_validator.cpp),
+  [manifest reader](../src/capture/manifest_reader.cpp),
+  [Python validator](../scripts/validate_joined_capture.py).
+- [Replay ordering checks](../src/feed/bitstamp/replay.cpp),
+  [tape writer](../src/capture/event_tape_writer.cpp).
+- [Captured-event metadata](../include/te/feed/captured_events.hpp),
+  [v3 limitations](specs/v3-segment-format.md).
+- [Aggregate digest contract](../include/te/book/order_book.hpp),
+  [allocation policy](decisions/0015-allocation-failure-policy.md).
+- [Sanitizers](../cmake/sanitizers.cmake), [CI](../.github/workflows/ci.yml),
+  [financial guard scope](../scripts/check_architecture_guards.py).
 
-## 10. Industry references
+Named external comparisons, checked for the 18 September review:
 
-There is no universal trading-engine architecture. Formal specifications,
-published implementations and our project choices have different authority.
+- [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines):
+  ownership, invariants, exception policy and measurement-led optimization; guidance, not the ISO standard.
+- [Clang sanitizer behavior](https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation):
+  UBSan recovery must be considered when making CI a failure gate.
+- [LLVM libFuzzer](https://llvm.org/docs/LibFuzzer.html): coverage-guided parser testing.
+- [Google Benchmark](https://google.github.io/benchmark/user_guide.html): repeated measurements,
+  counters and machine-readable output.
+- [Python lifecycle](https://devguide.python.org/versions/): Python 3.9 ended upstream support
+  on 31 October 2025.
+- [TimeSeriesSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html):
+  chronological/gap concepts; account for sampling assumptions before applying it to irregular events.
 
-**S1 - Timing pattern.** [NautilusTrader: Data](https://nautilustrader.io/docs/latest/concepts/data/).
-Distinct timestamps, stable ordering and clock-skew caveats. Use it to evaluate
-information availability, not to replace Bitstamp reconstruction ordering blindly.
+## 8. What this update does not prove
 
-**S2 - Simulation guidance.** [QuantConnect: Trade fills](https://www.quantconnect.com/docs/v2/writing-algorithms/reality-modeling/trade-fills/key-concepts).
-Fill price/quantity, partial-fill models and stale prices. Supports explicit
-assumptions, not a claim that our simulator matches a venue.
+This is a source-grounded plan, not a fresh clean-build certificate.
+The review did not inspect every historical Markdown/test body line by line, audit third-party
+internals, rerun the complete private corpus, establish live venue behavior, or measure performance
+or race freedom. Earlier test counts and checkpoint results remain dated historical evidence.
 
-**S3 - Value representation.** [NautilusTrader: Value types](https://nautilustrader.io/docs/latest/concepts/value_types/).
-Fixed-point Price, Quantity and Money. Our exact scales and rounding remain choices.
-
-**S4 - Industry protocol semantics.** [FIX: Order state changes](https://www.fixtrading.org/online-specification/order-state-changes/).
-Order status and pending-cancel/partial-execution behavior. Borrowing semantics
-does not make the project FIX compliant; no Stage 5 FIX adapter is proposed.
-
-**S5 - Accounting pattern.** [NautilusTrader: Accounting](https://nautilustrader.io/docs/latest/concepts/accounting/).
-Locked and free balances distinguish committed from available resources.
-Our outstanding-position limit still needs its own tests.
-
-**S6 - Formal provenance model.** [W3C: PROV-DM](https://www.w3.org/TR/prov-dm/).
-A W3C Recommendation for traceable entities and activities. Use that principle;
-RDF/ontology integration is unnecessary.
-
-**S7 - Testing pattern.** [Hypothesis: Stateful tests](https://hypothesis.readthedocs.io/en/latest/stateful.html).
-Action sequences compared with a simpler model. Existing GoogleTest scenarios
-can establish this style before another tool is introduced.
-
-**S8 - Simulation-testing pattern.** [NautilusTrader: Deterministic simulation testing](https://nautilustrader.io/docs/latest/concepts/dst/).
-Seed-controlled, replayable failure exploration. Adopt the needed scope.
-
-**S9 - Packaging guidance.** [PyPA: Repeatable installs](https://pip.pypa.io/en/stable/topics/repeatable-installs/).
-Declare and pin Python dependencies for another checkout.
-
-**S10 - Build-tool guidance.** [CMake: URL hashes](https://cmake.org/cmake/help/v4.3/module/ExternalProject.html).
-Verify fetched archives. The cited version does not imply this project needs
-a CMake upgrade.
-
-## 11. Repository evidence and limits
-
-### Where to look
-
-| Claim | Source |
-|---|---|
-| Causality remains open | [ADR 0014](decisions/0014-event-loop-causality-and-decision-authority.md), status and open questions. |
-| Portfolio/engine are placeholders | [portfolio.hpp](../include/te/engine/portfolio.hpp), [engine.hpp](../include/te/engine/engine.hpp), [portfolio test](../tests/unit/test_portfolio.cpp). |
-| Replay exists as library behavior | [replay.cpp](../src/feed/bitstamp/replay.cpp), [coordinator](../src/capture/capture_coordinator.cpp). |
-| Replay application is unfinished | [replay_main.cpp](../apps/replay_main.cpp), [CMakeLists.txt](../CMakeLists.txt). |
-| C++ capture envelopes retain limited metadata | [captured_events.hpp](../include/te/feed/captured_events.hpp); availability needs an explicit Stage 5 contract. |
-| Reports/fingerprints can support better traces | [replay.hpp](../include/te/feed/bitstamp/replay.hpp), [coordinator report](../include/te/capture/capture_coordinator.hpp). |
-| Run manifest is already planned | [Plan v4, section 8](project-plan-v4.md). |
-| Mandatory and optional evidence differ | [joined-capture tests](../tests/unit/test_bitstamp_joined_capture.cpp), [legacy golden test](../tests/unit/test_golden_replay.cpp). |
-| Foundation repairs remain open | [validator](../scripts/validate_joined_capture.py), [OrderBook](../src/book/order_book.cpp), [reconciler](../src/feed/trade_reconciler.cpp), [CI](../.github/workflows/ci.yml). |
-
-### What this recheck establishes
-
-The source snapshot and relevant contracts were re-inspected. Recommendations
-were compared with the linked primary sources. The arithmetic is a teaching
-example, not a selected live accounting policy. No upgrade is claimed implemented.
-
-The documented **303 passing C++ tests on 9 September 2026** remain historical.
-This documentation/PDF task did not perform a new engine build or test run.
-The committed joined fixture is synthetic; real-capture tests can skip when local
-data is absent. Three legacy order-only adjustments remain unexplained, not
-established silent fills.
-
-The editable guide is [this Markdown file](project-progress-guide.md).
-The PDF exports the same content. [TODO.md](../TODO.md) owns task completion;
-[the handoff](handoff/status.md) owns current status. Regenerate the PDF when this
-guide changes.
+The editable source is this Markdown file. The matching PDF is
+[trading-engine-progress-guide.pdf](../output/pdf/trading-engine-progress-guide.pdf).
+Other deep dives and old plan PDFs are historical snapshots. This guide and TODO's PDF are
+regenerated together when current guidance changes; the gitignored output directory does not
+make a PDF part of a fresh checkout.

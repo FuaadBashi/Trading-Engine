@@ -12,7 +12,11 @@ One indirect call per market event on the strategy callback. Templates would rem
 
 1. **Virtual functions** — runtime plugging, one vtable lookup per event, trivially testable.
 2. **CRTP / static polymorphism** — no indirection, strategy type baked into the binary.
-3. **std::function** — most flexible, worst performance, allocates.
+3. **std::function** — type-erased runtime callable; allocation depends on the callable and
+   implementation. Compare its actual dispatch/allocation cost with virtual and static alternatives.
+
+Correction, 2026-09-18: the previous blanket "worst performance, allocates" claim was unsupported.
+Choose the simplest useful seam first; any performance claim needs a representative benchmark.
 
 ## Decision
 

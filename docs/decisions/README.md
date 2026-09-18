@@ -1,7 +1,8 @@
 # Decisions
 
-One file per real decision, written the day it is made. Numbered, never deleted, superseded
-rather than edited when it changes.
+One file per real decision, written the day it is made. Numbered, never deleted. Use dated
+amendments for corrections and refinements; use an explicit superseding decision for a replacement.
+An accepted decision records intent, not implementation or test completion.
 
 This folder exists for two reasons. It stops you re-litigating settled questions at 1am, and
 it gives you a ready answer when an interviewer asks why L3 over L2, or why int64 over double,
@@ -26,7 +27,7 @@ are research, the decision is yours.
 | 0011 | Portable binary segments and snapshots | 1-2 | before durable binary corpus |
 | 0012 | Reference order-book API and failure contract | 2 | before `order_book.cpp` |
 | 0013 | Merge ordering and fill double-counting | 2 | accepted 2026-08-27 |
-| 0014 | Event-loop causality and decision authority | 5 | proposed 2026-09-09 |
+| 0014 | Event-loop causality and decision authority | 5 | accepted 2026-09-15; D5 policy gap recorded 2026-09-18 |
 | 0015 | Allocation failure is fatal to the process | 2 | accepted 2026-09-16, interim |
 
 Later additions with no stub yet: live-leg realism upgrade (week 11), equities adapter timing
