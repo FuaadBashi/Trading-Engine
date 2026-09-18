@@ -76,10 +76,23 @@ Tests must not silently select open accounting or simulation policy.
   boundary tests in `trade_reconciler`, `capture_coordinator` and `price_level` remain the only
   guard there.
 
-  Verified: 327/327 under UBSan with enforcement active (no latent signed-overflow UB in the
-  codebase), and 327/327 Release with real `gcc-15` (unaffected, the guard skips non-sanitized
-  builds). The ASan+UBSan suite could not be run locally — `gtest_discover_tests` fails against
-  ASan-instrumented binaries on this macOS host, a pre-existing limitation; CI covers that config.
+  **It found a real bug on its first CI run.** `Sha256.EmptyInput` failed under both gcc and
+  clang at `sha256.cpp:96:30`: an empty span's `data()` may be `nullptr`, and `memcpy` declares
+  `src` nonnull, so passing it was undefined even with a zero length. Harmless on every real
+  libc, but the compiler may infer from the nonnull attribute that the pointer cannot be null and
+  drop a later check on that basis. That UB predates C1 and UBSan had been reporting it on every
+  sanitized run since the SHA-256 work landed — it just scrolled past in a green log. Fixed in
+  `a1e1f9c`; digests unchanged, all eight known vectors still match.
+
+  Note this was a *nonnull-attribute* violation, not signed overflow: local runs were clean
+  because the probe only exercised the signed-overflow check. Do not read "the local suite
+  passed" as "the codebase has no UB."
+
+  Verified: 327/327 under UBSan with enforcement active (before and after the fix), 327/327
+  Release with real `gcc-15` (unaffected, the guard skips non-sanitized builds), and CI green on
+  `build (gcc)`, `build (clang)` and `release` at `a1e1f9c`. The ASan+UBSan suite could not be
+  run locally — `gtest_discover_tests` fails against ASan-instrumented binaries on this macOS
+  host, a pre-existing limitation; CI covers that config.
 
 ### C2. Align Python and C++ capture admission
 
