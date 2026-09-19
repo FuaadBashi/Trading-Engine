@@ -1,7 +1,7 @@
 # ADR 0014: Event-loop causality and decision authority
 
-- **Status:** accepted 2026-09-15; D5 accounting completion required as recorded below
-- **Date:** 2026-09-09, amended 2026-09-15 and corrected 2026-09-18
+- **Status:** accepted 2026-09-15; D5 accounting rules selected 2026-09-19, four items still open
+- **Date:** 2026-09-09, amended 2026-09-15, corrected 2026-09-18, rules recorded 2026-09-19
 - **Stage:** 5 (with explicitly deferred Stage 9 controls)
 
 ## Context
@@ -223,7 +223,7 @@ delivery order and strategy-view lifetime. Delaying a callback must not expose a
 containing other unavailable events. Market reconstruction ordering does not by itself solve
 this scheduling problem.
 
-### D5. Atomic fill accounting; signed-position policy must be completed
+### D5. Atomic fill accounting and signed-position rules
 
 **Correction, 2026-09-18:** the earlier "Buy establishes basis; Sell realizes PnL" rule
 described opening/closing a long only. It is not a complete specification for TODO's
@@ -249,21 +249,77 @@ fees from realized PnL. Under a corresponding short convention, opening fees red
 opening proceeds; blindly adding them to short basis is wrong. A gross-PnL convention
 with separately reported fees is an alternative, not interchangeable arithmetic.
 
-**Required decisions before Portfolio assertions are written:**
-
-- money units and checked rescaling from price ticks times quantity units;
-- basis representation and exact partial-close rounding/residual handling;
-- selected gross/net reporting and fee source;
-- fee allocation between closing and opening portions of a reversal when basis carries fees;
-- execution/fee identity and duplicate behavior.
-
-Total basis plus quantity is a candidate; it still requires partial-close allocation rules.
-No representation or fee schedule is selected by this correction. Complete TODO D1 using
-agreed long/short/reversal examples, then record the chosen policy here.
-The assistant writes the tests; Fuaad chooses the domain rules.
-
 Unrealized PnL is derived from an explicit mark, position and basis. A fill may change it
 through position/basis; the mark itself is not part of the confirmed-fill input.
+
+## Selected accounting rules, 2026-09-19
+
+Chosen by hand-working long, short and reversal examples (TODO D1). Eight rules are settled;
+four items remain open and are listed after them. No `Portfolio` implementation exists yet, so
+these are accepted intent, not verified behaviour.
+
+**1. Money representation.** Signed `std::int64_t`, scaled, carried per-instrument alongside the
+existing price tick and quantity increment. Unsigned is excluded: cash and position both go
+negative, and unsigned subtraction wraps rather than erroring. The scale is finer than the quote
+currency's minor unit, because the minor unit is too coarse here -- one satoshi at $100,000 is
+0.1 cents, which rounds to zero in whole cents. `btc_usd`, `btc_gbp` and `btc_eur` do not share a
+quote currency, so the unit is "minor units of this instrument's quote currency at the declared
+scale", never a hardcoded currency. Industry precedent: Nasdaq ITCH carries 4 implied decimals
+for US equities whose currency has 2; NautilusTrader uses `int64` at up to 9 decimals or `int128`
+at up to 16. Exact decimal count still open (see below). ADR 0004's 128-bit checked intermediate
+before rescaling continues to apply to `price x quantity`.
+
+**2. Basis representation.** Store **total basis and quantity** as two integers. The average is
+derived for display and never stored, so there is no second number that can drift out of
+agreement with the basis. Storing a rounded average was rejected: it re-rounds on every fill and
+the error accumulates. An exact rational was rejected because the denominator grows without bound
+and is not itself bounded by `int64`; essentially no production financial system stores money
+that way.
+
+**3. Gross versus net.** Net. Fees are folded into realized PnL rather than reported as gross PnL
+with fees alongside. `docs/project-progress-guide.md` uses the gross convention and is explicitly
+a teaching document; the two are not interchangeable, and the worked example makes the difference
+concrete -- the same trades gave realized of -3 under net and 0 gross with 3 fees separately.
+Do not subtract total fees again from an already fee-adjusted figure.
+
+**4. Fee direction.** A fee never improves a position. On a long it raises what was paid, so it
+joins basis. On a short it lowers what was received, so it reduces the proceeds recorded as
+basis. Adding a fee to a short's basis is the error the 2026-09-18 correction identified: the
+sanity check is that basis must agree with the direction and size of the cash movement it
+records.
+
+**5. Classification.** Against the existing signed position, using the table above, never against
+buy/sell direction alone.
+
+**6. Reversal fee allocation.** Split proportionally by quantity across the closing and opening
+portions of the fill. A 5-unit fill closing 2 and opening 3 assigns 2/5 of the fee to realized
+and 3/5 into the new basis. Reason: the books must not depend on whether the venue happened to
+report one fill or two. Assigning the whole fee to either side was rejected as arbitrary --
+all-to-opening additionally flatters the trade just closed. This division is a further consumer
+of the rounding rule still open below.
+
+**7. Zero invariant.** Position is zero if and only if basis is zero. Basis remaining against a
+flat position is cost attached to nothing; a non-zero position with zero basis has no record of
+what was paid or received. Both are bugs, and this is a cheap always-checkable invariant.
+
+**8. Realized accumulates; opening never realizes.** Realized is a running account total. Only
+closing produces realized PnL -- opening a long or a short produces none. Compute a fill's
+contribution in isolation first, then fold it into the total.
+
+### Still open after this pass
+
+- **Exact decimal scale.** Rule 1 fixes the shape, not the number of places.
+- **Partial-close allocation when it does not divide.** A basis of 302 over 3 units cannot assign
+  an integer share to one unit. Conserving the total and preserving the average are different
+  guarantees and two plain integers cannot provide both. The chosen direction is extra precision
+  over a carried residual, because a residual is hidden state the fill journal would also have to
+  reproduce on replay; that is a direction, not yet a stated rule.
+- **Execution and fee identity, and duplicate behaviour.**
+- **Overflow rejection**, including the reversal fee division above.
+
+Fee *schedule* (flat, basis-point, maker/taker) stays out of scope: rule 4 fixes where a fee
+lands, not how it is computed. Whether `Portfolio` receives a fee or calculates one is an
+interface question for D2.
 
 ### D6. `DecisionGate` is invoked at every checkpoint, trusted or not (was open question 6a)
 

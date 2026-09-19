@@ -142,17 +142,28 @@ Tests must not silently select open accounting or simulation policy.
 
 ### D1. Agree the money rules using examples
 
-- [ ] **Next learning task; 4-8 focused hours.** Define money/price/quantity units, signed
-  position, basis representation, gross versus net reporting, fee source, partial-close
-  rounding and residual handling. Total basis is a candidate, not a selected policy.
+- [ ] **In progress. Eight rules selected 19 September and recorded in ADR 0014 D5; four items
+  still open.**
 
-  Hand-work open/add long, partial/final close, open/add short, partial/final cover,
-  long-to-short by selling and short-to-long by buying. Include fees, a fractional average
-  such as 302/3, duplicate execution identity and overflow rejection.
+  Worked by hand so far, each row checked against equity and against realized-plus-unrealized:
+  open long, partial close, final close, open short, partial cover, final cover, and a
+  long-to-short reversal selling 5 while holding 2.
 
-  **Done when:** each row has exact cash, position, basis, realized PnL and fees.
-  Unrealized PnL uses a separate explicit mark. Reversal fee handling is defined.
-  Record the selected rules in ADR 0014 D5 before converting the examples into assertions.
+  Selected: signed `int64` money at a per-instrument scale finer than the quote currency's minor
+  unit; total basis plus quantity with the average derived, never stored; net fee convention;
+  fees always moving basis against the trader; classification by signed position; proportional
+  reversal fee split; position zero if and only if basis zero; realized produced only by closing.
+
+  **Still to settle:** the exact decimal scale; partial-close allocation when it does not divide
+  (302/3 — the direction is extra precision rather than a carried residual, because a residual is
+  hidden state the fill journal would have to reproduce on replay, but that is not yet a stated
+  rule); execution/fee identity and duplicate behaviour; overflow rejection.
+
+  Short-to-long by buying is deliberately not hand-worked — it is the structural mirror of the
+  reversal already done, and belongs in a test rather than a paper row.
+
+  **Done when:** the four open items above are decided and recorded in ADR 0014 D5. Only then do
+  the examples become assertions.
 
 ### D2. Implement Portfolio and its fill journal
 

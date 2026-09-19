@@ -15,9 +15,10 @@ and current PDF exports only; it does not implement review findings or rerun the
 Entering **Stage 5**, starting with accounting examples and Portfolio.
 Capture/reconstruction foundations exist; the complete trading engine does not.
 
-ADR 0014 was accepted on 15 September. Its 18 September correction preserves accepted
-authority/order decisions while identifying D5's incomplete signed-position accounting policy.
-Do not restart D1-D8 wholesale or treat a documentation amendment as implemented behavior.
+ADR 0014 was accepted on 15 September. Its 18 September correction identified D5's incomplete
+signed-position accounting policy; eight rules were selected on 19 September and recorded there,
+with four items still open (see limitation 1). Do not restart D1-D8 wholesale, and do not treat
+a recorded rule as implemented behavior — no `Portfolio` exists.
 ADR 0015 remains accepted and explicitly interim.
 
 The original foundation repair batch closed on 16 September. New hardening findings are
@@ -55,8 +56,14 @@ optimized structures, SPSC, live-paper operation and dashboard remain unimplemen
 
 ## Limitations the next implementation must respect
 
-1. **Accounting:** earlier D5 buy/sell wording was long-only. Basis, rounding, fees and
-   reversals still need signed-position examples. Price times quantity requires unit conversion.
+1. **Accounting:** the earlier D5 buy/sell wording was long-only. Eight rules were selected on
+   19 September by hand-working long, short and reversal examples, and are recorded in ADR 0014
+   D5 — money representation, basis as total-plus-quantity, net fees, fee direction,
+   signed-position classification, proportional reversal fee split, the zero invariant, and
+   realized arising only from closes. Four items remain open: exact decimal scale, partial-close
+   allocation when it does not divide, execution/fee identity and duplicates, and overflow
+   rejection. These are accepted intent; no `Portfolio` exists and nothing is test-verified.
+   Price times quantity still requires checked rescaling per ADR 0004.
 2. **Admission:** C++ validation omits `chain_valid` and `status`; Python/C++ semantic
    admission agreement remains open.
 3. **Tape preconditions:** the writer does not validate ordering/window consistency.

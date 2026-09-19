@@ -27,7 +27,7 @@ are research, the decision is yours.
 | 0011 | Portable binary segments and snapshots | 1-2 | before durable binary corpus |
 | 0012 | Reference order-book API and failure contract | 2 | before `order_book.cpp` |
 | 0013 | Merge ordering and fill double-counting | 2 | accepted 2026-08-27 |
-| 0014 | Event-loop causality and decision authority | 5 | accepted 2026-09-15; D5 policy gap recorded 2026-09-18 |
+| 0014 | Event-loop causality and decision authority | 5 | accepted 2026-09-15; D5 accounting rules selected 2026-09-19, 4 items open |
 | 0015 | Allocation failure is fatal to the process | 2 | accepted 2026-09-16, interim |
 
 Later additions with no stub yet: live-leg realism upgrade (week 11), equities adapter timing
