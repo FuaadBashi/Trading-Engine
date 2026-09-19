@@ -232,6 +232,30 @@ Tests must not silently select open accounting or simulation policy.
 ## E. After Stage 5: learning and research gates
 
 Planned, not implemented; detailed requirements live in plan v4.
+Longer-range context, including the PhD bridge, is proposed in
+[research-extension-plan.md](docs/research-extension-plan.md) — not accepted, and not a
+prerequisite for anything here.
+
+- [ ] **E1. Experiment runner — do this first, immediately after Stage 5.** Pulled forward from
+  Stage 10, because every study below is only worth as much as its reproducibility, and results
+  produced before the harness exists have to be redone afterwards.
+  One command reproduces a result from recorded data, parameters and code version. Plan v4 §4's
+  boundary is unchanged — Python configures, reports and analyses; C++ owns the book, fills, risk
+  and ledger. This applies that rule earlier, it does not rewrite it. Every run records dataset
+  identity and exclusions, parameters and seeds, commit/build identity and dirty state, and
+  results. Start with Python invoking the executable and reading structured output; add bindings
+  only when repeated-call or transfer cost justifies the added lifetime complexity.
+  **Done when:** one command regenerates a comparison report from a mandatory fixture with no
+  private data, and a second machine reproduces the same numbers from the same recorded inputs.
+  Effort: 2-4 days.
+
+- [ ] **E2. Reproducible failure and recovery experiments.** Inject missing, duplicated, delayed
+  and stale inputs, an overloaded consumer, an interrupted run and an invalid model output — each
+  from a recorded scenario rather than a live accident. Market feeds and process sensors produce
+  the same failure shapes, so this transfers; the recovery rules do not.
+  **Done when:** a recorded failure replays to the same defined response every time, with
+  diagnostics that identify what failed and where, and a recovered state that is consistent rather
+  than merely non-crashing. Effort: 2-4 days.
 
 - [ ] **L3 evidence before Stage 6/8 claims:** compare order IDs/quantities at intermediate
   checkpoints, and priority only where known. Keep the L2 digest for depth checks. Effort: 1-3 days.
@@ -242,9 +266,17 @@ Planned, not implemented; detailed requirements live in plan v4.
   availability-safe features and transparent baselines.
 - [ ] **Stage 7:** chronological sessions, label-interval leakage protection, frozen evaluation,
   calibration, block uncertainty and sensitivity to assumptions.
+  This is the trading uncertainty study: does an observed order fill within a defined horizon?
+  It must beat a stated naive baseline, and its claimed uncertainty must be checked against
+  observed error rather than asserted. Split by session — splitting neighbouring timestamps
+  leaks the answer and produces a reassuring number that means nothing.
 - [ ] **Stage 8:** equivalent optimized book, controlled profiles and allocation/cache measurements.
   Compare bounded SPSC with a mutex queue after the single-thread baseline.
   Add relevant fuzzing, fault injection and concurrency checks.
+  **Record the optimizations that did not help, and why.** A benchmark report containing only wins
+  is a filtered result, not evidence. Measure tail latency, not just throughput — an average hides
+  exactly the behaviour that matters in execution. Every optimization needs correctness equivalence
+  against the reference book before its number counts.
 - [ ] **Stage 9:** read-only live feed, recovery, paper lifecycle, operational risk,
   bounded telemetry and shutdown/failure runbooks. No real-money trading.
 - [ ] **Stage 10:** thin dashboard, ownership-safe C++/Python boundary, reproducible
