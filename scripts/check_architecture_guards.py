@@ -19,15 +19,24 @@ CPP_SUFFIXES = {".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"}
 PRODUCTION_ROOTS = ("include", "src", "apps", "strategies")
 ALLOWED_CLOCK_FILES = {Path("src/core/time.cpp")}
 
-# These headers own exact prices, quantities, order/trade financial fields, book aggregates, or
+# These files own exact prices, quantities, order/trade financial fields, book aggregates, or
 # portfolio/risk state. Strategy/research/telemetry code is deliberately not banned wholesale:
 # probabilities, statistics and graph coordinates may legitimately use floating point.
+#
+# Implementation files are listed alongside their headers. Declaring the type in an int64 header
+# does not stop the arithmetic in the matching .cpp from passing through a double, which is
+# exactly where a rounding error would enter. The two engine .cpp entries are listed before those
+# files exist: the set is matched against files actually walked, so an entry for a missing file is
+# inert until the file appears, and this way the guard is already in place the day it is written
+# rather than being retrofitted afterwards (TODO C7).
 EXACT_FINANCIAL_PATHS = {
     Path("include/te/core/types.hpp"),
     Path("include/te/feed/events.hpp"),
     Path("include/te/feed/trade_event.hpp"),
     Path("include/te/engine/portfolio.hpp"),
     Path("include/te/engine/risk.hpp"),
+    Path("src/engine/portfolio.cpp"),
+    Path("src/engine/risk.cpp"),
 }
 EXACT_FINANCIAL_DIRECTORIES = (Path("include/te/book"),)
 
@@ -143,7 +152,7 @@ def lineNumber(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
-def isExactFinancialHeader(relativePath: Path) -> bool:
+def isExactFinancialPath(relativePath: Path) -> bool:
     if relativePath in EXACT_FINANCIAL_PATHS:
         return True
     return any(directory in relativePath.parents for directory in EXACT_FINANCIAL_DIRECTORIES)
@@ -176,7 +185,7 @@ def scanRepository(root: Path) -> list[Violation]:
                         )
                     )
 
-            if isExactFinancialHeader(relativePath):
+            if isExactFinancialPath(relativePath):
                 for match in FLOATING_TYPE.finditer(code):
                     violations.append(
                         Violation(

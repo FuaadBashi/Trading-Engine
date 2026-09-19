@@ -133,10 +133,19 @@ Tests must not silently select open accounting or simulation policy.
 
 ### C7. Extend financial guards alongside accounting
 
-- [ ] **Part of D2; 1-2 hours.** The float guard covers selected headers and
-  `include/te/book/`, not future portfolio/risk implementation files.
-  **Done when:** deliberately invalid financial implementation code is detected.
-  Keep floating point available for probabilities, statistics and presentation.
+- [x] **Done 19 September 2026.** `src/engine/portfolio.cpp` and `src/engine/risk.cpp` are now in
+  the guard's exact-financial set, alongside the headers that were already there. Declaring a type
+  in an int64 header never stopped the arithmetic in the matching `.cpp` from passing through a
+  `double`, which is precisely where a rounding error would enter.
+
+  Listed **before** those files exist, deliberately. The set is matched against files actually
+  walked, so an entry for a missing file is inert until the file appears — which means the guard
+  is in place the day Portfolio is written rather than retrofitted after. Also renamed
+  `isExactFinancialHeader` to `isExactFinancialPath`, since it no longer covers headers only.
+
+  Verified both directions: a `double` planted in `src/engine/portfolio.cpp` produces violations
+  and exit 1, while a `double` in `src/research/statistics.cpp` is still allowed, so probabilities
+  and statistics keep floating point. Guard passes on the real tree; 13/13 Python tests pass.
 
 ## D. Build the Stage 5 engine
 
