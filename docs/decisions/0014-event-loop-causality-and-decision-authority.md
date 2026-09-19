@@ -1,6 +1,7 @@
 # ADR 0014: Event-loop causality and decision authority
 
-- **Status:** accepted 2026-09-15; D5 accounting rules selected 2026-09-19, four items still open
+- **Status:** accepted 2026-09-15; D5 accounting rules selected 2026-09-19 (12 rules, fee schedule
+  deferred to D2)
 - **Date:** 2026-09-09, amended 2026-09-15, corrected 2026-09-18, rules recorded 2026-09-19
 - **Stage:** 5 (with explicitly deferred Stage 9 controls)
 
@@ -28,7 +29,8 @@ open-but-untrusted or trusted-but-one-sided book to drive an order.
 The 18 September source review corrected status, clock and accounting overstatements.
 The authority/order contract remains accepted. These are requirements for the future engine,
 not a claim that Strategy, DecisionGate, Portfolio or ExecutionVenue is implemented.
-D5 now identifies the signed-position policy that must be completed before Portfolio.
+D5 identified an incomplete signed-position policy on 18 September; the twelve rules selected on
+19 September complete it. They are accepted intent, not implemented behaviour.
 
 ### Apply before observe
 
@@ -254,8 +256,8 @@ through position/basis; the mark itself is not part of the confirmed-fill input.
 
 ## Selected accounting rules, 2026-09-19
 
-Chosen by hand-working long, short and reversal examples (TODO D1). Eight rules are settled;
-four items remain open and are listed after them. No `Portfolio` implementation exists yet, so
+Chosen by hand-working long, short and reversal examples (TODO D1). Twelve rules are settled;
+covering everything D5 listed as required. No `Portfolio` implementation exists yet, so
 these are accepted intent, not verified behaviour.
 
 **1. Money representation.** Signed `std::int64_t`, scaled, carried per-instrument alongside the
@@ -306,20 +308,67 @@ what was paid or received. Both are bugs, and this is a cheap always-checkable i
 closing produces realized PnL -- opening a long or a short produces none. Compute a fill's
 contribution in isolation first, then fold it into the total.
 
-### Still open after this pass
+**9. Decimal scale.** Eight places below one unit of the quote currency, so one stored unit is
+`0.00000001` of that currency. Chosen from the low end, not the high end: the ceiling is
+comfortable at every candidate scale (8 places still allows about 92 billion currency units,
+far beyond any account), so what decides it is the smallest representable amount. One satoshi at
+$100,000 is `$0.001`, which rounds to zero in whole cents — whole minor units silently destroy
+small fills. Eight places also matches the existing BTC quantity increment, so money and quantity
+share a scale, and matches what venues carry in practice.
 
-- **Exact decimal scale.** Rule 1 fixes the shape, not the number of places.
-- **Partial-close allocation when it does not divide.** A basis of 302 over 3 units cannot assign
-  an integer share to one unit. Conserving the total and preserving the average are different
-  guarantees and two plain integers cannot provide both. The chosen direction is extra precision
-  over a carried residual, because a residual is hidden state the fill journal would also have to
-  reproduce on replay; that is a direction, not yet a stated rule.
-- **Execution and fee identity, and duplicate behaviour.**
-- **Overflow rejection**, including the reversal fee division above.
+**10. Execution identity and duplicates.** Identity is the **venue's own execution ID**, not a
+locally generated counter — a local counter restarts or drifts across a reconnect, which is
+precisely when duplicates arrive. Fees carry their own identity, since a fee can arrive as a
+message separate from its fill. A fill whose ID has already been applied is **ignored with no
+state change**; it is not an error, because redelivery after a reconnect is normal protocol
+behaviour. Applied IDs are retained for the whole run: replay inputs are finite capture files, so
+the set has a natural bound. Unbounded growth becomes real only under continuous live operation,
+which is Stage 9's problem. Counting ignored duplicates is deliberately deferred — it changes no
+behaviour and no contract, so it can be added the day someone wants the visibility. The cost of
+deferring is that a flood of duplicates would be silent.
+
+**11. Overflow.** `price x quantity` is computed in a **128-bit intermediate** before rescaling,
+per ADR 0004; at an 8-place money scale an ordinary large trade (a $100,000 price against 1000
+BTC) exceeds a 64-bit product by orders of magnitude, so this is a routine path, not an edge case.
+Where a result would not fit, the fill is **refused with a named error and no state change** —
+never wrapped, never clamped, because a clamped figure is silently wrong money that nothing
+flags. Enforced by construction: compute the complete candidate (cash, signed position, basis,
+realized, fees), validate all of it, then commit in one step. A half-updated account is therefore
+unrepresentable rather than merely avoided, matching what `OrderBook` already guarantees for
+rejected events and satisfying D5's atomicity requirement above. `TradeReconciler::observe`
+saturates instead of refusing; that is a documented exception, forced by its `void` return and
+safe because `reconcile` only ever consumes `min(shortfall, credit)`.
+
+**12. Partial-close allocation.** On a partial close:
+
+```
+removed   = basis x (units closed / units held)   rounded to the stored scale
+remaining = basis - removed                       never recomputed
+```
+
+The load-bearing half is the second line. Because `remaining` is *defined* as what did not leave,
+`removed + remaining == basis` holds by construction no matter how the division rounded, so the
+total can never leak. Rebuilding the remainder instead — rounding a per-unit average and
+multiplying it back by the units still held — multiplies the rounding error by that quantity and
+invents or destroys money: a one-penny rounding against 1000 units fabricates ten pounds on every
+partial close.
+
+Consequences: the total is exact always; the derived average may differ by at most one unit in
+the last stored place, and that error does not accumulate because it stays in the residual basis
+until the final close settles it. At 8 places that is billionths of a currency unit. This also
+supplies rule 7 for free — a final close removes `basis x (all / all) == basis`, so basis reaches
+exactly zero as position does, with no special case.
+
+This supersedes the earlier "extra precision versus carried residual" framing. A carried residual
+was rejected for the reason recorded before (it is hidden state the fill journal would have to
+reproduce on replay), but the deeper point is that subtracting rather than rebuilding already
+conserves the total exactly, so no residual field is needed.
+
+### Still open
 
 Fee *schedule* (flat, basis-point, maker/taker) stays out of scope: rule 4 fixes where a fee
 lands, not how it is computed. Whether `Portfolio` receives a fee or calculates one is an
-interface question for D2.
+interface question for D2. Nothing else in D5 remains unselected.
 
 ### D6. `DecisionGate` is invoked at every checkpoint, trusted or not (was open question 6a)
 

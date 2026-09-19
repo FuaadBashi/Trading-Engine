@@ -151,8 +151,7 @@ Tests must not silently select open accounting or simulation policy.
 
 ### D1. Agree the money rules using examples
 
-- [ ] **In progress. Eight rules selected 19 September and recorded in ADR 0014 D5; four items
-  still open.**
+- [x] **Done 19 September 2026. Twelve rules selected and recorded in ADR 0014 D5.**
 
   Worked by hand so far, each row checked against equity and against realized-plus-unrealized:
   open long, partial close, final close, open short, partial cover, final cover, and a
@@ -163,16 +162,21 @@ Tests must not silently select open accounting or simulation policy.
   fees always moving basis against the trader; classification by signed position; proportional
   reversal fee split; position zero if and only if basis zero; realized produced only by closing.
 
-  **Still to settle:** the exact decimal scale; partial-close allocation when it does not divide
-  (302/3 — the direction is extra precision rather than a carried residual, because a residual is
-  hidden state the fill journal would have to reproduce on replay, but that is not yet a stated
-  rule); execution/fee identity and duplicate behaviour; overflow rejection.
+  Also selected: money at **8 decimal places** below one quote-currency unit, chosen from the
+  smallest representable amount rather than the ceiling — one satoshi at $100,000 is `$0.001` and
+  rounds to zero in whole cents. Duplicates keyed on the **venue's execution ID**, ignored with no
+  state change and retained for the whole run. Overflow **refuses the fill** with a named error,
+  using a 128-bit intermediate for `price x quantity` and a candidate-then-commit update so a
+  half-changed account is unrepresentable. Partial closes **subtract what left** rather than
+  rebuilding from a rounded average — rebuilding multiplies the rounding error by the remaining
+  quantity and invents money, while subtracting conserves the total by construction and hands back
+  the position-zero-implies-basis-zero invariant for free.
 
   Short-to-long by buying is deliberately not hand-worked — it is the structural mirror of the
   reversal already done, and belongs in a test rather than a paper row.
 
-  **Done when:** the four open items above are decided and recorded in ADR 0014 D5. Only then do
-  the examples become assertions.
+  Only the fee *schedule* (flat, basis-point, maker/taker) is left, and it is a D2 interface
+  question, not an accounting rule. These are accepted intent; nothing is test-verified.
 
 ### D2. Implement Portfolio and its fill journal
 

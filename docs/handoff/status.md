@@ -1,8 +1,10 @@
 # Status handoff
 
 **Source review baseline:** 18 September 2026, `HEAD 6c2f2f6`.
-The checkout was clean before documentation alignment. This update changes documentation
-and current PDF exports only; it does not implement review findings or rerun the engine suite.
+**Updated 19 September 2026:** C1 (sanitizer enforcement) and C7 (float guard over the accounting
+implementation files) are now done and pushed, along with ADR 0014 D5's twelve accounting rules.
+Those carry their own verification; the rest of this document remains the 18 September review
+baseline and no full engine suite was rerun for the documentation changes.
 
 - [TODO.md](../../TODO.md): single active sequence, task status and completion criteria.
 - [Plan v4](../project-plan-v4.md): long-range scope and evidence gates.
@@ -16,8 +18,7 @@ Entering **Stage 5**, starting with accounting examples and Portfolio.
 Capture/reconstruction foundations exist; the complete trading engine does not.
 
 ADR 0014 was accepted on 15 September. Its 18 September correction identified D5's incomplete
-signed-position accounting policy; eight rules were selected on 19 September and recorded there,
-with four items still open (see limitation 1). Do not restart D1-D8 wholesale, and do not treat
+signed-position accounting policy; twelve rules were selected on 19 September and recorded there (see limitation 1). Do not restart D1-D8 wholesale, and do not treat
 a recorded rule as implemented behavior — no `Portfolio` exists.
 ADR 0015 remains accepted and explicitly interim.
 
@@ -60,9 +61,12 @@ optimized structures, SPSC, live-paper operation and dashboard remain unimplemen
    19 September by hand-working long, short and reversal examples, and are recorded in ADR 0014
    D5 — money representation, basis as total-plus-quantity, net fees, fee direction,
    signed-position classification, proportional reversal fee split, the zero invariant, and
-   realized arising only from closes. Four items remain open: exact decimal scale, partial-close
-   allocation when it does not divide, execution/fee identity and duplicates, and overflow
-   rejection. These are accepted intent; no `Portfolio` exists and nothing is test-verified.
+   realized arising only from closes. Four further rules were added the same day: an 8-place
+   money scale, venue execution IDs with duplicates ignored, overflow refusing the fill under a
+   candidate-then-commit update, and partial closes subtracting what left rather than rebuilding
+   from a rounded average. Twelve rules total; only the fee schedule is left, and that is a D2
+   interface question. These are accepted intent; no `Portfolio` exists and nothing is
+   test-verified.
    Price times quantity still requires checked rescaling per ADR 0004.
 2. **Admission:** C++ validation omits `chain_valid` and `status`; Python/C++ semantic
    admission agreement remains open.
@@ -72,8 +76,10 @@ optimized structures, SPSC, live-paper operation and dashboard remain unimplemen
 5. **Tape equivalence:** complete tape replay is absent; pre-seed classifier warm-up and
    source lineage need proof before raw/tape substitution.
 6. **L3 evidence:** the aggregate digest excludes order identity and priority.
-7. **CI:** UBSan recovery is not explicitly disabled; Python 3.9 is EOL.
-   The float guard does not yet protect future accounting implementation files.
+7. **CI:** Python 3.9 is EOL (C5, open). UBSan recovery was disabled on 19 September and the
+   float guard now covers `src/engine/portfolio.cpp` and `src/engine/risk.cpp`; both were
+   verified by probe, and the first enforced CI run exposed a real nonnull-`memcpy` UB in
+   `sha256Hex` that had been reported and ignored on every prior sanitized run.
 8. **Allocation:** `apply()` does not enforce process termination locally. A future catching
    wrapper must not retain/reuse a partially mutated book; read ADR 0015.
 9. **Diagnostics:** the coordinator collapses several detailed failure causes.
