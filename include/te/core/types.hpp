@@ -53,6 +53,27 @@ static_assert(std::is_trivially_copyable_v<Qty>,
               "inside normalized events and fixed-capacity queues; this does not define its "
               "binary serialization.");
 
+// Exact integer money in minor units of the instrument's quote currency, at the scale ADR 0014 D5
+// rule 9 fixes: eight places below one currency unit, so one unit here is 0.00000001 of it.
+// Distinct from Price and Qty on purpose (ADR 0004) -- cash, a price and a size are all "an int64
+// of somethings", and only separate types stop them being added to each other by accident.
+//
+// Signed because cash, position value and realized PnL all go negative, and unsigned subtraction
+// wraps instead of erroring. Ordered because callers ask whether cash is negative or realized is
+// above zero; Price is ordered for the same practical reason, Qty is not.
+struct Money {
+    std::int64_t units{};
+
+    friend constexpr bool operator==(const Money&, const Money&) = default;
+
+    friend constexpr auto operator<=>(const Money&, const Money&) = default;
+};
+
+static_assert(std::is_trivially_copyable_v<Money>,
+              "Money must remain a trivial value type for predictable, allocation-free use "
+              "inside normalized events and fixed-capacity queues; this does not define its "
+              "binary serialization.");
+
 // Bitstamp IDs are parsed exactly from id_str; event-chain UUIDs are a different identifier.
 struct OrderId {
     std::uint64_t value{};

@@ -78,10 +78,11 @@ target_sources(te_core PRIVATE
     src/telemetry/legacy/recorder.cpp
     src/telemetry/legacy/sink.cpp
 
+    src/engine/portfolio.cpp
+
     # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
     # Future slices:
     # src/engine/engine.cpp
-    # src/engine/portfolio.cpp
     # src/feed/replay_feed.cpp
     # src/venue/simulated_venue.cpp
 )
