@@ -113,6 +113,8 @@ Older plan/learning/deep-dive PDFs are historical snapshots, not current status 
 
 ## Verification when source changes
 
-Inspect Git first. Use the chosen non-synced build path, actual CI compilers/flags,
+Inspect Git first. Build in `~/build/TradingEngineProject` (outside iCloud sync; the in-tree
+`build/` reconfigures in minutes instead of seconds and rewrites `compile_commands.json` with
+paths that later break editor tooling). Use actual CI compilers/flags,
 a clean build when citing results, mandatory fixtures, appropriate sanitizers and
 `git diff --check`. Check task-specific gates before marking work complete.

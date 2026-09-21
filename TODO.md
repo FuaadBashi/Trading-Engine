@@ -32,10 +32,23 @@ Tests must not silently select open accounting or simulation policy.
   was not performed; do not turn that distinction into a repeated blocker.
 - [x] **Broken build directories:** repaired on 16 September. The recorded cause was
   iCloud conflict duplicates. Do not repeat the old deletion instructions.
-- [ ] **Build outside the synced Desktop tree.** Choose and document one configure/build/test
-  workflow, then verify the actual GCC/Clang configurations.
-  **Done when:** the chosen build path is outside sync and a clean build plus mandatory tests pass.
-  Effort: 1-2 hours. Build location remains to be chosen.
+- [x] **Build outside the synced Desktop tree.** Done 21 September 2026. The canonical build is
+  now `~/build/TradingEngineProject`, outside iCloud sync:
+
+  ```bash
+  cmake -S . -B ~/build/TradingEngineProject -DCMAKE_BUILD_TYPE=RelWithDebInfo
+  cmake --build ~/build/TradingEngineProject -j
+  ctest --test-dir ~/build/TradingEngineProject --output-on-failure
+  ```
+
+  Measured, not assumed: reconfiguring the durable build takes **2.8 seconds**; the same command
+  against the in-tree `build/` timed out at **5 minutes**. 327/327 pass there.
+
+  This also fixes editor tooling. `compile_commands.json` is copied from whichever directory you
+  build in, so building anywhere transient points clangd at paths that later vanish and every
+  `#include` goes red. Build in the durable directory and the file stays valid. The in-tree
+  `build/` still exists and still resyncs; prefer deleting it so it cannot silently become the
+  source of `compile_commands.json` again.
 - [x] **Previously pending work:** present in history at the review baseline; the checkout
   was clean before this documentation update. New changes remain uncommitted until requested.
 
