@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <unordered_set>
 
+#include <te/core/instrument.hpp>
 #include <te/core/types.hpp>
 
 #include <te/core/result.hpp>
@@ -37,11 +38,18 @@ struct ExecutionIdHash {
 // One confirmed execution. Quantity is a positive magnitude with a separate side, matching
 // OrderEvent; the signed position lives inside Portfolio so exactly one place can get the sign
 // wrong rather than every caller.
+//
+// notional and fee both arrive from the venue rather than being recomputed here. FIX carries the
+// same two facts in an ExecutionReport -- GrossTradeAmt(381) and the commission that makes up
+// NetMoney(118) -- for the reason that decided it: the venue has already rounded price x quantity
+// its own way, and recomputing it with a different rule drifts the ledger away from the actual
+// account balance. price is retained as a record of the execution, not as an input to arithmetic.
 struct Fill {
     ExecutionId execution_id{};
     Side side{};
     Price price{};
     Qty quantity{};
+    Money notional{};
     Money fee{};
 };
 
@@ -91,6 +99,11 @@ struct FillOutcome {
 //     cannot half-change the account (rule 11).
 class Portfolio {
 public:
+    // The spec is needed only by unrealizedAt: a mark is a price nobody has traded at, so no
+    // venue supplies its notional and this is the one place Portfolio must convert price ticks
+    // and quantity units into money itself. The fill path never converts.
+    explicit Portfolio(InstrumentSpec spec) : spec_(spec) {}
+
     Result<FillOutcome, FillError> applyFill(const Fill& fill);
 
     Money cash() const { return cash_; }
@@ -109,10 +122,13 @@ public:
 
     // Requires a mark because paper profit depends on a price nobody has traded at. Kept off the
     // fill path so an account cannot silently value itself at whatever price happened to arrive
-    // last (D5, unrealized paragraph).
+    // last (D5, unrealized paragraph). Converts mark x position through a 128-bit intermediate
+    // (ADR 0004) and rounds against the trader when the rescale does not divide evenly, matching
+    // the conservative asymmetry venues use for position valuation.
     Money unrealizedAt(Price mark) const;
 
 private:
+    InstrumentSpec spec_{};
     Money cash_{};
     Qty position_{};
     Money basis_{};
