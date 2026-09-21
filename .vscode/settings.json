@@ -2,7 +2,12 @@
     "C_Cpp.intelliSenseEngine": "disabled",
     "clangd.path": "/opt/homebrew/opt/llvm/bin/clangd",
     "clangd.arguments": [
-        "--compile-commands-dir=${workspaceFolder}/build",
+        // The repo root, not build/. CMakeLists copies compile_commands.json here from whichever
+        // directory you configured, so this stays current wherever you build -- and the canonical
+        // build now lives outside the iCloud-synced tree (~/build/TradingEngineProject), which a
+        // ${workspaceFolder}-relative path cannot reach. Pointing at build/ pinned clangd to a
+        // stale database that predated new source files, so they showed as unresolved includes.
+        "--compile-commands-dir=${workspaceFolder}",
         "--background-index",
         "--header-insertion=never"
     ],
