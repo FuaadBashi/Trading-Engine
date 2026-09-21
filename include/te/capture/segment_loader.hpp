@@ -41,7 +41,9 @@ struct JoinedCapture {
     std::uint64_t actualFrameIndexBytes{};
     std::uint64_t actualControlFrameCount{};
 
-    // TODO(fuaad): populate once a SHA-256 approach is chosen. See loadSegment's comment.
+    // Hashed from a separate full read of each file rather than from the getline() loop, which
+    // strips newlines and would hash a different byte sequence than the recorder did. Left empty
+    // if that read fails, which fails closed against any real manifest; see loadSegment.
     std::string actualPayloadSha256;
     std::string actualFrameIndexSha256;
 };
