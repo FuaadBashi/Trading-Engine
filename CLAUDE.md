@@ -23,6 +23,8 @@ to become:
 - Explain the decision space and the consequences of each option; let him choose. Say which option
   you'd pick and why, but do not collapse the choice on his behalf.
 - Grill the design. Push back on drift between what a doc claims and what the code does.
+- No new ADR until the code it governs exists. Build the simple version first; record the
+  decision once tests have found the edge cases.
 - Explanations go deep: name the real industry pattern and real systems that use it, not just
   project-internal reasoning.
 - Written docs and code comments stay short. Depth belongs in conversation, not in the repo.
@@ -47,7 +49,7 @@ Deeper background, read only the relevant part as needed:
 5. `docs/decisions/` — ADR index and current amendments. Read the relevant decision before changing
    its contract; accepted design does not mean implemented behavior.
 
-Older plans (`project-plan-v2.md`, `coding-plan-v3.md`, `slice-1-plan.md`) are historical.
+Older plans, session logs and PDF exports are in `docs/archive/` and are historical.
 
 ## Keeping the docs honest
 

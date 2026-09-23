@@ -5,7 +5,7 @@
 **Primary career target:** Quant developer, with credible C++ market-data and performance-engineering evidence  
 **Status:** Current long-range scope and evidence gates; TODO.md owns active task status
 
-This plan supersedes `project-plan-v2.md` and `coding-plan-v3.md`. Those documents remain useful
+This plan supersedes `project-plan-v2.md` and `coding-plan-v3.md` (now in `docs/archive/`). Those documents remain useful
 historical records of how the design changed, but this document controls current scope, ordering and
 exit gates.
 

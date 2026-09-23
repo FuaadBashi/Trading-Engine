@@ -21,7 +21,7 @@ are research, the decision is yours.
 | 0005 | Order ID representation | 1 | before `events.hpp` |
 | 0006 | Behaviour on a lost-event gap | 1 | before the recorder runs unattended |
 | 0007 | Price level storage in the order book | 2 | before `order_book.hpp` |
-| 0008 | Queue-position assumption for cancels | 4 | before `queue_model.hpp` |
+| 0008 | Queue-position assumption for cancels | 4 | before the queue model |
 | 0009 | Virtual dispatch vs CRTP for Strategy | 3 | before `strategy.hpp` |
 | 0010 | Primary venue for L3 capture | 1 | before the hour-long capture |
 | 0011 | Portable binary segments and snapshots | 1-2 | before durable binary corpus |

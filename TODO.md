@@ -1,32 +1,21 @@
 # Trading Engine - active checklist
 
-Updated **21 September 2026**: added the Stage 8 low-latency evidence sequence.
-The original source review was at `6c2f2f6`; current accounting scaffolding is at `4c25c77`.
-This is the single active task list. [Plan v4](docs/project-plan-v4.md) owns long-range
-scope; [the guide](docs/project-progress-guide.md) explains the work and effort estimates.
-
-[TODO.pdf](TODO.pdf) is an older export and does not include this update; this Markdown is current.
-The originally supplied
-[new-todo-list.pdf](new-todo-list.pdf) is historical input, not the current plan.
-Documentation edits do not complete the code tasks below. No deadlines are agreed.
+The single active task list. [Plan v4](docs/project-plan-v4.md) owns long-range scope;
+[the guide](docs/project-progress-guide.md) explains the work. Superseded plans and PDF exports
+are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 
 ## Start here
 
-**Next learning task: D2, implement Portfolio from D1's agreed examples.**
-D1 is recorded complete. The interface and 16 disabled specification tests exist;
-the implementation remains a stub. Low-latency experiments follow the complete Stage 5 engine.
-The original foundation repair batch closed on 16 September. ADR 0014 was accepted on
-15 September; do not reopen all eight decisions. The review found a narrower D5 accounting
-gap and additional hardening work, listed separately below.
+**Next: D2, finish Portfolio.** Opening a long works; enable the next `DISABLED_` test and
+extend `applyFill` until it passes. Then D3-D7 in order. Pulled forward alongside D2: the
+engineering track in [docs/roadmap-borrowed-ideas.md](docs/roadmap-borrowed-ideas.md).
 
-Continue D2-D7, closing C2 before trusted capture integration and C3 before tape use.
-C1 sanitizer enforcement and C7 financial guard coverage are complete.
-In-memory Portfolio work can proceed while capture hardening remains open.
-C2 gates trusted capture-to-engine results; C3 gates tape use.
+C2 gates trusted capture-to-engine results; C3 gates tape use. In-memory Portfolio work does not
+wait on either. Fuaad writes learning-critical code; the assistant writes tests from agreed
+examples and must not silently choose open policy.
 
-Fuaad chooses domain rules and writes the first learning-critical implementation.
-The assistant writes all tests against agreed examples and explains their purpose.
-Tests must not silently select open accounting or simulation policy.
+**No new ADR until the code it governs exists.** Write the simple version, find the edge cases
+through tests, then record the decision.
 
 ## A. Preserve data and reproducibility
 
@@ -238,7 +227,7 @@ Tests must not silently select open accounting or simulation policy.
 
 ### D7. Ship the replay executable and run record
 
-- [ ] Connect `apps/replay_main.cpp` to the build and actual engine.
+- [ ] Create `apps/replay_main.cpp` and connect it to the build and actual engine.
   **Done when:** one command runs a mandatory fixture without private data and reports counts,
   trust, shape, blocks/rejections, orders, accounting and fingerprints.
   Record input hashes, commit/build and dirty state, scales, policies, configuration,

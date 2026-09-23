@@ -1,39 +1,30 @@
-# Paper Trading Engine
+# L3 Replay and Execution-Research Engine
 
-One C++/Python system in which the same strategy binary runs against recorded historical data
-(backtest) and a live feed (paper trading), with only the data source and the clock swapped.
+A deterministic C++ engine that rebuilds a venue's full order-by-order (L3) book from recorded
+market data and replays it exactly. The goal is for one strategy to run against recorded data
+(backtest) and a live feed (paper trading), with only the data source and clock swapped.
 
-**The deliverable combines a validated engine and an interactive local dashboard.** The technical
-evidence is a deterministic, gap-aware L3 order/trade replay system, a reference-versus-optimized
-C++ performance study, and an out-of-sample evaluation of fill-within-horizon forecasts on real
-observed resting orders. The dashboard exposes the same C++ engine for historical replay, live
-observation and local paper-order experiments. See the current
-[Project Plan v4](docs/project-plan-v4.md) for the evidence gates, limitations and schedule.
+**What exists today:** Bitstamp L3 capture, merge and reconciliation, a portable tape format, and
+a reference order book that reproduces the venue's own checkpoint exactly (0 of 4,533 levels
+differ). **What doesn't yet:** the strategy, simulated venue, risk checks and live path. Portfolio
+accounting is in progress. [Plan v4](docs/project-plan-v4.md) has the full scope and gates.
 
 ## Status
 
-Source review baseline: **18 September 2026, `6c2f2f6`**. Status refreshed **21 September**
-at `4c25c77`: D1 accounting rules are agreed; Portfolio has an interface, an unimplemented
-stub and 16 disabled specification tests. D2 implementation is next, followed by the complete
-Stage 5 engine. Documentation updates do not establish a fresh test result.
+Stage 5 (replay and accounting) is in progress. `Portfolio::applyFill` handles opening a long;
+closing, shorts and reversals are next, driven by 16 specification tests enabled one at a time.
+[TODO.md](TODO.md) owns live task status; [status](docs/handoff/status.md) is the session handoff.
 
-For a plain-language explanation of what exists, diagrams, and why the next steps are ordered as
-they are, read [Trading Engine: your next milestone](docs/project-progress-guide.md)
-or its [older PDF snapshot](output/pdf/trading-engine-progress-guide.pdf), which does not contain
-the 21 September low-latency amendment.
-The table below uses historical slice numbers; the guide and active planner use plan-v4 stages.
-
-| Slice | Weeks | State |
+| Stage | Focus | State |
 |---|---|---|
-| 0 Foundations | 0 | complete |
-| 1 Data contract + recorder | 1 to 3 | capture/v3 I/O and byte/hash/count admission exist; semantic admission and tape equivalence remain |
-| 2 L3 book + reconciliation | 3 to 5 | merge controller built and its gate met; joined replay reproduces the venue checkpoint exactly (0 of 4,533 levels differ) |
-| 3 Deterministic replay + accounting | after joined replay | D1 rules agreed; D2 Portfolio implementation next, then complete Stage 5 |
-| 4 Queue labels + execution model | after replay core | not started |
-| 5 Held-out corpus validation | after label-quality gate | not started |
-| 6 Performance laboratory | after deterministic correctness | planned; TODO S8.1-S8.7 defines low-latency evidence |
-| 7 Operational live/paper path | after validated core | not started |
-| 8 Interactive dashboard | after stable telemetry contract | not started |
+| 0-3 | Contracts, joined capture, merge/reconciliation, golden correctness | done; hardening open (TODO C) |
+| 4 | Portable v3 tape | format done; raw/tape equivalence open |
+| 5 | Replay and accounting | **in progress** (Portfolio) |
+| 6 | Queue labels and baselines | not started |
+| 7 | Held-out validation | not started |
+| 8 | Performance laboratory | planned (TODO S8.1-S8.7) |
+| 9 | Operational paper path | not started |
+| 10 | Dashboard | not started |
 
 ## The one idea this repo is shaped around
 
@@ -93,13 +84,8 @@ cannot exactly verify a Bitstamp book.
 The live sequence and its exact completion gates are in
 [TODO.md](TODO.md); long-range reasoning remains in [Project Plan v4](docs/project-plan-v4.md).
 
-The checklist was aligned with the source review on 18 September 2026; [TODO.pdf](TODO.pdf)
-is an older export without the 21 September amendment. Start with **Start here** in TODO.md.
-The supplied `new-todo-list.pdf` is historical input.
-The guide explains the learning/research path; TODO owns priorities and completion criteria.
-In-memory accounting can proceed independently of capture hardening, but integration must meet
-its named prerequisites. The guide PDF is a local export under gitignored `output/`;
-older plan and deep-dive PDFs are historical snapshots, not current status authorities.
+The guide explains the learning path; TODO owns priorities and completion criteria. Superseded
+plans and PDF exports are in [docs/archive](docs/archive/README.md).
 
 Stage 8's [low-latency sequence](TODO.md#stage-8-sequence-low-latency-evidence) follows the
 complete Stage 5 engine and experiment runner: define timed paths, baseline, profile, compare

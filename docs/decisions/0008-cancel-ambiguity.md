@@ -51,7 +51,7 @@ See ADR 0013 for the fill-accounting mechanism and the measurements above.
    *(Corrected 2026-09-15: these two labels were previously stated the other way round. With
    100 units ahead of you and 40 cancelled, "cancels ahead" leaves 60 blocking you and "cancels
    behind" leaves 100 — so "ahead" is the optimistic case. No code was built against the inverted
-   text; `queue_model.hpp` is still a placeholder.)*
+   text; no queue model exists yet.)*
 3. **Uniform across the queue** — reduce queue-ahead by qty * (ahead / total).
 4. **Weighted toward the back** — front-of-queue orders are older and less likely to be cancelled.
 

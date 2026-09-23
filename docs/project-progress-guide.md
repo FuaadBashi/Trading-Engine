@@ -242,8 +242,7 @@ results before the full dashboard is finished.
 
 Source evidence for the current review:
 
-- [Portfolio placeholder](../include/te/engine/portfolio.hpp),
-  [engine placeholder](../include/te/engine/engine.hpp), [active tasks](../TODO.md).
+- [Portfolio](../include/te/engine/portfolio.hpp), [active tasks](../TODO.md).
 - [Capture admission](../src/capture/capture_validator.cpp),
   [manifest reader](../src/capture/manifest_reader.cpp),
   [Python validator](../scripts/validate_joined_capture.py).
