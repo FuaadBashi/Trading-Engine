@@ -1,6 +1,8 @@
 #include <te/engine/portfolio.hpp>
 
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace te {
 
@@ -61,10 +63,11 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
 }
 
 Money Portfolio::unrealizedAt(Price mark) const {
-    // NOT IMPLEMENTED. Needed by the last three tests, not the first.
-    // mark x position against basis, through a 128-bit intermediate, rounded against the trader.
+    // Not implemented. Aborts rather than return a zero that looks like a real answer.
+    // TODO(fuaad): mark x position against basis, 128-bit intermediate, rounded against the trader.
     (void)mark;
-    return Money{};
+    std::fputs("Portfolio::unrealizedAt is not implemented\n", stderr);
+    std::abort();
 }
 
 }  // namespace te

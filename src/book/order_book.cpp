@@ -36,7 +36,11 @@ Result<ApplyOutcome, ApplyError> OrderBook::apply(const OrderEvent& orderEvent) 
     }();
 
 #ifndef NDEBUG
-    if (result.hasValue()) {
+    // A full walk is O(book): check every event while the book is small, every 256th once large.
+    constexpr std::uint64_t kFullCheckInterval = 256;
+    ++debugAppliedEvents_;
+    if (result.hasValue() && (orderIndex_.size() <= kFullCheckInterval ||
+                              debugAppliedEvents_ % kFullCheckInterval == 0)) {
         validateStructure();
     }
 #endif
@@ -52,20 +56,13 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyAdd(const OrderEvent& orderEven
         return Result<ApplyOutcome, ApplyError>::failure(ApplyError::invalid_price);
     }
 
-    // Allocation failure is deliberately NOT handled here: ADR 0015 makes heap exhaustion fatal to
-    // the process, not a market-data error. A throw from addOrder() or orderIndex_.emplace()
-    // propagates out of apply(), and this OrderBook may be left with an empty price level -- which
-    // is only safe because nothing catches std::bad_alloc, so the book always dies with the stack.
-    // If a caller ever starts catching it, this becomes a ghost-book bug: an empty level IS the
-    // best price (bestBid/bestAsk read the map, not quantity) and digest() skips zero-quantity
-    // levels, so the book would lie about top-of-book while hashing identically.
+    // Allocation failure is fatal and unhandled here; catching it leaves a ghost level (ADR 0015).
     auto& levels = (orderEvent.side == Side::buy) ? bids_ : asks_;
     auto [levelIt, createdLevel] = levels.try_emplace(orderEvent.price);
     const std::optional<OrderHandle> orderHandle =
         levelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
     if (!orderHandle.has_value()) {
-        // Roll back a level created solely for this failed insertion. This is the graceful
-        // quantity-overflow path (a normal return), not the throw path above.
+        // Roll back a level created only for this failed insertion.
         if (createdLevel) {
             levels.erase(levelIt);
         }
@@ -92,11 +89,7 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderE
     }
 
     auto orderIt = orderIndex_.find(orderEvent.order_id);
-    // apply()'s own orderIndex_.contains() guard already makes this unreachable for modify/remove,
-    // but that guard is a separate lookup the optimizer can't connect to this one across the
-    // assert()-strips-in-release boundary -- gcc's -O2 flags the dereference as a potential null
-    // deref (-Wnull-dereference) with nothing but an assert() standing between them. A real branch
-    // fixes the warning and adds defense-in-depth instead of trusting a second, independent lookup.
+    // Unreachable after apply()'s guard, but GCC -O2 cannot prove it (-Wnull-dereference).
     if (orderIt == orderIndex_.end()) {
         return Result<ApplyOutcome, ApplyError>::failure(ApplyError::unknown_order_id);
     }
@@ -122,12 +115,8 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderE
         return Result<ApplyOutcome, ApplyError>::success(ApplyOutcome{});
     }
 
-    // Insert at the destination first, so a graceful overflow leaves the original order untouched.
-    // Allocation failure is fatal and unhandled here for the same reason as applyAdd -- see ADR
-    // 0015. Note this path has a second exposure applyAdd does not: between the destination insert
-    // succeeding and the source removeOrder() below, a throw would leave the order resting in two
-    // levels with the index still naming the old one. Harmless while nothing catches bad_alloc;
-    // it is one of the reasons the safe-object option exists.
+    // Insert at the destination first, so an overflow leaves the original order untouched.
+    // A throw between here and removeOrder() would leave the order in two levels (ADR 0015).
     auto [targetLevelIt, createdLevel] = levels.try_emplace(orderEvent.price);
     const std::optional<OrderHandle> newOrderHandle =
         targetLevelIt->second.addOrder(orderEvent.order_id, orderEvent.quantity);
@@ -152,9 +141,7 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyModify(const OrderEvent& orderE
 
 Result<ApplyOutcome, ApplyError> OrderBook::applyRemove(const OrderEvent& orderEvent) {
     auto orderIt = orderIndex_.find(orderEvent.order_id);
-    // Same reasoning as applyModify's identical guard: apply()'s orderIndex_.contains() check
-    // already makes this unreachable, but gcc's -O2 -Wnull-dereference can't see across the
-    // assert()-strips-in-release boundary between that check and this independent lookup.
+    // Unreachable after apply()'s guard; kept for GCC -Wnull-dereference, as in applyModify.
     if (orderIt == orderIndex_.end()) {
         return Result<ApplyOutcome, ApplyError>::failure(ApplyError::unknown_order_id);
     }
@@ -181,21 +168,21 @@ Result<ApplyOutcome, ApplyError> OrderBook::applyRemove(const OrderEvent& orderE
     orderIndex_.erase(orderIt);
     return Result<ApplyOutcome, ApplyError>::success(outcome);
 }
-std::optional<Price> OrderBook::bestBid() const {
+std::optional<Price> OrderBook::bestBid() const noexcept {
     if (bids_.empty()) {
         return std::nullopt;
     }
     return bids_.rbegin()->first;
 }
 
-std::optional<Price> OrderBook::bestAsk() const {
+std::optional<Price> OrderBook::bestAsk() const noexcept {
     if (asks_.empty()) {
         return std::nullopt;
     }
     return asks_.begin()->first;
 }
 
-Qty OrderBook::qtyAt(Side side, Price price) const {
+Qty OrderBook::qtyAt(Side side, Price price) const noexcept {
     const auto& levels = (side == Side::buy) ? bids_ : asks_;
     const auto levelIt = levels.find(price);
     if (levelIt == levels.end()) {
@@ -238,7 +225,7 @@ void OrderBook::validateStructure() const {
     validateLevels(Side::sell, asks_);
 }
 
-MarketShape OrderBook::marketShape() const {
+MarketShape OrderBook::marketShape() const noexcept {
     const std::optional<Price> bid = bestBid();
     const std::optional<Price> ask = bestAsk();
 
@@ -256,14 +243,9 @@ MarketShape OrderBook::marketShape() const {
     }
     return MarketShape::open;
 }
-std::uint64_t OrderBook::digest() const {
-    // FNV-1a structure with a project-specific offset basis: this constant is NOT the published
-    // FNV-1a 64-bit basis (14695981039346656037). Every recorded digest, including those in
-    // ADR 0013, was produced with the value below, so changing it would invalidate them. Version
-    // the digest before ever altering it, and do not describe the output as standard FNV-1a.
-    //
-    // std::map iterates in ascending price order, so the walk is already canonical and does not
-    // depend on the order events arrived in.
+std::uint64_t OrderBook::digest() const noexcept {
+    // Not standard FNV-1a: the basis is missing a digit, and recorded digests depend on it.
+    // Bump kBookDigestVersion before changing it. std::map order makes the walk canonical.
     constexpr std::uint64_t kOffsetBasis = 1469598103934665603ULL;
     constexpr std::uint64_t kPrime = 1099511628211ULL;
 

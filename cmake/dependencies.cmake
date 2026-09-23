@@ -35,5 +35,4 @@ FetchContent_MakeAvailable(googletest)
 # Boost.Beast and cppzmq. Both are heavier; decide in slice 5 whether FetchContent is
 # still the right call for Boost or whether the system package wins there.
 
-# TODO(fuaad): uncomment googletest now, simdjson at the start of slice 1.
-# Pin versions by tag, never by branch. Check for newer releases when you uncomment.
+# Pin versions by tag and hash, never by branch.

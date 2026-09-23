@@ -19,14 +19,14 @@ using OrderHandle = std::list<RestingOrder>::iterator;
 class PriceLevel {
 public:
     // nullopt/false means invalid quantity or aggregate overflow; state is unchanged.
-    std::optional<OrderHandle> addOrder(OrderId id, Qty quantity);
+    [[nodiscard]] std::optional<OrderHandle> addOrder(OrderId id, Qty quantity);
     void removeOrder(OrderHandle orderHandle);
-    bool changeQty(OrderHandle orderHandle, Qty newQty);
+    [[nodiscard]] bool changeQty(OrderHandle orderHandle, Qty newQty);
 
-    Qty totalQuantity() const { return total_quantity_; }
-    bool isEmpty() const;
-    auto begin() const { return restingOrders_.begin(); }
-    auto end() const { return restingOrders_.end(); }
+    [[nodiscard]] Qty totalQuantity() const noexcept { return total_quantity_; }
+    [[nodiscard]] bool isEmpty() const noexcept;
+    [[nodiscard]] auto begin() const noexcept { return restingOrders_.begin(); }
+    [[nodiscard]] auto end() const noexcept { return restingOrders_.end(); }
 
 private:
     std::list<RestingOrder> restingOrders_{};

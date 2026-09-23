@@ -49,6 +49,10 @@ struct OrderLocator {
 
 // Sparse reference L3 book: ordered maps own levels and orderIndex_ gives direct ID lookup.
 // It is the correctness oracle; optimized books must reproduce its results (ADR 0007/0012).
+// Bump when digest()'s algorithm or constants change; recorded digests are only comparable
+// within one version.
+inline constexpr std::uint32_t kBookDigestVersion = 1;
+
 class OrderBook {
 public:
     OrderBook() = default;
@@ -71,16 +75,16 @@ public:
     void validateStructure() const;
 
     // Empty side is absence, never a sentinel price.
-    std::optional<Price> bestBid() const;
-    std::optional<Price> bestAsk() const;
+    [[nodiscard]] std::optional<Price> bestBid() const noexcept;
+    [[nodiscard]] std::optional<Price> bestAsk() const noexcept;
 
     // "No level" and "zero resting quantity" share the same meaning for this aggregate query.
-    Qty qtyAt(Side side, Price price) const;
+    [[nodiscard]] Qty qtyAt(Side side, Price price) const noexcept;
 
-    std::size_t levelCount() const { return bids_.size() + asks_.size(); }
+    [[nodiscard]] std::size_t levelCount() const noexcept { return bids_.size() + asks_.size(); }
 
     // Classifies the visible best prices without deciding whether trading is permitted.
-    MarketShape marketShape() const;
+    [[nodiscard]] MarketShape marketShape() const noexcept;
 
     /**
      * @brief  Order-independent fingerprint of the book's resting state.
@@ -97,7 +101,7 @@ public:
      *         independently confirm. A snapshot cannot confirm queue order, so hashing it would
      *         produce a digest nothing external could ever verify.
      */
-    std::uint64_t digest() const;
+    [[nodiscard]] std::uint64_t digest() const noexcept;
 
 private:
     Result<ApplyOutcome, ApplyError> applyAdd(const OrderEvent& orderEvent);
@@ -107,6 +111,8 @@ private:
     std::map<Price, PriceLevel> bids_{};
     std::map<Price, PriceLevel> asks_{};
     std::unordered_map<OrderId, OrderLocator, OrderIdHash> orderIndex_{};
+    // Present in every build so the layout never differs; used only when NDEBUG is off.
+    [[maybe_unused]] std::uint64_t debugAppliedEvents_{};
 };
 
 static_assert(!std::is_copy_constructible_v<OrderBook>,

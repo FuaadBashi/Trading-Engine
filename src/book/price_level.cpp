@@ -43,6 +43,6 @@ bool PriceLevel::changeQty(OrderHandle orderHandle, Qty newQty) {
     return true;
 }
 
-bool PriceLevel::isEmpty() const { return restingOrders_.empty(); }
+bool PriceLevel::isEmpty() const noexcept { return restingOrders_.empty(); }
 
 }  // namespace te

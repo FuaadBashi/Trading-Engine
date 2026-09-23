@@ -1,13 +1,5 @@
-# Warnings are the cheapest bug detector you own.
-#
-# -Werror is on from day one, same as AudioVisualiser. The extra flags beyond
-# -Wall -Wextra -Wpedantic are here because this project is full of int64 arithmetic
-# and raw pointers, which is exactly what -Wconversion and -Wcast-align catch.
-#
-# -Wconversion plus -Werror WILL be painful in slice 1. That pain is the feature:
-# every hit is a place where a price or a size is silently changing width or sign.
-# If it becomes unworkable, demote it via TE_STRICT_CONVERSIONS=OFF rather than
-# dropping -Werror entirely.
+# -Werror from day one. -Wconversion catches prices and sizes silently changing width or sign;
+# demote it with TE_STRICT_CONVERSIONS=OFF rather than dropping -Werror.
 
 option(TE_STRICT_CONVERSIONS "Treat implicit numeric conversions as errors" ON)
 
@@ -31,15 +23,7 @@ function(te_set_warnings target)
         # Keep frame pointers so Instruments and perf can walk the stack.
         target_compile_options(${target} PRIVATE -fno-omit-frame-pointer)
 
-        # -Wnull-dereference: clang never raises it on this codebase (Debug or Release). GCC at
-        # -O2 (Release only -- Debug uses -Og) raises it on the core Result<T,E> idiom itself --
-        # `if (!x.hasValue()) return failure(*x.errorIf());`, checked and used on the very next
-        # line, same object, no intervening call. errorIf() is non-null exactly when hasValue() is
-        # false by construction (std::variant holds exactly one of T or E), so this is a real
-        # invariant GCC's flow analysis doesn't connect across the two accessor calls, not a bug --
-        # confirmed by testing every flagged site by hand. Enabled for clang, where it never fires
-        # a false positive; disabled for GCC, where fixing it would mean rewriting the error-
-        # propagation idiom used at every Result<T,E> call site in the codebase for no safety gain.
+        # GCC -O2 false-positives on the Result<T,E> idiom (hasValue() then errorIf()); clang doesn't.
         if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             target_compile_options(${target} PRIVATE -Wno-null-dereference)
         else()

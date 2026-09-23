@@ -42,7 +42,6 @@ target_sources(te_core PRIVATE
     src/core/time.cpp
     src/core/sha256.cpp
     src/util/byte_buffer.cpp
-    src/util/intrusive_list.cpp
 
     # Order book
     src/book/order_book.cpp
@@ -80,11 +79,6 @@ target_sources(te_core PRIVATE
 
     src/engine/portfolio.cpp
 
-    # memory_pool.hpp is a template (Pool<T, N>); header-only, like result.hpp -- no .cpp to add.
-    # Future slices:
-    # src/engine/engine.cpp
-    # src/feed/replay_feed.cpp
-    # src/venue/simulated_venue.cpp
 )
 
 
@@ -110,8 +104,6 @@ endfunction()
 te_add_app(recorder apps/recorder_main.cpp)
 
 set_target_properties(recorder PROPERTIES OUTPUT_NAME tep)
-# te_add_app(replay apps/replay_main.cpp)   # slice 3
-# te_add_app(live   apps/live_main.cpp)     # slice 5
 
 # ==============================================================================
 # Tests
