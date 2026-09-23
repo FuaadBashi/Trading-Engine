@@ -65,6 +65,10 @@ enum class FillError {
     basis_overflow,
     realized_overflow,
     fee_overflow,
+
+    // Temporary: the closing, covering and reversing paths are not written yet.
+    // Remove this once applyFill handles every transition in D5.
+    unsupported_transition,
 };
 
 // What applying a fill did. Carries the realized change because that is the number a fill journal

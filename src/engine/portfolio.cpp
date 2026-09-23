@@ -1,5 +1,7 @@
 #include <te/engine/portfolio.hpp>
 
+#include <cstdint>
+
 namespace te {
 
 Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
@@ -31,25 +33,21 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     Money candidateFees = feesPaid_;
     Money realizedDelta{};
 
-    // TODO(fuaad): this is the part that is yours.
-    //
-    // For the first test only the simplest case matters: flat account, a buy, so this fill just
-    // opens a long. Closing, covering and reversing all come later -- do not write them yet.
-    //
-    // Four values move. Work out from D5 what each becomes:
-    //   - candidateCash      what leaves the account (rule 4: the fee is real money that left)
-    //   - candidatePosition  a buy adds, a sell subtracts (rule 5 works off the signed position)
-    //   - candidateBasis     what this position cost you (rule 4: does the fee belong in here?)
-    //   - candidateFees      the running total
-    //
-    // realizedDelta stays zero: opening never realizes, because nothing has been closed (rule 8).
-    //
-    // Note Money has no operator+ yet -- do the arithmetic on .units, e.g.
-    //   candidateCash.units -= something;
-    // Adding operators to Money is a reasonable follow-up, but it is a design choice, not a
-    // requirement of this test.
+    // Opening a long only. Closing, covering and reversing are not written yet, so a sell is
+    // rejected rather than silently mis-accounted.
+    if (fill.side != Side::buy || position_.units < 0) {
+        return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
+    }
 
-    
+    // The fee is money that left, and it is also part of what acquiring the position cost, so it
+    // appears in both lines on purpose (rule 4). realizedDelta stays zero: nothing was closed.
+    const std::int64_t acquisitionCost = fill.notional.units + fill.fee.units;
+
+    candidateCash.units -= acquisitionCost;
+    candidatePosition.units += fill.quantity.units;
+    candidateBasis.units += acquisitionCost;
+    candidateFees.units += fill.fee.units;
+
     // --- 4. Commit everything at once ---------------------------------------------------------
     cash_ = candidateCash;
     position_ = candidatePosition;

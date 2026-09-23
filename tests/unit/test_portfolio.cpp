@@ -84,7 +84,7 @@ void expectAccount(const te::Portfolio& portfolio, te::Money cash, std::int64_t 
 // The long cycle: open, close half, close the rest. Cases 1-3 of the sheet.
 // ------------------------------------------------------------------------------------------
 
-TEST(Portfolio, DISABLED_OpeningALongFoldsTheFeeIntoBasis) {
+TEST(Portfolio, OpeningALongFoldsTheFeeIntoBasis) {
     te::Portfolio portfolio = openedAccount();
 
     const auto outcome = portfolio.applyFill(buy(1, 2, money(200), money(1)));
