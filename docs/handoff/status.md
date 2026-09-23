@@ -1,5 +1,11 @@
 # Status handoff
 
+**Documentation amendment, 21 September 2026:** Stage 8 now has an explicit low-latency
+measurement contract in plan v4 section 18 and active tasks S8.1-S8.7 in TODO. These follow
+the complete Stage 5 engine and E1; no benchmark, optimization or concurrency code was added.
+Checked at `4c25c77`: Portfolio has an interface, a stub and 16 disabled specification tests.
+Next implementation task is D2. No fresh build or test run is claimed for this amendment.
+
 **Source review baseline:** 18 September 2026, `HEAD 6c2f2f6`.
 **Updated 19 September 2026:** C1 (sanitizer enforcement) and C7 (float guard over the accounting
 implementation files) are now done and pushed, along with ADR 0014 D5's twelve accounting rules.
@@ -14,12 +20,12 @@ baseline and no full engine suite was rerun for the documentation changes.
 
 ## Current position
 
-Entering **Stage 5**, starting with accounting examples and Portfolio.
+Entering **Stage 5**, with D1 examples agreed and D2 Portfolio implementation next.
 Capture/reconstruction foundations exist; the complete trading engine does not.
 
 ADR 0014 was accepted on 15 September. Its 18 September correction identified D5's incomplete
 signed-position accounting policy; twelve rules were selected on 19 September and recorded there (see limitation 1). Do not restart D1-D8 wholesale, and do not treat
-a recorded rule as implemented behavior — no `Portfolio` exists.
+a recorded rule as implemented behavior — `Portfolio` is scaffolding, not working accounting.
 ADR 0015 remains accepted and explicitly interim.
 
 The original foundation repair batch closed on 16 September. New hardening findings are
@@ -52,7 +58,7 @@ Do not stage, commit, push or discard unrelated work without an explicit request
 - GCC/Clang Debug sanitizer CI, Release job, Python discovery and hashed C++ downloads.
 - The built `tep` application is the legacy recorder; the replay application is not wired.
 
-Portfolio, strategy, decision gate, simulated venue, complete engine, queue research,
+Working Portfolio accounting, strategy, decision gate, simulated venue, complete engine, queue research,
 optimized structures, SPSC, live-paper operation and dashboard remain unimplemented.
 
 ## Limitations the next implementation must respect
@@ -65,8 +71,8 @@ optimized structures, SPSC, live-paper operation and dashboard remain unimplemen
    money scale, venue execution IDs with duplicates ignored, overflow refusing the fill under a
    candidate-then-commit update, and partial closes subtracting what left rather than rebuilding
    from a rounded average. Twelve rules total; only the fee schedule is left, and that is a D2
-   interface question. These are accepted intent; no `Portfolio` exists and nothing is
-   test-verified.
+   interface question. These are accepted intent; Portfolio's stub and disabled specification
+   tests do not verify accounting behaviour.
    Price times quantity still requires checked rescaling per ADR 0004.
 2. **Admission:** C++ validation omits `chain_valid` and `status`; Python/C++ semantic
    admission agreement remains open.
@@ -101,13 +107,14 @@ unavailable and must not be the sole public correctness gate.
 
 The user reports backup complete; an independent byte comparison was not performed.
 Previous recovery checks found no remaining `dataless` flags. Do not reblock accounting
-on the same backup question. Non-synced build output remains a workflow task;
+on the same backup question. The non-synced build workflow is recorded complete in TODO;
 the earlier damaged build folders were already repaired.
 
 ## Document/export ownership
 
-`TODO.pdf` is the current checklist export; `new-todo-list.pdf` is the historical input.
-`output/pdf/trading-engine-progress-guide.pdf` exports the current guide. The output directory
+`TODO.md` is current; `TODO.pdf` is an older export without the 21 September amendment.
+`new-todo-list.pdf` is the historical input. `output/pdf/trading-engine-progress-guide.pdf`
+is also an older snapshot; consult the Markdown guide for the low-latency addition. The output directory
 is gitignored, so a local export is not automatically available in a fresh checkout.
 Older plan/learning/deep-dive PDFs are historical snapshots, not current status authorities.
 

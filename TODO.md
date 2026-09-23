@@ -1,23 +1,26 @@
 # Trading Engine - active checklist
 
-Updated **18 September 2026**, following the source review at `6c2f2f6`.
+Updated **21 September 2026**: added the Stage 8 low-latency evidence sequence.
+The original source review was at `6c2f2f6`; current accounting scaffolding is at `4c25c77`.
 This is the single active task list. [Plan v4](docs/project-plan-v4.md) owns long-range
 scope; [the guide](docs/project-progress-guide.md) explains the work and effort estimates.
 
-[TODO.pdf](TODO.pdf) is an export of this checklist. The originally supplied
+[TODO.pdf](TODO.pdf) is an older export and does not include this update; this Markdown is current.
+The originally supplied
 [new-todo-list.pdf](new-todo-list.pdf) is historical input, not the current plan.
 Documentation edits do not complete the code tasks below. No deadlines are agreed.
 
 ## Start here
 
-**Next learning task: D1, agree the accounting examples; then D2, implement Portfolio.**
+**Next learning task: D2, implement Portfolio from D1's agreed examples.**
+D1 is recorded complete. The interface and 16 disabled specification tests exist;
+the implementation remains a stub. Low-latency experiments follow the complete Stage 5 engine.
 The original foundation repair batch closed on 16 September. ADR 0014 was accepted on
 15 September; do not reopen all eight decisions. The review found a narrower D5 accounting
 gap and additional hardening work, listed separately below.
 
-Recommended impact/effort order: ~~C1 sanitizer enforcement~~ (done 18 September),
-**D1 accounting rules next**, then C2 capture admission, C3 tape preconditions, then the
-complete D2-D7 engine path.
+Continue D2-D7, closing C2 before trusted capture integration and C3 before tape use.
+C1 sanitizer enforcement and C7 financial guard coverage are complete.
 In-memory Portfolio work can proceed while capture hardening remains open.
 C2 gates trusted capture-to-engine results; C3 gates tape use.
 
@@ -58,8 +61,8 @@ Tests must not silently select open accounting or simulation policy.
   and market shape; operational state belongs to Stage 9.
 - [x] **ADR 0015 accepted, 16 September:** fatal allocation failure, unsafe object,
   explicitly interim. This does not mean rollback has been implemented.
-- [ ] **Complete D5's signed-position accounting policy** through D1 below.
-  The 18 September ADR correction identifies the missing policy; it does not choose it.
+- [x] **D5's twelve accounting rules selected, 19 September** through D1 below.
+  Recorded policy is not implemented accounting; D2 remains open.
 - [ ] **Choose Strategy dispatch when implementing the seam.** Compare runtime and static
   alternatives in ADR 0009. Do not assume templates or `std::function` are inherently faster.
 
@@ -283,13 +286,8 @@ prerequisite for anything here.
   It must beat a stated naive baseline, and its claimed uncertainty must be checked against
   observed error rather than asserted. Split by session — splitting neighbouring timestamps
   leaks the answer and produces a reassuring number that means nothing.
-- [ ] **Stage 8:** equivalent optimized book, controlled profiles and allocation/cache measurements.
-  Compare bounded SPSC with a mutex queue after the single-thread baseline.
-  Add relevant fuzzing, fault injection and concurrency checks.
-  **Record the optimizations that did not help, and why.** A benchmark report containing only wins
-  is a filtered result, not evidence. Measure tail latency, not just throughput — an average hides
-  exactly the behaviour that matters in execution. Every optimization needs correctness equivalence
-  against the reference book before its number counts.
+- [ ] **Stage 8: measured low-latency processing.** Follow S8.1-S8.7 below after Stage 5
+  and E1; this expands the existing performance laboratory, not a second engine project.
 - [ ] **Stage 9:** read-only live feed, recovery, paper lifecycle, operational risk,
   bounded telemetry and shutdown/failure runbooks. No real-money trading.
 - [ ] **Stage 10:** thin dashboard, ownership-safe C++/Python boundary, reproducible
@@ -297,6 +295,44 @@ prerequisite for anything here.
 
 Advanced techniques may be contained learning experiments. Promotion to the main engine requires
 correctness equivalence and measured value. A measured non-improvement still teaches something.
+
+### Stage 8 sequence: low-latency evidence
+
+Plan v4 section 18 owns the measurement contract; this is the active implementation sequence.
+No measured latency, speedup or specialist qualification is claimed by adding these tasks.
+
+- [ ] **S8.1 Define the timed paths.** Separate decoded-event-to-book-update,
+  decoded-event-to-intention/rejection, and producer-publication-to-consumer-completion.
+  **Done when:** start/end points, included work, clock and workload are documented.
+  Start with the single-thread book; all three are in-process, not exchange round trips.
+- [ ] **S8.2 Establish a reproducible baseline.** Use optimized builds, realistic event mixes,
+  small/large books, quiet traffic and bursts. Record p50/p99/p99.9, throughput, offered load,
+  allocations, memory, backlog and repeated-run variation.
+  **Done when:** a public fixture and command reproduce the experiment, with hardware/build
+  metadata and raw samples or documented histogram precision. Do not demand identical timings.
+- [ ] **S8.3 Profile one bottleneck.** Investigate allocation, pointer chasing, lookup, copying,
+  parsing and logging costs; keep parsing separate from decoded-event timings.
+  **Done when:** a saved profile supports one stated optimization hypothesis.
+- [ ] **S8.4 Compare one optimized book variant.** Retain the reference. Try a measured change
+  to storage, indexing or allocation, with explicit capacity/exhaustion behaviour.
+  **Done when:** intermediate order IDs/quantities and known priority agree; ordinary rejection
+  preserves state; failures meet the chosen allocation policy; memory and latency trade-offs
+  are reported. An aggregate depth digest alone is insufficient.
+- [ ] **S8.5 Compare concurrency designs.** Single thread versus mutex queue versus bounded
+  SPSC, with the same useful work and explicit one-producer/one-consumer ownership.
+  **Done when:** wraparound, ordering, object lifetime, saturation and shutdown tests pass;
+  bursts and delayed consumers are measured; queue-full behaviour cannot silently lose events.
+  Run applicable sanitizers separately and explain acquire/release and cache sharing.
+- [ ] **S8.6 Audit measurement bias.** Account for timestamp overhead, warm-up, sample count,
+  CPU placement/frequency, background load and instrumentation cost. Use scheduled offered load
+  to expose overload rather than waiting for each response before submitting the next event.
+  **Done when:** queueing delay and missed/dropped work remain visible, tail estimates state
+  their sample support, and batch-average timings are not presented as per-event percentiles.
+- [ ] **S8.7 Publish the evidence.** Include reproduction command, workload, hardware, build,
+  baseline, profiles, correctness results, before/after distributions and capacity/memory costs.
+  **Done when:** report includes regressions and non-improvements, distinguishes in-process
+  measurements from network latency, and supports every README/CV number. Shared CI runs
+  correctness and benchmark smoke checks; controlled hardware supplies performance comparisons.
 
 ## F. Completed foundation evidence
 

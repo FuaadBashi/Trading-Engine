@@ -1,6 +1,8 @@
 # Trading Engine: where you are and what comes next
 
 Updated **18 September 2026** against source baseline `6c2f2f6`.
+Stage 8 learning guidance amended **21 September 2026**; current task status is in TODO.
+The existing PDF is an older snapshot and does not include this amendment.
 
 You have built the foundations for reconstructing a market. The next milestone is a
 complete, small trading run: one intention, a real risk check, a simulated fill and
@@ -160,6 +162,27 @@ For performance, start with actual profiles: repeated whole-file hashing, parser
 container allocation and cache behavior are candidates to measure, not predeclared bottlenecks.
 Keep microbenchmarks separate from end-to-end replay. Measure tail latency, allocations,
 memory and throughput on controlled hardware; do not infer speed from container names.
+
+### What makes the low-latency work credible
+
+After Stage 5 and the experiment runner, follow [TODO S8.1-S8.7](../TODO.md#stage-8-sequence-low-latency-evidence).
+First measure a decoded event updating the reference book. Profile one bottleneck, compare one
+optimized variant, then compare single-thread processing with mutex and bounded SPSC queues.
+Keep the reference implementation and prove equivalent order state before comparing speed.
+
+Measure three different paths: book update, event-to-intention/rejection, and queue publication
+to consumer completion. The last includes queue residence, but not producer waiting before
+publication; record that delay and offered load too. None measures an exchange round trip.
+
+Report median and tail latency, throughput, allocations, memory and backlog under quiet and
+burst traffic. A producer that waits for each response can hide overload. Record the machine,
+build, timing overhead, warm-up and sample count; use repeated optimized runs without sanitizers.
+Batch timings estimate average cost, not individual-event tail latency.
+
+The outcome is a short reproducible report: baseline, profile, change, correctness evidence,
+before/after distributions and trade-offs, including changes that did not help. No speedup or
+"low-latency specialist" claim is earned by adding a pool or queue alone. The detailed contract
+is [plan v4 section 18](project-plan-v4.md#18-stage-8---c-performance-laboratory).
 
 ## 5. A focused research direction
 

@@ -12,14 +12,15 @@ observation and local paper-order experiments. See the current
 
 ## Status
 
-Source review: **18 September 2026, `6c2f2f6`**. The project is entering Stage 5:
-accounting examples, Portfolio, then a complete deterministic engine path. ADR 0014 is
-accepted; its D5 signed-position policy still needs completion. Documentation alignment
-does not implement the open review findings or establish a fresh test result.
+Source review baseline: **18 September 2026, `6c2f2f6`**. Status refreshed **21 September**
+at `4c25c77`: D1 accounting rules are agreed; Portfolio has an interface, an unimplemented
+stub and 16 disabled specification tests. D2 implementation is next, followed by the complete
+Stage 5 engine. Documentation updates do not establish a fresh test result.
 
 For a plain-language explanation of what exists, diagrams, and why the next steps are ordered as
 they are, read [Trading Engine: your next milestone](docs/project-progress-guide.md)
-or its [PDF edition](output/pdf/trading-engine-progress-guide.pdf).
+or its [older PDF snapshot](output/pdf/trading-engine-progress-guide.pdf), which does not contain
+the 21 September low-latency amendment.
 The table below uses historical slice numbers; the guide and active planner use plan-v4 stages.
 
 | Slice | Weeks | State |
@@ -27,10 +28,10 @@ The table below uses historical slice numbers; the guide and active planner use 
 | 0 Foundations | 0 | complete |
 | 1 Data contract + recorder | 1 to 3 | capture/v3 I/O and byte/hash/count admission exist; semantic admission and tape equivalence remain |
 | 2 L3 book + reconciliation | 3 to 5 | merge controller built and its gate met; joined replay reproduces the venue checkpoint exactly (0 of 4,533 levels differ) |
-| 3 Deterministic replay + accounting | after joined replay | ADR 0014 accepted; complete D5 examples, then implement Stage 5 |
+| 3 Deterministic replay + accounting | after joined replay | D1 rules agreed; D2 Portfolio implementation next, then complete Stage 5 |
 | 4 Queue labels + execution model | after replay core | not started |
 | 5 Held-out corpus validation | after label-quality gate | not started |
-| 6 Performance laboratory | after deterministic correctness | not started |
+| 6 Performance laboratory | after deterministic correctness | planned; TODO S8.1-S8.7 defines low-latency evidence |
 | 7 Operational live/paper path | after validated core | not started |
 | 8 Interactive dashboard | after stable telemetry contract | not started |
 
@@ -93,11 +94,18 @@ The live sequence and its exact completion gates are in
 [TODO.md](TODO.md); long-range reasoning remains in [Project Plan v4](docs/project-plan-v4.md).
 
 The checklist was aligned with the source review on 18 September 2026; [TODO.pdf](TODO.pdf)
-exports it. Start with **Start here**. The supplied `new-todo-list.pdf` is historical input.
+is an older export without the 21 September amendment. Start with **Start here** in TODO.md.
+The supplied `new-todo-list.pdf` is historical input.
 The guide explains the learning/research path; TODO owns priorities and completion criteria.
 In-memory accounting can proceed independently of capture hardening, but integration must meet
 its named prerequisites. The guide PDF is a local export under gitignored `output/`;
 older plan and deep-dive PDFs are historical snapshots, not current status authorities.
+
+Stage 8's [low-latency sequence](TODO.md#stage-8-sequence-low-latency-evidence) follows the
+complete Stage 5 engine and experiment runner: define timed paths, baseline, profile, compare
+one book variant and queue designs, audit measurement bias, then publish correctness and
+performance evidence. These are in-process measurements, not exchange round-trip latency.
+No latency or speedup result is claimed until measured; see [the measurement contract](docs/project-plan-v4.md#18-stage-8---c-performance-laboratory).
 
 Done before this list: the mandatory committed golden fixture; timestamp and ID contract fixes;
 portable v3 encoding/segment I/O; CI architecture guards; joined order/trade capture under one

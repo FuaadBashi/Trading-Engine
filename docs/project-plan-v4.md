@@ -1,7 +1,7 @@
 # Trading Engine Project Plan v4
 
 **Owner:** Fuaad Bashi  
-**Revised:** 2026-09-18
+**Revised:** 2026-09-21 (Stage 8 measurement and delivery contract)
 **Primary career target:** Quant developer, with credible C++ market-data and performance-engineering evidence  
 **Status:** Current long-range scope and evidence gates; TODO.md owns active task status
 
@@ -524,6 +524,25 @@ Integrated performance work follows deterministic correctness. The reference boo
 Contained learning variants are allowed under section 23; the SPSC experiment follows the stable
 single-thread Stage 5 baseline.
 
+The intended deliverable is evidence of low-latency engineering, not an unmeasured claim of
+being a low-latency specialist. TODO S8.1-S8.7 owns the active sequence: define, baseline,
+profile, compare one book variant, compare queues, audit measurement, publish.
+Use E1's experiment runner. This expands Stage 8; it is not additional prerequisite work for
+Portfolio or a requirement to finish the proposed drying companion.
+
+### Timed paths
+
+| Path | Start | End | Scope |
+|---|---|---|---|
+| Book update | Decoded event ready for apply | Book update completes | Single-thread data-structure cost |
+| Decision | Decoded event enters engine processing | Intention or rejection produced | Internal processing, not order acknowledgement |
+| Queued | Producer publishes event | Consumer completes the declared useful work | Includes queue residence and consumer processing |
+
+These are in-process timings. Queue-publication timing omits waiting before publication:
+also record scheduled arrival, publication delay, backlog and offered/completed/dropped counts
+under load. Do not present service time as response time or exchange round-trip latency.
+Decoding, file loading and telemetry must be explicitly included or excluded, never silently mixed.
+
 ### Benchmark layers
 
 - decimal/integer parse;
@@ -553,6 +572,13 @@ single-thread Stage 5 baseline.
 - Release/RelWithDebInfo build, sanitizers disabled during measurement;
 - compiler, flags, CPU, OS, governor, warm-up and sample size recorded;
 - repeated runs with distribution statistics;
+- quiet, sustained and burst workloads with stated event mix and small/large book sizes;
+- timestamp overhead characterized; batch averages never labelled as per-event percentiles;
+- latency sample count, histogram precision and run-to-run variation reported, especially for p99.9;
+- scheduled offered load independent of completion to expose queueing and overload; report late
+  publications and losses rather than omitting slow intervals (coordinated omission);
+- CPU placement, frequency policy and background activity recorded; report unavailable counters
+  rather than inventing cycles/cache measurements on unsupported hardware;
 - benchmark JSON and raw profiles stored with the report;
 - shared GitHub runners do not enforce nanosecond regression thresholds;
 - every optimized candidate must replay identically to the reference engine.
@@ -562,11 +588,21 @@ equivalence and measurements justify it. Learning variants may explore these cos
 Compare SPSC against a mutex queue; test wraparound, ordering, lifetime, saturation, shutdown,
 bursts and a delayed consumer. Explain acquire/release synchronization and cache sharing.
 Run ThreadSanitizer, while recognizing that it does not prove a lock-free algorithm correct.
+Use the same useful workload across the single-thread, mutex and SPSC designs. State who owns
+each object, what acquire/release establishes, and what happens when capacity is exhausted.
+Never silently drop market events. Correctness/sanitizer builds are separate from timed builds.
+Measure allocation/exhaustion behaviour and preserve the chosen fatal-or-recovery contract.
 
 ### Gate
 
 Publish a reference-versus-optimized report with intermediate order-level/known-priority equivalence, separate depth/event hashes, and a profile that explains
 why each optimization exists. A speedup without semantic equivalence is a failed change.
+The report includes the reproduction command, workload and machine identity, baseline,
+raw measurements, before/after distributions, memory/capacity costs and failed hypotheses.
+Independent machines should reproduce correctness and the method; their timings need not match.
+CI runs correctness and benchmark smoke checks, not nanosecond thresholds on shared runners.
+README/CV claims quote only measured results with their workload and scope. Kernel bypass,
+custom networking and additional concurrency are later hypotheses, not completion requirements.
 
 ## 19. Stage 9 - operational live and paper path
 
