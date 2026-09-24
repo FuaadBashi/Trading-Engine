@@ -8,7 +8,7 @@ namespace te {
 // Explicit success-or-error value used where callers need a failure reason (ADR 0002/0003).
 // T and E must differ because the variant is queried by type.
 template <typename T, typename E>
-class Result {
+class [[nodiscard]] Result {
 public:
     static Result success(T value) { return Result(std::move(value)); }
     static Result failure(E error) { return Result(std::move(error)); }

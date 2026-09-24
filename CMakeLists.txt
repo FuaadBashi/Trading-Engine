@@ -27,6 +27,10 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
 endif()
 
 include(cmake/warnings.cmake)
+# Bounds-checked operator[], front(), back() etc. in libstdc++ Debug builds (GCC, and clang on
+# Linux). ABI-compatible, so dependencies need not match. No effect with libc++ on macOS.
+add_compile_definitions($<$<CONFIG:Debug>:_GLIBCXX_ASSERTIONS>)
+
 include(cmake/sanitizers.cmake)
 include(cmake/dependencies.cmake)
 

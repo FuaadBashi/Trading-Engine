@@ -5,10 +5,8 @@
 namespace te {
 
 bool writeU8(std::span<std::byte> buffer, std::size_t offset, std::uint8_t value) {
-    // Check offset before subtracting it: size_t underflow would make an invalid range look large.
-    if (offset > buffer.size()) {
-        return false;
-    } else if ((buffer.size() - offset) < 1) {
+    // || short-circuits, so offset is checked before the subtraction can underflow.
+    if (offset > buffer.size() || buffer.size() - offset < 1) {
         return false;
     }
 
@@ -16,9 +14,7 @@ bool writeU8(std::span<std::byte> buffer, std::size_t offset, std::uint8_t value
     return true;
 };
 bool readU8(std::span<const std::byte> buffer, std::size_t offset, std::uint8_t& out) {
-    if (offset > buffer.size()) {
-        return false;
-    } else if ((buffer.size() - offset) < 1) {
+    if (offset > buffer.size() || buffer.size() - offset < 1) {
         return false;
     }
 
@@ -27,9 +23,7 @@ bool readU8(std::span<const std::byte> buffer, std::size_t offset, std::uint8_t&
 };
 
 bool writeU64(std::span<std::byte> buffer, std::size_t offset, std::uint64_t value) {
-    if (offset > buffer.size()) {
-        return false;
-    } else if ((buffer.size() - offset) < 8) {
+    if (offset > buffer.size() || buffer.size() - offset < 8) {
         return false;
     }
 
@@ -38,9 +32,7 @@ bool writeU64(std::span<std::byte> buffer, std::size_t offset, std::uint64_t val
     return true;
 };
 bool readU64(std::span<const std::byte> buffer, std::size_t offset, std::uint64_t& out) {
-    if (offset > buffer.size()) {
-        return false;
-    } else if ((buffer.size() - offset) < 8) {
+    if (offset > buffer.size() || buffer.size() - offset < 8) {
         return false;
     }
 

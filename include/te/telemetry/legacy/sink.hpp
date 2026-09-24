@@ -23,8 +23,8 @@ public:
     bool flush();
     bool ok() const;
 
-    Sink(Sink&&) = default;
-    Sink& operator=(Sink&&) = default;
+    Sink(Sink&&) noexcept = default;
+    Sink& operator=(Sink&&) noexcept = default;
     Sink(const Sink&) = delete;
     Sink& operator=(const Sink&) = delete;
 

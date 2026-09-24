@@ -1,0 +1,39 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "$env{HOME}/build/TradingEngineProject-${presetName}"
+    },
+    {
+      "name": "debug-asan",
+      "inherits": "base",
+      "displayName": "Debug, ASan + UBSan (matches CI)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TE_SANITIZE": "address,undefined" }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release (matches CI release job)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "tsan",
+      "inherits": "base",
+      "displayName": "Debug, ThreadSanitizer (for the SPSC queue)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TE_SANITIZE": "thread" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug-asan", "configurePreset": "debug-asan" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "tsan", "configurePreset": "tsan" }
+  ],
+  "testPresets": [
+    { "name": "debug-asan", "configurePreset": "debug-asan", "output": { "outputOnFailure": true } },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "tsan", "configurePreset": "tsan", "output": { "outputOnFailure": true } }
+  ]
+}

@@ -128,12 +128,17 @@ def make_frame(
     payload_line: int,
     stream_kind: str,
     venue_timestamp_micros: Optional[str],
+    received: tuple[int, int],
 ) -> dict[str, Any]:
-    """Build metadata that points at, rather than rewrites, the raw payload line."""
+    """Build metadata that points at, rather than rewrites, the raw payload line.
+
+    `received` is (wall_ns, steady_ns) taken when the websocket library handed the frame to this
+    loop: application receive time, after kernel and library queueing, not wire arrival.
+    """
     return {
         "captureOrdinal": capture_ordinal,
-        "localWallTimestampNanos": time.time_ns(),
-        "localSteadyTimestampNanos": time.monotonic_ns(),
+        "localWallTimestampNanos": received[0],
+        "localSteadyTimestampNanos": received[1],
         "streamKind": stream_kind,
         "venueTimestampMicros": venue_timestamp_micros,
         "runId": run_id,
@@ -200,6 +205,8 @@ async def capture_segment(
 
                 async def drain() -> None:
                     async for message in websocket:
+                        # Stamp before any work so file I/O and parsing are not counted.
+                        received = (time.time_ns(), time.monotonic_ns())
                         state["frames"] += 1
                         payload_line = state["frames"]
                         capture_ordinal = capture_state["next_capture_ordinal"]
@@ -223,6 +230,7 @@ async def capture_segment(
                                 payload_line,
                                 "control",
                                 None,
+                                received,
                             )
                             write_json_line(frames_sink, frame, frames_digest)
                             state["control_frames"] += 1
@@ -241,6 +249,7 @@ async def capture_segment(
                                 payload_line,
                                 "control",
                                 None,
+                                received,
                             )
                             write_json_line(frames_sink, frame, frames_digest)
                             state["control_frames"] += 1
@@ -259,6 +268,7 @@ async def capture_segment(
                             payload_line,
                             stream_kind,
                             microtimestamp,
+                            received,
                         )
                         write_json_line(frames_sink, frame, frames_digest)
 

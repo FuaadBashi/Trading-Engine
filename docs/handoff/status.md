@@ -23,7 +23,10 @@ what is true now and what to be careful of.
 4. **L3 evidence:** the book digest covers aggregate levels, not order identity or priority.
 5. **Allocation:** heap exhaustion is fatal and nothing may catch it (ADR 0015); catching it
    leaves a ghost level.
-6. **Latency:** receipt-minus-venue time includes unknown clock offset. It is not network latency.
+6. **Latency:** the capture's local timestamps are *application* receive time (stamped when the
+   websocket library hands Python the frame), not wire arrival, and receipt-minus-venue time also
+   includes unknown clock offset. Neither is network latency. The v3 tape drops receive time
+   entirely; that must change before D5 can model feed latency.
 
 ## Working agreement
 

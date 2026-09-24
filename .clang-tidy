@@ -1,0 +1,10 @@
+# Bug-finding and performance checks only; style is clang-format's job.
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -performance-enum-size
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/include/te/.*'

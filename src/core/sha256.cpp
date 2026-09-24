@@ -31,8 +31,8 @@ std::uint32_t rotr(std::uint32_t x, int n) {
 // Processes exactly one 64-byte block, folding it into the running hash state.
 void processBlock(std::array<std::uint32_t, 8>& state, const std::uint8_t* block) {
     std::array<std::uint32_t, 64> w{};
-    for (int i = 0; i < 16; ++i) {
-        w[static_cast<std::size_t>(i)] =
+    for (std::size_t i = 0; i < 16; ++i) {
+        w[i] =
             (static_cast<std::uint32_t>(block[i * 4]) << 24) |
             (static_cast<std::uint32_t>(block[i * 4 + 1]) << 16) |
             (static_cast<std::uint32_t>(block[i * 4 + 2]) << 8) |

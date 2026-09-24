@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <te/feed/bitstamp/decoder.hpp>
 
+// Not <simdjson.h>: in 3.9.1 it pulls in the DOM serializer, which fails on current clang.
 #include "simdjson/ondemand.h"
 #include "simdjson/padded_string-inl.h"
 #include "simdjson/padded_string.h"

@@ -103,3 +103,21 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  clang-tidy:
+    runs-on: ubuntu-24.04
+
+    # Bug-finding and performance checks from .clang-tidy, over project sources only (the compile
+    # database also lists googletest and simdjson, which are not ours to fix).
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang clang-tidy
+
+      - name: Configure
+        run: CC=clang CXX=clang++ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Run clang-tidy
+        run: run-clang-tidy -quiet -p build "$GITHUB_WORKSPACE/src/"
