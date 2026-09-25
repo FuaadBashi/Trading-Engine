@@ -98,7 +98,7 @@ TEST(Portfolio, OpeningALongFoldsTheFeeIntoBasis) {
     expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
 }
 
-TEST(Portfolio, DISABLED_ClosingHalfALongRealizesNetOfTheFee) {
+TEST(Portfolio, ClosingHalfALongRealizesNetOfTheFee) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
 
@@ -312,9 +312,3 @@ TEST(Portfolio, DISABLED_RealizedPlusUnrealizedAccountsForTheWholeEquityChange) 
     EXPECT_EQ(portfolio.unrealizedAt(te::Price{11000}), money(9, 50));
 }
 
-TEST(Portfolio, ClosingHalfALongRealizesNetOfTheFee) {
-    te::Portfolio portfolio = openedAccount();
-    GTEST_SKIP() << "Work in progress: add closing assertions before counting this as coverage.";
-
-
-}
