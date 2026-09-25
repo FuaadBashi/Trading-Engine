@@ -35,20 +35,36 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     Money candidateFees = feesPaid_;
     Money realizedDelta{};
 
-    // Opening a long only. Closing, covering and reversing are not written yet, so a sell is
-    // rejected rather than silently mis-accounted.
-    if (fill.side != Side::buy || position_.units < 0) {
+    const bool openingOrIncreasingLong = fill.side == Side::buy && position_.units >= 0;
+    const bool reducingLong = fill.side == Side::sell && position_.units > 0 &&
+                              fill.quantity.units < position_.units;
+
+    if (openingOrIncreasingLong) {
+        // The fee is money that left, and it is also part of what acquiring the position cost, so
+        // it appears in both lines on purpose (rule 4). realizedDelta stays zero: nothing closed.
+        const std::int64_t acquisitionCost = fill.notional.units + fill.fee.units;
+
+        candidateCash.units -= acquisitionCost;
+        candidatePosition.units += fill.quantity.units;
+        candidateBasis.units += acquisitionCost;
+        candidateFees.units += fill.fee.units;
+    } else if (reducingLong) {
+        // This first closing case is deliberately limited to an exactly divisible basis split.
+        // General remainder policy and checked arithmetic remain separate D2 work.
+        const std::int64_t basisLeaving =
+            (basis_.units / position_.units) * fill.quantity.units;
+        const std::int64_t netProceeds = fill.notional.units - fill.fee.units;
+
+        realizedDelta.units = netProceeds - basisLeaving;
+
+        candidateCash.units += netProceeds;
+        candidatePosition.units -= fill.quantity.units;
+        candidateBasis.units -= basisLeaving;
+        candidateRealized.units += realizedDelta.units;
+        candidateFees.units += fill.fee.units;
+    } else {
         return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
     }
-
-    // The fee is money that left, and it is also part of what acquiring the position cost, so it
-    // appears in both lines on purpose (rule 4). realizedDelta stays zero: nothing was closed.
-    const std::int64_t acquisitionCost = fill.notional.units + fill.fee.units;
-
-    candidateCash.units -= acquisitionCost;
-    candidatePosition.units += fill.quantity.units;
-    candidateBasis.units += acquisitionCost;
-    candidateFees.units += fill.fee.units;
 
     // --- 4. Commit everything at once ---------------------------------------------------------
     cash_ = candidateCash;
