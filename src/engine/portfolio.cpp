@@ -50,7 +50,11 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
         candidateFees.units += fill.fee.units;
     } else if (reducingLong) {
         // This first closing case is deliberately limited to an exactly divisible basis split.
-        // General remainder policy and checked arithmetic remain separate D2 work.
+        // Do not silently choose a remainder rule before D2 settles that policy.
+        if (basis_.units % position_.units != 0) {
+            return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
+        }
+
         const std::int64_t basisLeaving =
             (basis_.units / position_.units) * fill.quantity.units;
         const std::int64_t netProceeds = fill.notional.units - fill.fee.units;
