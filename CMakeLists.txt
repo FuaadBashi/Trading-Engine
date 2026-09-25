@@ -90,11 +90,6 @@ target_link_libraries(te_core PUBLIC Threads::Threads simdjson)
 te_set_warnings(te_core)
 te_enable_sanitizers(te_core)
 
-target_compile_definitions(te_core PUBLIC
-    TE_PROJECT_ROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-    TE_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-)
-
 # ==============================================================================
 # Apps — thin main() files. If one grows past ~50 lines, it belongs in te_core.
 # ==============================================================================

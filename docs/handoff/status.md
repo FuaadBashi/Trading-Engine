@@ -8,7 +8,7 @@ what is true now and what to be careful of.
 - **Stage 5, D2 in progress.** `Portfolio::applyFill` handles opening a long (1 of 16 spec tests
   enabled). Every other transition returns `FillError::unsupported_transition`, which is
   temporary. `unrealizedAt` fails loudly until implemented.
-- ADR 0014 D5 holds the twelve accounting rules the tests encode. Don't reopen them.
+- ADR 0014 D5 records accounting intent; TODO D2 now tracks the review's unresolved arithmetic details.
 - Capture, merge, reconciliation and the reference book are done: joined replay reproduces the
   venue checkpoint exactly (0 of 4,533 levels differ).
 - Not built: strategy, simulated venue, risk, engine loop, replay executable, live path.
@@ -21,12 +21,12 @@ what is true now and what to be careful of.
 3. **Tape:** the writer doesn't validate ordering or window consistency (C3). Raw/tape
    equivalence is unproven, so the tape can't yet replace raw capture.
 4. **L3 evidence:** the book digest covers aggregate levels, not order identity or priority.
-5. **Allocation:** heap exhaustion is fatal and nothing may catch it (ADR 0015); catching it
-   leaves a ghost level.
+5. **Allocation:** process death is the intended policy (ADR 0015), not locally enforced rollback.
+   C6 must prevent reuse of a failed book or partially committed Portfolio after a caught exception.
 6. **Latency:** the capture's local timestamps are *application* receive time (stamped when the
    websocket library hands Python the frame), not wire arrival, and receipt-minus-venue time also
    includes unknown clock offset. Neither is network latency. The v3 tape drops receive time
-   entirely; that must change before D5 can model feed latency.
+   entirely; recorded availability through tape needs that metadata. Zero/fixed-delay models do not.
 
 ## Working agreement
 

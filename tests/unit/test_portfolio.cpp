@@ -39,8 +39,8 @@ te::InstrumentSpec btcUsd() {
     };
 }
 
-// Quantities are raw unit counts rather than realistic satoshi amounts. Position arithmetic and
-// the basis split are both ratio-based, so the scale cancels; small numbers keep the sheet legible.
+// Basis-allocation examples use small raw quantities because their ratios cancel the scale.
+// Mark-valuation examples use actual satoshi quantities because price x quantity retains the scale.
 te::Fill buy(std::uint64_t id, std::int64_t quantity, te::Money notional, te::Money fee) {
     return te::Fill{
         .execution_id = te::ExecutionId{id},
@@ -63,7 +63,7 @@ te::Fill sell(std::uint64_t id, std::int64_t quantity, te::Money notional, te::M
     };
 }
 
-// Starting cash. The sheet begins every scenario from 1000 so the equity check is easy to read.
+// Start at zero cash; these examples track cash movements rather than a funded account balance.
 te::Portfolio openedAccount() {
     te::Portfolio portfolio{btcUsd()};
     return portfolio;
@@ -293,7 +293,7 @@ TEST(Portfolio, DISABLED_UnrealizedIsZeroWhenFlat) {
 
 TEST(Portfolio, DISABLED_AFreshLongIsUnderwaterByItsFee) {
     te::Portfolio portfolio = openedAccount();
-    ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
+    ASSERT_TRUE(portfolio.applyFill(buy(1, 200'000'000, money(200), money(1))).hasValue());
 
     // Marked at the price just traded, the position is worth 200 against a basis of 201. The gap
     // is exactly the fee, which is why a position opens slightly underwater.
@@ -302,12 +302,19 @@ TEST(Portfolio, DISABLED_AFreshLongIsUnderwaterByItsFee) {
 
 TEST(Portfolio, DISABLED_RealizedPlusUnrealizedAccountsForTheWholeEquityChange) {
     te::Portfolio portfolio = openedAccount();
-    ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
-    ASSERT_TRUE(portfolio.applyFill(sell(2, 1, money(110), money(1))).hasValue());
+    ASSERT_TRUE(portfolio.applyFill(buy(1, 200'000'000, money(200), money(1))).hasValue());
+    ASSERT_TRUE(portfolio.applyFill(sell(2, 100'000'000, money(110), money(1))).hasValue());
 
     // The check applied to every row of the paper sheet. Marked at 110: one unit is worth 110
     // against a basis of 100.50, so unrealized is 9.50, and 8.50 realized plus 9.50 unrealized is
     // the 18 the account is up. If these two ever fail to reconcile, a number is wrong.
     EXPECT_EQ(portfolio.realized(), money(8, 50));
     EXPECT_EQ(portfolio.unrealizedAt(te::Price{11000}), money(9, 50));
+}
+
+TEST(Portfolio, ClosingHalfALongRealizesNetOfTheFee) {
+    te::Portfolio portfolio = openedAccount();
+    GTEST_SKIP() << "Work in progress: add closing assertions before counting this as coverage.";
+
+
 }

@@ -63,9 +63,9 @@ value next") are opinions with a date, not facts.
 ## Build and test
 
 ```bash
-cmake --build build -j
-ctest --test-dir build --output-on-failure
+cmake --build ~/build/TradingEngineProject -j
+ctest --test-dir ~/build/TradingEngineProject --output-on-failure
 ```
 
-`cmake --build build` alone can report success against stale objects. Use `--clean-first` when the
+An incremental build alone can report success against stale objects. Use `--clean-first` when the
 answer matters.

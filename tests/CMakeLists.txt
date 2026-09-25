@@ -21,6 +21,10 @@ include(GoogleTest)
 function(te_add_test name source)
     add_executable(${name} ${source})
     target_link_libraries(${name} PRIVATE te_core GTest::gtest_main)
+    target_compile_definitions(${name} PRIVATE
+        TE_PROJECT_ROOT_DIR="${PROJECT_SOURCE_DIR}"
+        TE_TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
+    )
     te_set_warnings(${name})
     te_enable_sanitizers(${name})
     # PROPERTIES forwards LABELS through a generated script; an unescaped ";" is read back as

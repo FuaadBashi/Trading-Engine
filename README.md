@@ -38,18 +38,18 @@ Only three things vary between backtest and live:
 
 If any file outside those six implementations calls the system clock or knows what a WebSocket
 is, the design has leaked. The injected clock boundary exists, and CI now enforces direct-clock and
-selected financial-header guards with focused deliberately-broken tests. Financial implementation
-files need explicit guard coverage as Portfolio/risk are added; the current guard is not comprehensive.
+financial guards covering book headers/implementations and selected Portfolio/risk files, with
+focused deliberately-broken tests. The guard is lexical, not a proof of exact arithmetic.
 
 ## Layout
 
 ```
 include/te/     public headers, namespace te
 src/            implementations
-apps/           thin main() files: recorder, replay, live
-strategies/     Strategy implementations
-bindings/       pybind11 module for research
-python/         research + local web dashboard
+apps/           recorder; replay and live executables are planned
+strategies/     planned: Strategy implementations
+bindings/       planned: pybind11 module for research
+python/         planned: research + local web dashboard
 tests/          unit + golden
 docs/decisions/ one ADR per real decision
 scripts/        throwaway tooling (raw websocket dump lives here)
@@ -58,9 +58,9 @@ scripts/        throwaway tooling (raw websocket dump lives here)
 ## Build
 
 ```
-cmake -B build -DTE_SANITIZE=address,undefined
-cmake --build build
-ctest --test-dir build
+cmake -S . -B ~/build/TradingEngineProject -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build ~/build/TradingEngineProject -j
+ctest --test-dir ~/build/TradingEngineProject --output-on-failure
 ```
 
 ## Venue

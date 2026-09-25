@@ -122,7 +122,9 @@ censoring assumptions. Protect train/evaluation boundaries using label intervals
 
 Candidate research question: **how do information delay and queue-observation uncertainty change
 short-horizon fill-forecast accuracy?** This is a proposed study, not a claim of novelty or an accepted
-PhD topic. The PhD subject and weekly availability are not specified; require a literature review.
+PhD topic. The PhD is AI-Driven Drying for Advanced Catalyst and Membrane Manufacturing with
+DigitalMetal-CD; weekly availability is unspecified. The research bridge needs supervisor input
+and a literature review before selecting a model or claiming novelty.
 
 ### Hypothetical orders are secondary
 

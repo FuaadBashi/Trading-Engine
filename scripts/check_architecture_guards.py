@@ -38,7 +38,7 @@ EXACT_FINANCIAL_PATHS = {
     Path("src/engine/portfolio.cpp"),
     Path("src/engine/risk.cpp"),
 }
-EXACT_FINANCIAL_DIRECTORIES = (Path("include/te/book"),)
+EXACT_FINANCIAL_DIRECTORIES = (Path("include/te/book"), Path("src/book"))
 
 CLOCK_CALL = re.compile(
     r"\bstd\s*::\s*chrono\s*::\s*(?:system_clock|steady_clock)\s*::\s*now\s*\("

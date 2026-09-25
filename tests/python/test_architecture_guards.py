@@ -71,6 +71,12 @@ class ArchitectureGuardsTest(unittest.TestCase):
         self.assertIn("include/te/core/types.hpp:1", result.stdout)
         self.assertIn("floating-point type", result.stdout)
 
+    def testRejectsFloatingPointInFinancialImplementations(self):
+        for path in ("src/engine/portfolio.cpp", "src/engine/risk.cpp", "src/book/price_level.cpp"):
+            with self.subTest(path=path):
+                result = self.runGuard({path: "double amount;\n"})
+                self.assertEqual(result.returncode, 1, result.stdout)
+
     def testAllowsFloatingPointOutsideExactFinancialState(self):
         result = self.runGuard(
             {

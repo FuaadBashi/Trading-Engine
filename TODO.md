@@ -6,9 +6,45 @@ are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 
 ## Start here
 
-**Next: D2, finish Portfolio.** Opening a long works; enable the next `DISABLED_` test and
-extend `applyFill` until it passes. Then D3-D7 in order. Pulled forward alongside D2: the
-engineering track in [docs/roadmap-borrowed-ideas.md](docs/roadmap-borrowed-ideas.md).
+**Next: D2, finish Portfolio.** First settle the arithmetic examples and replace the skipped
+closing-test scaffold with assertions, then implement one transition at a time. Fuaad writes the
+learning-critical code; the assistant writes tests from agreed examples and handles small repairs.
+
+Work order: **D2 → C2/C3 before capture/tape use → D3-D7 → E1 → research/performance extensions.**
+C4-C6 are supporting work with the gates below. SPSC is optional as an isolated learning exercise;
+it is not a prerequisite for Portfolio and is not integrated before Stage 8.
+
+### Review list: where each of the 30 items belongs
+
+This is a navigation map, not a second checklist. The sections named here own completion.
+Review numbers refer to the September 2026 ranked list; order follows dependencies, not just size.
+
+| Review items | Work | Owner below / when |
+|---|---|---|
+| 1-4, 8 | Test units/scaffold, rounding, checked arithmetic, valid fills, Portfolio/journal | D2, next; only unit correction and honest scaffold status are done |
+| 5 | Tape ordering/window checks | C3, before tape use |
+| 6 | Allocation-failure behavior | C6, before recovery or bindings |
+| 7 | Python/C++ capture admission | C2, before trusted capture runs |
+| 9 | Error context | C4, alongside capture hardening |
+| 10 | Documentation drift | C8; small factual repairs done, accounting claims still open |
+| 11 | Full L3 oracle | E: L3 evidence, before Stage 6/8 claims |
+| 12 | Public one-command example | D7 |
+| 13 | Availability timestamps | D5 and E: tape equivalence |
+| 14-15 | Liquidity rules, risk and order lifecycle | D4 |
+| 16 | Simulated venue and complete engine loop | D4-D6 |
+| 17 | Feed versus order-entry latency | D5 |
+| 18 | Experiment runner and run records | D7 then E1 |
+| 19 | Fuzzing and fault tests | E3 |
+| 20-21 | Baseline and measured optimization | S8.1-S8.3, S8.6-S8.7 |
+| 22 | SPSC queue | S8.5; optional isolated exercise earlier |
+| 23 | Build/interface boundaries | C9; test definitions moved, interface work open |
+| 24 | Python batch bindings | E4, after E1's CLI route |
+| 25 | TWAP and market-making experiment | E5, after the engine and E1 |
+| 26 | Optimized book comparison | S8.4 |
+| 27 | One networking/protocol exercise | E6, after Stage 5 |
+| 28 | Backfill or second venue | E7, optional after the core |
+| 29 | Drying-model comparisons | E8, supervisor/data dependent |
+| 30 | Advanced infrastructure | E9, optional specialization |
 
 C2 gates trusted capture-to-engine results; C3 gates tape use. In-memory Portfolio work does not
 wait on either. Fuaad writes learning-critical code; the assistant writes tests from agreed
@@ -51,7 +87,7 @@ through tests, then record the decision.
 - [x] **ADR 0015 accepted, 16 September:** fatal allocation failure, unsafe object,
   explicitly interim. This does not mean rollback has been implemented.
 - [x] **D5's twelve accounting rules selected, 19 September** through D1 below.
-  Recorded policy is not implemented accounting; D2 remains open.
+  Recorded policy is not implemented accounting; D2 remains open, including the arithmetic clarifications below.
 - [ ] **Choose Strategy dispatch when implementing the seam.** Compare runtime and static
   alternatives in ADR 0009. Do not assume templates or `std::function` are inherently faster.
 
@@ -134,7 +170,9 @@ through tests, then record the decision.
   wrapper, Python binding or recovery loop. Choose an enforced fatal boundary or exception-safe
   rollback with explicit process behavior.
   **Done when:** injected failures prove the chosen behavior; no retained book can be reused
-  corrupt. Quantity-overflow tests do not cover allocation failure.
+  corrupt. Include Portfolio: execution-ID insertion currently follows account-state updates, so
+  a caught allocation failure must not permit double application on retry. Integer-overflow tests
+  do not cover this path.
 
 ### C7. Extend financial guards alongside accounting
 
@@ -152,6 +190,28 @@ through tests, then record the decision.
   and exit 1, while a `double` in `src/research/statistics.cpp` is still allowed, so probabilities
   and statistics keep floating point. Guard passes on the real tree; 13/13 Python tests pass.
 
+- [x] September review follow-up: extend coverage to `src/book/` and add a regression test for
+  book, Portfolio and risk implementations. The guard remains lexical, not an arithmetic proof.
+
+### C8. Review documentation repairs (review item 10)
+
+- [x] Align README/CLAUDE build paths with the handoff; describe the actual floating-point guard;
+  label planned directories, record the supplied PhD topic and qualify the tape timing limitation.
+- [ ] Resolve accounting wording with D2: rounding/remainder selection, zero-basis assumptions,
+  derived-average error bound and eight decimal places meaning hundred-millionths, not billionths.
+  **Done when:** ADR, tests and checklist agree; no unimplemented guarantee is described as proved.
+
+Verification for this small-fix batch: normal C++ build passed; 328 cases passed, one scaffold
+skipped and 15 specifications disabled. Python: 14 passed; architecture guard, changed-document
+links and `git diff --check` passed. This does not complete Portfolio or the open capture gates.
+
+### C9. Build and interface boundaries (review item 23)
+
+- [x] Move fixture/root-path definitions from `te_core`'s public interface to private test targets.
+- [ ] Before an optimized book or another consumer depends on internals, review public locator/
+  handle types and dependency visibility. Split targets only when a real independent consumer needs it.
+  **Done when:** consumers use the supported interface without depending on reference-book storage.
+
 ## D. Build the Stage 5 engine
 
 ### D1. Agree the money rules using examples
@@ -165,7 +225,8 @@ through tests, then record the decision.
   Selected: signed `int64` money at a per-instrument scale finer than the quote currency's minor
   unit; total basis plus quantity with the average derived, never stored; net fee convention;
   fees always moving basis against the trader; classification by signed position; proportional
-  reversal fee split; position zero if and only if basis zero; realized produced only by closing.
+  reversal fee split; the recorded zero-basis invariant (challenged by the review; see D2);
+  realized produced only by closing.
 
   Also selected: money at **8 decimal places** below one quote-currency unit, chosen from the
   smallest representable amount rather than the ceiling — one satoshi at $100,000 is `$0.001` and
@@ -180,17 +241,30 @@ through tests, then record the decision.
   Short-to-long by buying is deliberately not hand-worked — it is the structural mirror of the
   reversal already done, and belongs in a test rather than a paper row.
 
-  Only the fee *schedule* (flat, basis-point, maker/taker) is left, and it is a D2 interface
-  question, not an accounting rule. These are accepted intent; nothing is test-verified.
+  Historical selection is intent, not proof. The review found arithmetic details requiring
+  clarification before dependent D2 tests; those follow below. The fee schedule remains separate.
 
 ### D2. Implement Portfolio and its fill journal
 
-- [ ] The assistant writes tests from D1; Fuaad writes the first implementation.
-  Use distinct signed exact types and checked wider multiplication before rescaling.
-  Calculate a candidate update before committing state; record execution and fee identities.
+Review items 1-4 and 8. Keep the existing representation; clarify its edge cases rather than
+silently choosing policy in a test. Assistant: tests/review. Fuaad: rules and implementation.
+
+- [x] Correct the two mark-valuation tests to use BTC quantities scaled by 100,000,000.
+- [x] Mark the empty closing-test scaffold skipped so it cannot pass without assertions.
+- [ ] Agree examples for indivisible basis allocation, reversal-fee remainder assignment,
+  zero-basis/nonzero-position cases and permitted rebates. State the rounding operation explicitly.
+  **Done when:** every example has exact integer inputs/outputs and a named rule; update C8 wording.
+- [ ] Replace the skipped closing scaffold with assertions from the agreed partial-close example.
+  **Done when:** it checks state and outcome and fails on the current unsupported transition;
+  avoid maintaining two copies of the same specification case.
+- [ ] Implement checked candidate arithmetic for cash, position, basis, realized and fees;
+  validate supplied notional under the agreed contract. Use wider multiplication when converting units.
+  **Done when:** boundary/invalid inputs return named errors with no account or execution-ID change.
+- [ ] Implement long reductions, flat closure, shorts, covers and both reversal directions;
+  enforce duplicate identity, marked valuation and journal replay. Enable specifications as implemented.
   **Done when:** long/flat/short/reversal cases pass; failed and duplicate fills cannot half-change
-  state; journal replay rebuilds the account exactly. Complete C7. Fill accounting does not
-  obtain a mark price or wall clock.
+  state; journal replay rebuilds the account exactly. Fill accounting obtains no mark or wall clock.
+  Allocation-failure behavior is the separate C6 integration gate, not proved by integer checks.
 
 ### D3. Define intentions, reasons and the strategy boundary
 
@@ -207,6 +281,9 @@ through tests, then record the decision.
   Implement quantity, notional and resulting absolute-position limits.
   **Done when:** transitions are independently testable, rejection cannot mutate venue/portfolio
   state, and a fill can correctly race a pending cancellation.
+- [ ] **Review item 14:** choose how hypothetical fills consume/reserve liquidity without corrupting
+  the historical reconstruction book. **Done when:** repeated aggressive orders cannot reuse liquidity
+  silently; full/partial fills and multi-level walks have explicit non-impact assumptions.
 
 ### D5. Implement scheduling and information availability
 
@@ -216,6 +293,10 @@ through tests, then record the decision.
   **Done when:** timelines prove apply-before-observe, no future information, market-before-own-arrival
   ties, submission-sequence ties and arrival-time fill eligibility.
   Stored receipt time is deterministic input, not a calibrated network-delay measurement.
+- [ ] **Review items 13/17:** separate feed availability from order-entry delay; retain required
+  timestamps through normalization and versioned tape when supporting recorded availability.
+  **Done when:** an order cannot fill against liquidity removed before its arrival; raw/tape
+  equivalence holds for supported policies. Zero/fixed policies do not require recorded timestamps.
 
 ### D6. Pass the complete engine proof
 
@@ -282,6 +363,33 @@ prerequisite for anything here.
 - [ ] **Stage 10:** thin dashboard, ownership-safe C++/Python boundary, reproducible
   correctness/performance/research reports and a five-minute demonstration.
 
+### Additional review exercises: after Stage 5 and E1
+
+These extend existing stages, not the definition of a finished D2. Pick one extension at a time.
+
+- [ ] **E3. Fuzzing and fault tests (19).** Exercise malformed JSON/binary records and injected
+  failures. **Done when:** bounded harness runs have reproducible seeds/corpora, saved regressions
+  and defined rejection/state behavior; sanitizer findings fail the run. Effort: 2-4 days.
+- [ ] **E4. Batch Python bindings (24).** Follow E1's CLI baseline; justify bindings by a measured
+  call/transfer cost or required API. **Done when:** batch output matches CLI output, ownership and
+  GIL behavior are tested, and C6 is satisfied. Effort: 2-5 days.
+- [ ] **E5. Execution experiments (25).** TWAP first, then simple inventory-aware market making.
+  **Done when:** arrival-price implementation shortfall, fees, inventory limits and sensitivity to
+  fill/latency assumptions are reported against a baseline. Effort: 1-2 weeks.
+- [ ] **E6. One protocol exercise (27).** Choose UDP loss/reordering or a small ITCH decoder.
+  **Done when:** generated loss/duplicates/reordering or truncated packets receive defined responses;
+  normalized replay stays deterministic. Do not implement every protocol. Effort: 1-2 weeks.
+- [ ] **E7. Backfill or second venue (28).** Investigate documented API coverage and access first.
+  **Done when:** a bounded fixture demonstrates verified continuity after recovery, or a second adapter
+  passes the same normalization contract. No silent relaxation of admission. Effort: days to weeks.
+- [ ] **E8. PhD bridge (29).** With the supervisor, select a simple approximate drying model and data.
+  **Done when:** physics-only, data-only and hybrid comparisons share documented splits, baselines,
+  metrics and provenance, with uncertainty and limitations reported. Keep domain models separate;
+  reuse experiment discipline. Research-dependent; no novelty or winning model assumed.
+- [ ] **E9. Advanced infrastructure (30).** Optional FIX connectivity, interactive agent simulation
+  or kernel-bypass study only for a selected specialization. **Done when:** a written need, bounded
+  exercise and measurable success criterion justify the work. Not an internship prerequisite.
+
 Advanced techniques may be contained learning experiments. Promotion to the main engine requires
 correctness equivalence and measured value. A measured non-improvement still teaches something.
 
@@ -300,7 +408,8 @@ No measured latency, speedup or specialist qualification is claimed by adding th
   **Done when:** a public fixture and command reproduce the experiment, with hardware/build
   metadata and raw samples or documented histogram precision. Do not demand identical timings.
 - [ ] **S8.3 Profile one bottleneck.** Investigate allocation, pointer chasing, lookup, copying,
-  parsing and logging costs; keep parsing separate from decoded-event timings.
+  parsing and logging costs; keep parsing separate from decoded-event timings. Parser/padded-buffer
+  reuse is a candidate only if the profile supports it; preserve malformed-input behavior and lifetimes.
   **Done when:** a saved profile supports one stated optimization hypothesis.
 - [ ] **S8.4 Compare one optimized book variant.** Retain the reference. Try a measured change
   to storage, indexing or allocation, with explicit capacity/exhaustion behaviour.
@@ -309,7 +418,8 @@ No measured latency, speedup or specialist qualification is claimed by adding th
   are reported. An aggregate depth digest alone is insufficient.
 - [ ] **S8.5 Compare concurrency designs.** Single thread versus mutex queue versus bounded
   SPSC, with the same useful work and explicit one-producer/one-consumer ownership.
-  **Done when:** wraparound, ordering, object lifetime, saturation and shutdown tests pass;
+  **Done when:** a publication/slot-reuse happens-before argument is written; wraparound, ordering,
+  object lifetime, saturation and shutdown tests pass;
   bursts and delayed consumers are measured; queue-full behaviour cannot silently lose events.
   Run applicable sanitizers separately and explain acquire/release and cache sharing.
 - [ ] **S8.6 Audit measurement bias.** Account for timestamp overhead, warm-up, sample count,

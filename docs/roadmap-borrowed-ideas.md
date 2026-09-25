@@ -6,7 +6,7 @@ tests from agreed examples.
 
 | # | Idea | From | Stage | Size |
 |---|---|---|---|---|
-| 1 | SPSC ring buffer, single writer | LMAX Disruptor, Rigtorp `SPSCQueue` | **now**, beside D2 | 3-5 days |
+| 1 | SPSC ring buffer, single writer | LMAX Disruptor, Rigtorp `SPSCQueue` | Stage 8; optional isolated exercise earlier | 3-5 days |
 | 2 | Order lifecycle as an explicit state machine | FIX 4.4 execution reports, QuickFIX | D4 | 2-3 days |
 | 3 | Fixed pipeline order: risk, then match, then settle | exchange-core | D4 | 1 day |
 | 4 | A small matching core against `OrderBook` | Liquibook | D4 | 3-4 days |
@@ -15,14 +15,14 @@ tests from agreed examples.
 | 7 | Same strategy code in replay and live | NautilusTrader | D5-D6 | shapes design |
 | 8 | Config-driven parameter sweeps | Hummingbot | E1 | 1-2 days |
 
-## 1. SPSC ring buffer — pulled forward
+## 1. SPSC ring buffer — optional early exercise
 
-Independent of accounting, so it can be built while D2 continues. A standard interview question.
+Independent of accounting, but not a D2 prerequisite. TODO.md owns the work order.
 
 - Power-of-two capacity, head and tail on separate cache lines (`alignas(64)`), acquire/release
   ordering only, each side caching the other's index. `tryPush`/`tryPop` never block.
-- **Single-writer principle:** each index has exactly one thread that writes it. That is the
-  reason no lock or `seq_cst` is needed. Be able to say why.
+- **Single-writer principle:** each index has one writer; correctness also requires an
+  acquire/release happens-before argument for publishing objects and safely reusing slots.
 - **Done when:** a TSan stress test (two threads, millions of items, order and count checked)
   passes, and a benchmark against a `std::mutex` + `std::deque` queue reports p50/p99/p99.9.
 - **Needs first:** a TSan build (`-DTE_SANITIZE=thread`) and Google Benchmark enabled in
