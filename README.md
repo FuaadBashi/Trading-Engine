@@ -9,6 +9,13 @@ a reference order book that reproduces the venue's own checkpoint exactly (0 of 
 differ). **What doesn't yet:** the strategy, simulated venue, risk checks and live path. Portfolio
 accounting is in progress. [Plan v4](docs/project-plan-v4.md) has the full scope and gates.
 
+## Review guide
+
+Start with [the domain context](CONTEXT.md), then inspect [the reference book](src/book/order_book.cpp),
+[the replay coordinator](src/capture/capture_coordinator.cpp), and [tests](tests).
+[Design decisions](docs/decisions) explain the constraints; [CI](.github/workflows/ci.yml)
+shows the automated checks. Implemented behavior and planned stages are separated below.
+
 ## Status
 
 Stage 5 (replay and accounting) is in progress. `Portfolio::applyFill` handles opening a long;
@@ -56,6 +63,9 @@ scripts/        throwaway tooling (raw websocket dump lives here)
 ```
 
 ## Build
+
+Requires CMake 3.25+ and a C++20 compiler. Start from a clone of this repository;
+CMake configures dependencies through `cmake/dependencies.cmake`.
 
 ```
 cmake -S . -B ~/build/TradingEngineProject -DCMAKE_BUILD_TYPE=RelWithDebInfo
