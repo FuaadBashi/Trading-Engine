@@ -73,6 +73,16 @@ cmake --build ~/build/TradingEngineProject -j
 ctest --test-dir ~/build/TradingEngineProject --output-on-failure
 ```
 
+To check the replay claims in one command:
+
+```
+./scripts/verify.sh
+```
+
+It builds Release outside the source tree, runs the suite and lists which replay claims passed on
+your machine. The 29k-event real-capture check needs the gitignored `data/raw/` capture; without
+it the script reports "not run", not a pass.
+
 ## Venue
 
 Primary is **Bitstamp `live_orders`** — genuine order-by-order L3, public, no authentication.
