@@ -11,14 +11,10 @@
 // These tests are the specification. If the implementation disagrees, the implementation is wrong
 // until the numbers are re-derived and this file is changed deliberately.
 //
-// Every case is DISABLED_ because Portfolio::applyFill is not written yet. They would all fail,
-// and a suite that is red for days stops being a signal -- a real regression elsewhere would sit
-// unnoticed among expected failures. Delete one DISABLED_ prefix as each case starts passing;
-// that is the progress ladder through D2, roughly in the order below.
-//
-// Two of these pass even against the unimplemented stub, for the wrong reasons: the stub returns
-// invalid_quantity for everything, and it returns a zero Money. They only become real evidence
-// once applyFill exists.
+// Cases not yet supported by applyFill stay DISABLED_: a suite that is red for days stops being a
+// signal, and a real regression elsewhere would sit unnoticed among expected failures. Delete one
+// DISABLED_ prefix as each case starts passing; that is the progress ladder through D2, roughly in
+// the order below. The unrealizedAt cases abort until it is implemented.
 
 namespace {
 
@@ -210,7 +206,7 @@ TEST(Portfolio, DISABLED_BuyingThroughFlatClosesTheShortAndOpensALong) {
 // Duplicates. A redelivered fill is ignored, not rejected (rule 10).
 // ------------------------------------------------------------------------------------------
 
-TEST(Portfolio, DISABLED_ARepeatedExecutionIdIsIgnoredWithoutChangingTheAccount) {
+TEST(Portfolio, ARepeatedExecutionIdIsIgnoredWithoutChangingTheAccount) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
 
@@ -224,7 +220,7 @@ TEST(Portfolio, DISABLED_ARepeatedExecutionIdIsIgnoredWithoutChangingTheAccount)
     expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
 }
 
-TEST(Portfolio, DISABLED_ADuplicateIsRecognisedByIdAloneEvenIfOtherFieldsDiffer) {
+TEST(Portfolio, ADuplicateIsRecognisedByIdAloneEvenIfOtherFieldsDiffer) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
 
@@ -241,7 +237,7 @@ TEST(Portfolio, DISABLED_ADuplicateIsRecognisedByIdAloneEvenIfOtherFieldsDiffer)
 // Rejection. Every refused fill leaves the account completely unchanged (rule 11).
 // ------------------------------------------------------------------------------------------
 
-TEST(Portfolio, DISABLED_AZeroQuantityFillIsRejectedAndChangesNothing) {
+TEST(Portfolio, AZeroQuantityFillIsRejectedAndChangesNothing) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
 
@@ -253,7 +249,7 @@ TEST(Portfolio, DISABLED_AZeroQuantityFillIsRejectedAndChangesNothing) {
     expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
 }
 
-TEST(Portfolio, DISABLED_ANegativeQuantityFillIsRejected) {
+TEST(Portfolio, ANegativeQuantityFillIsRejected) {
     te::Portfolio portfolio = openedAccount();
 
     const auto outcome = portfolio.applyFill(buy(1, -3, money(300), money(1)));
@@ -266,7 +262,7 @@ TEST(Portfolio, DISABLED_ANegativeQuantityFillIsRejected) {
     expectAccount(portfolio, money(0), 0, money(0), money(0), money(0));
 }
 
-TEST(Portfolio, DISABLED_ARejectedFillDoesNotConsumeItsExecutionId) {
+TEST(Portfolio, ARejectedFillDoesNotConsumeItsExecutionId) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_FALSE(portfolio.applyFill(buy(1, 0, money(0), money(1))).hasValue());
 

@@ -5,9 +5,11 @@ what is true now and what to be careful of.
 
 ## Where things are
 
-- **Stage 5, D2 in progress.** `Portfolio::applyFill` handles opening a long (1 of 16 spec tests
-  enabled). Every other transition returns `FillError::unsupported_transition`, which is
-  temporary. `unrealizedAt` fails loudly until implemented.
+- **Stage 5, D2 in progress.** `Portfolio::applyFill` opens or adds to a long, and reduces a long
+  when the basis splits exactly (7 of 16 spec tests enabled). Uneven splits wait on the rounding
+  rule; full close, shorts and reversals are not written. All of those return the temporary
+  `FillError::unsupported_transition`. `unrealizedAt` fails loudly until implemented.
+- `scripts/verify.sh` builds Release and reports each replay claim in one command.
 - ADR 0014 D5 records accounting intent; TODO D2 now tracks the review's unresolved arithmetic details.
 - Capture, merge, reconciliation and the reference book are done: joined replay reproduces the
   venue checkpoint exactly (0 of 4,533 levels differ).

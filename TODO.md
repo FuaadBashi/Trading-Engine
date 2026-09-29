@@ -254,9 +254,8 @@ silently choosing policy in a test. Assistant: tests/review. Fuaad: rules and im
 - [ ] Agree examples for indivisible basis allocation, reversal-fee remainder assignment,
   zero-basis/nonzero-position cases and permitted rebates. State the rounding operation explicitly.
   **Done when:** every example has exact integer inputs/outputs and a named rule; update C8 wording.
-- [ ] Replace the skipped closing scaffold with assertions from the agreed partial-close example.
-  **Done when:** it checks state and outcome and fails on the current unsupported transition;
-  avoid maintaining two copies of the same specification case.
+- [x] Replace the skipped closing scaffold with assertions from the agreed partial-close example.
+  Done in `d65a8c3`: one copy of the case, now passing.
 - [ ] Implement checked candidate arithmetic for cash, position, basis, realized and fees;
   validate supplied notional under the agreed contract. Use wider multiplication when converting units.
   **Done when:** boundary/invalid inputs return named errors with no account or execution-ID change.
