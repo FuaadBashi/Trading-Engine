@@ -42,22 +42,21 @@ The target interview story is:
 
 ## 2. Current baseline and limits
 
-Source was reviewed at `6c2f2f6` on **18 September 2026**. The detailed, dated source
-baseline and historical validation evidence live in [the handoff](handoff/status.md);
-[TODO.md](../TODO.md) owns completion status. This documentation update did not rerun the engine suite.
+Alignment refreshed on **29 September 2026**, at `f816b1d` plus the user's local full-close test
+activation. [The handoff](handoff/status.md) records current behavior; [TODO](../TODO.md) owns status.
+The Portfolio target rebuilt: seven cases passed, the newly enabled full-close case failed, eight
+remain disabled. No full-suite/sanitizer performance claim follows from this targeted check.
 
-Implemented foundations include exact parsing/types, the move-only sparse reference book,
-joined capture, per-segment loading, multi-segment coordination, byte/hash/count admission,
-merge/reconciliation, portable v3 codecs/I/O and mandatory synthetic fixtures.
-The built application remains the legacy recorder. Portfolio, strategy, venue and engine are placeholders.
+Implemented foundations: exact types/parsing, reference book, joined capture and reconciliation,
+byte/hash/count admission, portable codecs/I/O and synthetic fixtures. Portfolio is partially
+implemented, not a placeholder: long opening/increase and restricted partial close work. Full close,
+shorts, reversals, valuation and journal remain unfinished. Strategy/venue/engine are not implemented.
+`scripts/verify.sh` checks replay claims; it does not satisfy D7 execution or E1 experiments.
 
-The project is entering Stage 5. ADR 0014 is accepted; D5's signed-position accounting
-detail needs completion. ADR 0015 is an accepted interim fatal-allocation policy.
-
-Important limits remain: semantic C++ capture admission; tape ordering/window validation;
-receipt metadata and classifier warm-up for tape equivalence; order-level correctness evidence;
-diagnostic context; UBSan failure enforcement; supported Python and financial source-guard scope.
-These are open work, not closed by the earlier byte/hash/count repair.
+Open gates include semantic admission, tape ordering/window checks, source/timing/warm-up equivalence,
+full order-level evidence and allocation policy. UBSan enforcement and financial implementation
+coverage have been added; do not keep listing them as wholly missing. Accounting overflow remains
+open despite sanitizer enforcement. The dated aggregate checkpoint result below retains its limits.
 
 Previously reported real checkpoint agreement (0/4,533 price-level residuals) is aggregate
 evidence, not proof of all order identities or queue priority. The correction path has synthetic
@@ -262,7 +261,7 @@ A stage closes when its gate passes, not when its estimated time has elapsed.
 | 5 | Replay and accounting | single-thread engine, ledger, fees, simulated venue | hand-calculated conservation scenarios pass |
 | 6 | Queue labels and baselines | versioned labels, queue model and transparent baselines | leakage tests and label-quality report pass |
 | 7 | Held-out validation | chronological evaluation with uncertainty | frozen held-out report beats or explains baseline |
-| 8 | Performance laboratory | reference-versus-optimized measurement | identical hashes plus defensible benchmark report |
+| 8 | Performance laboratory | reference-versus-optimized measurement | intermediate order/known-priority equivalence plus defensible benchmark report |
 | 9 | Operational paper path | live read-only feed, risk, paper venue, telemetry | recovery/risk/backpressure tests pass |
 | 10 | Dashboard and package | interactive local UI plus portfolio evidence | same engine in replay/live and five-minute demo |
 
@@ -788,9 +787,13 @@ At the end of each stage, Fuaad should be able to explain without the editor:
 ## 24. Immediate next actions and estimates
 
 Follow [TODO.md](../TODO.md), beginning with the accounting examples and targeted hardening.
-Do not restart accepted ADR decisions or allow unrelated advanced features to delay Stage 5.
+Do not restart the selected representation; resolve the specific arithmetic ambiguities in D2.
+The immediate local exercise is full close, followed by checked arithmetic and agreed remainders.
+Keep optional advanced features from delaying Stage 5.
 The guide's [planning ranges](project-progress-guide.md#6-remaining-work-and-planning-ranges)
-estimate 380-680 remaining focused hours for the full planned project, including learning.
+estimate 100-180 focused hours for hardening plus Stage 5, and 380-680 for the full trading scope,
+including learning. These overlap; do not add them. The guide breaks them down and converts weekly
+commitments into calendar ranges. Optional protocols/venues and drying research are excluded.
 No deadline or weekly commitment is agreed. Re-estimate after Stage 5; PhD novelty work is variable.
 
 ## 25. Final definition of done
@@ -828,3 +831,5 @@ The core project is complete only when all of the following are true:
   [UndefinedBehaviorSanitizer](https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html) and
   [ThreadSanitizer](https://clang.llvm.org/docs/ThreadSanitizer.html): memory, undefined-behavior and
   data-race detection.
+
+For task-specific reading and learning checks, use the guide’s [source-to-exercise table](project-progress-guide.md#read-one-source-for-the-task-in-front-of-you). Job advertisements above are historical role examples, not verified current vacancies or universal requirements.

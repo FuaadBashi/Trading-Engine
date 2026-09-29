@@ -6,9 +6,12 @@ are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 
 ## Start here
 
-**Next: D2, finish Portfolio.** First settle the arithmetic examples and replace the skipped
-closing-test scaffold with assertions, then implement one transition at a time. Fuaad writes the
-learning-critical code; the assistant writes tests from agreed examples and handles small repairs.
+**Next: D2, finish Portfolio.** The partial-close example now passes. The local full-close test is
+newly enabled and fails on the unsupported equality transition: this is the next learning exercise.
+Then add checked arithmetic and settle remainder examples before implementing their dependent cases.
+Fuaad writes the implementation; the assistant writes agreed tests and reviews it.
+See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ranges) for dated
+planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).
 
 Work order: **D2 → C2/C3 before capture/tape use → D3-D7 → E1 → research/performance extensions.**
 C4-C6 are supporting work with the gates below. SPSC is optional as an isolated learning exercise;
@@ -21,7 +24,7 @@ Review numbers refer to the September 2026 ranked list; order follows dependenci
 
 | Review items | Work | Owner below / when |
 |---|---|---|
-| 1-4, 8 | Test units/scaffold, rounding, checked arithmetic, valid fills, Portfolio/journal | D2, next; only unit correction and honest scaffold status are done |
+| 1-4, 8 | Test units/scaffold, rounding, checked arithmetic, valid fills, Portfolio/journal | D2, next; units/scaffold, partial close and five safety specs addressed; D2 still open |
 | 5 | Tape ordering/window checks | C3, before tape use |
 | 6 | Allocation-failure behavior | C6, before recovery or bindings |
 | 7 | Python/C++ capture admission | C2, before trusted capture runs |

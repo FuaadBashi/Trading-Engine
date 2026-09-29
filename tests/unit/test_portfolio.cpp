@@ -107,7 +107,7 @@ TEST(Portfolio, ClosingHalfALongRealizesNetOfTheFee) {
     expectAccount(portfolio, money(-92), 1, money(100, 50), money(8, 50), money(2));
 }
 
-TEST(Portfolio, DISABLED_ClosingTheRestAtALossLeavesBasisAndPositionAtZero) {
+TEST(Portfolio, ClosingTheRestAtALossLeavesBasisAndPositionAtZero) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
     ASSERT_TRUE(portfolio.applyFill(sell(2, 1, money(110), money(1))).hasValue());

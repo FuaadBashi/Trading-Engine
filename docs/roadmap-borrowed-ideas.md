@@ -1,6 +1,6 @@
 # Borrowed ideas: what to take from real engines, and where
 
-Eight designs from production systems, each placed in an existing TODO stage. This changes how
+Eight ideas from public engine designs, each placed in an existing TODO stage. This changes how
 D4-D6 and E1 are built, not what they must prove. Fuaad writes the code; the assistant writes the
 tests from agreed examples.
 
@@ -14,6 +14,9 @@ tests from agreed examples.
 | 6 | Two latencies: feed and order entry | hftbacktest | D5 | 1-2 days |
 | 7 | Same strategy code in replay and live | NautilusTrader | D5-D6 | shapes design |
 | 8 | Config-driven parameter sweeps | Hummingbot | E1 | 1-2 days |
+
+Sizes above are rough implementation subtask estimates, not complete learner/calendar budgets.
+They overlap D4-D6/E1 and must not be added to the guide’s [planning ranges](project-progress-guide.md#6-remaining-work-and-planning-ranges).
 
 ## 1. SPSC ring buffer — optional early exercise
 

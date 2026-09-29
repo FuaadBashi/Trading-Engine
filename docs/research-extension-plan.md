@@ -6,8 +6,9 @@
 
 ## The honest framing
 
-This roughly **doubles the project**. It adds a second scientific domain to something that has not
-yet finished Stage 5. That can be worth it, but it should be chosen, not drifted into.
+This adds a second scientific domain before Stage 5 is finished. Its effort cannot yet be
+estimated as a multiplier: data access, physical model and supervisor-approved question are unknown.
+Keep it separate from the trading roadmap’s hour estimates.
 
 The shared skill is real and narrow: **making decisions from noisy, delayed observations, and
 proving whether the decisions helped.** Almost nothing else transfers.
