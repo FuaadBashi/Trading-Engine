@@ -22,9 +22,17 @@ namespace {
 // unreadable: 100.50 is 10050000000. This builds them from whole units and hundredths so the test
 // bodies show the same figures as the paper sheet. Integer-only on purpose -- no double may touch
 // a money value anywhere, including in a test helper.
+//
+// The sign belongs to the whole amount, as on the sheet: money(-11, 50) is -11.50. Adding the
+// hundredths unsigned made it -10.50, so a loss expectation silently asked for the wrong figure.
+// Amounts between -1 and 0 cannot be written this way; none of the examples need one.
 constexpr te::Money money(std::int64_t whole, std::int64_t hundredths = 0) {
-    return te::Money{whole * 100'000'000 + hundredths * 1'000'000};
+    const std::int64_t signedHundredths = whole < 0 ? -hundredths : hundredths;
+    return te::Money{whole * 100'000'000 + signedHundredths * 1'000'000};
 }
+
+static_assert(money(-11, 50).units == -1'150'000'000);
+static_assert(money(100, 50).units == 10'050'000'000);
 
 te::InstrumentSpec btcUsd() {
     return te::InstrumentSpec{

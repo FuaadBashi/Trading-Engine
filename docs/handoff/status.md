@@ -5,10 +5,10 @@ what is true now and what to be careful of.
 
 ## Where things are
 
-- **Stage 5, D2 in progress.** `Portfolio::applyFill` opens or adds to a long, and reduces a long
-  when the per-unit basis divides exactly. Seven spec tests pass; the local full-close test is
-  additionally enabled and fails (8 enabled, 8 disabled as of 29 September). Uneven splits wait on the rounding
-  rule; full close, shorts and reversals are not written. All of those return the temporary
+- **Stage 5, D2 in progress.** `Portfolio::applyFill` opens or adds to a long, and reduces or fully
+  closes a long when the per-unit basis divides exactly. Eight spec tests pass and eight are disabled
+  (29 September). Uneven splits wait on the rounding rule; shorts and reversals are not written, and
+  a sell larger than the long is still rejected. All of those return the temporary
   `FillError::unsupported_transition`. `unrealizedAt` fails loudly until implemented.
 - `scripts/verify.sh` builds Release and reports each replay claim in one command.
 - ADR 0014 D5 records accounting intent; TODO D2 now tracks the review's unresolved arithmetic details.
