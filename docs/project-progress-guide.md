@@ -1,8 +1,8 @@
 # Trading Engine: where you are and what comes next
 
-Updated **29 September 2026** against `f816b1d` plus the user's local full-close test activation.
-Only the Portfolio target was rebuilt and run for this refresh: seven passed, one full-close case
-failed, eight disabled. Historical full-suite results are not fresh verification. PDFs are older
+Updated **29 September 2026**, after the full close was implemented. The full Release suite passed:
+eight Portfolio specs pass, eight are disabled, and the real-capture tests skip without the private
+corpus. Sanitizer builds were not rerun. PDFs are older
 snapshots; this Markdown is the current guide.
 
 You have built the foundations for reconstructing a market. The next milestone is a
@@ -20,7 +20,7 @@ defines the full scope. Recommendations and unchecked tasks are not implemented 
 | Capture, decoding and exact types | Implemented; semantic admission hardening remains |
 | Reference book and joined replay | Implemented; aggregate agreement is not full queue proof |
 | Portable binary tapes | Codecs and I/O exist; complete raw/tape replay equivalence remains open |
-| Portfolio | Opens/adds long; reduces long when the per-unit basis divides exactly; full close and valuation unfinished |
+| Portfolio | Opens/adds long; reduces or fully closes a long when the per-unit basis divides exactly; shorts, reversals and valuation unfinished |
 | Engine, strategy and simulated venue | Planned; Portfolio progress does not complete the engine |
 | Reproduction tooling | `scripts/verify.sh` exists for replay claims; it is not the D7 engine executable or E1 runner |
 | Queue research and held-out evaluation | Planned, Stages 6-7 |
@@ -74,16 +74,16 @@ subtracting what leaves; conservation alone does not specify a rounding rule.
 
 ### Your next three learning sessions
 
-1. **Full close:** the local test is enabled and currently fails because the closing predicate uses
-   strict `<`. Explain the equality boundary and all expected account fields, then attempt the change.
-   Preserve rejection of sells larger than the position until reversal is implemented.
+1. **Full close (written for you):** the closing predicate changed from `<` to `<=`. Explain the
+   equality boundary, every expected account field, and why a sell larger than the position is
+   still rejected until reversal is implemented.
 2. **Arithmetic safety:** trace every intermediate and accumulation, then make boundary tests reject
    overflow without state changes. Candidate variables alone cannot prevent signed overflow.
 3. **Remainders:** hand-work an indivisible stored-money basis and reversal fee; choose the rule,
    let the assistant encode it in tests, then implement it. Short/reversal/valuation cases follow.
 
-The first exercise is exactly divisible; it can proceed without silently selecting the later
-remainder policy. A passing example is progress, not completion of D2.
+The full close is exactly divisible, so it did not silently select the later remainder policy.
+A passing example is progress, not completion of D2.
 
 ### Work these cases by hand
 
@@ -336,9 +336,9 @@ baselines under the same evaluation before being preferred. No supervisor/data e
 ## 8. What this update does not prove
 
 This is a targeted code/roadmap alignment review, not a complete repeat of the earlier audit.
-The Portfolio target was rebuilt and run; the full suite, sanitizers, private corpus, live APIs
-and performance experiments were not rerun. The user's full-close test remains enabled and failing;
-no implementation or test changes were made by this documentation refresh.
+The full Release suite was rebuilt and run; sanitizers, the private corpus, live APIs and
+performance experiments were not rerun. The only code changes were the full close and the test
+helper's sign fix.
 
 Existing PDF exports are historical snapshots and were not regenerated. Current guidance lives in
 this Markdown, TODO and plan v4. Optional extensions and task estimates are plans, not implemented

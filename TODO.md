@@ -6,9 +6,8 @@ are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 
 ## Start here
 
-**Next: D2, finish Portfolio.** The partial-close example now passes. The local full-close test is
-newly enabled and fails on the unsupported equality transition: this is the next learning exercise.
-Then add checked arithmetic and settle remainder examples before implementing their dependent cases.
+**Next: D2, finish Portfolio.** The partial-close and full-close examples now pass. Next, add
+checked arithmetic and settle remainder examples before implementing their dependent cases.
 Fuaad writes the implementation; the assistant writes agreed tests and reviews it.
 See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ranges) for dated
 planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).
@@ -259,6 +258,9 @@ silently choosing policy in a test. Assistant: tests/review. Fuaad: rules and im
   **Done when:** every example has exact integer inputs/outputs and a named rule; update C8 wording.
 - [x] Replace the skipped closing scaffold with assertions from the agreed partial-close example.
   Done in `d65a8c3`: one copy of the case, now passing.
+- [x] Close a whole long when the basis divides exactly. The assistant wrote this at Fuaad's request
+  (29 September) instead of it being his exercise. The test's `money()` helper made `money(-11, 50)`
+  -10.50; it now keeps the sign on the whole amount, which also corrects a disabled short case.
 - [ ] Implement checked candidate arithmetic for cash, position, basis, realized and fees;
   validate supplied notional under the agreed contract. Use wider multiplication when converting units.
   **Done when:** boundary/invalid inputs return named errors with no account or execution-ID change.

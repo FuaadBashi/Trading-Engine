@@ -18,8 +18,8 @@ shows the automated checks. Implemented behavior and planned stages are separate
 
 ## Status
 
-Stage 5 (replay and accounting) is in progress. `Portfolio::applyFill` handles opening a long;
-closing, shorts and reversals are next, driven by 16 specification tests enabled one at a time.
+Stage 5 (replay and accounting) is in progress. `Portfolio::applyFill` opens, reduces and closes a
+long; shorts and reversals are next, driven by 16 specification tests enabled one at a time.
 [TODO.md](TODO.md) owns live task status; [status](docs/handoff/status.md) is the session handoff.
 
 | Stage | Focus | State |

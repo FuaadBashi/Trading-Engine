@@ -36,8 +36,10 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     Money realizedDelta{};
 
     const bool openingOrIncreasingLong = fill.side == Side::buy && position_.units >= 0;
+    // Selling exactly the position closes it. Selling more would reverse into a short, which
+    // stays unsupported until reversal is written.
     const bool reducingLong = fill.side == Side::sell && position_.units > 0 &&
-                              fill.quantity.units < position_.units;
+                              fill.quantity.units <= position_.units;
 
     if (openingOrIncreasingLong) {
         // The fee is money that left, and it is also part of what acquiring the position cost, so

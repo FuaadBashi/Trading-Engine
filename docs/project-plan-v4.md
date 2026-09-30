@@ -42,15 +42,15 @@ The target interview story is:
 
 ## 2. Current baseline and limits
 
-Alignment refreshed on **29 September 2026**, at `f816b1d` plus the user's local full-close test
-activation. [The handoff](handoff/status.md) records current behavior; [TODO](../TODO.md) owns status.
-The Portfolio target rebuilt: seven cases passed, the newly enabled full-close case failed, eight
-remain disabled. No full-suite/sanitizer performance claim follows from this targeted check.
+Alignment refreshed on **29 September 2026**, after the full close was implemented.
+[The handoff](handoff/status.md) records current behavior; [TODO](../TODO.md) owns status.
+The full Release suite passed with eight Portfolio specs enabled and eight disabled. No
+sanitizer or performance claim follows from this check.
 
 Implemented foundations: exact types/parsing, reference book, joined capture and reconciliation,
 byte/hash/count admission, portable codecs/I/O and synthetic fixtures. Portfolio is partially
-implemented, not a placeholder: long opening/increase and restricted partial close work. Full close,
-shorts, reversals, valuation and journal remain unfinished. Strategy/venue/engine are not implemented.
+implemented, not a placeholder: long opening/increase and exactly divisible partial and full closes
+work. Shorts, reversals, valuation and journal remain unfinished. Strategy/venue/engine are not implemented.
 `scripts/verify.sh` checks replay claims; it does not satisfy D7 execution or E1 experiments.
 
 Open gates include semantic admission, tape ordering/window checks, source/timing/warm-up equivalence,
@@ -788,7 +788,7 @@ At the end of each stage, Fuaad should be able to explain without the editor:
 
 Follow [TODO.md](../TODO.md), beginning with the accounting examples and targeted hardening.
 Do not restart the selected representation; resolve the specific arithmetic ambiguities in D2.
-The immediate local exercise is full close, followed by checked arithmetic and agreed remainders.
+The immediate exercises are checked arithmetic and agreed remainders; full close is done.
 Keep optional advanced features from delaying Stage 5.
 The guide's [planning ranges](project-progress-guide.md#6-remaining-work-and-planning-ranges)
 estimate 100-180 focused hours for hardening plus Stage 5, and 380-680 for the full trading scope,
