@@ -53,12 +53,12 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     } else if (reducingLong) {
         // This first closing case is deliberately limited to an exactly divisible basis split.
         // Do not silently choose a remainder rule before D2 settles that policy.
-        if (basis_.units % position_.units != 0) {
+        if ((basis_.units * fill.quantity.units) % position_.units != 0) {
             return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
         }
 
         const std::int64_t basisLeaving =
-            (basis_.units / position_.units) * fill.quantity.units;
+            (basis_.units * fill.quantity.units) / position_.units;
         const std::int64_t netProceeds = fill.notional.units - fill.fee.units;
 
         realizedDelta.units = netProceeds - basisLeaving;

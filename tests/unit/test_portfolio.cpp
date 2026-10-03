@@ -130,6 +130,19 @@ TEST(Portfolio, ClosingTheRestAtALossLeavesBasisAndPositionAtZero) {
     expectAccount(portfolio, money(-3), 0, money(0), money(-3), money(3));
 }
 
+TEST(Portfolio, FullyClosingALongNeedsNoSplitEvenWhenTheBasisDoesNotDivide) {
+    te::Portfolio portfolio = openedAccount();
+    ASSERT_TRUE(portfolio.applyFill(buy(1, 3, money(100), money(1))).hasValue());
+
+    const auto outcome = portfolio.applyFill(sell(2, 3, money(120), money(1)));
+
+    // 101 does not divide by 3, but selling everything takes the whole tag: basis x (3 / 3) is
+    // exactly 101 with nothing to round. An unresolved rounding rule must not block this (rule 12).
+    ASSERT_TRUE(outcome.hasValue());
+    EXPECT_EQ(outcome.valueIf()->realizedDelta, money(18));
+    expectAccount(portfolio, money(18), 0, money(0), money(18), money(2));
+}
+
 // ------------------------------------------------------------------------------------------
 // The short cycle: the same arithmetic with the signs flipped. Cases 4-6 of the sheet.
 // ------------------------------------------------------------------------------------------
