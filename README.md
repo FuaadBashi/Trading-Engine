@@ -81,7 +81,9 @@ To check the replay claims in one command:
 
 It builds Release outside the source tree, runs the suite and lists which replay claims passed on
 your machine. The 29k-event real-capture check needs the gitignored `data/raw/` capture; without
-it the script reports "not run", not a pass.
+it the script reports "not run", not a pass. The capture isn't published because Bitstamp puts
+redistribution of its exchange data under a data licence. You can record and validate your own
+with the commands under [Venue](#venue), but the pinned tests expect the original capture folders.
 
 ## Venue
 
