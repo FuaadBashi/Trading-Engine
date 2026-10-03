@@ -6,6 +6,11 @@
 
 namespace te {
 
+namespace {
+// __int128 is a GCC/Clang extension; __extension__ keeps -Wpedantic -Werror quiet on GCC.
+__extension__ using Int128 = __int128;
+}  // namespace
+
 Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     // --- 1. Reject bad input before touching anything (rule 11) -------------------------------
     if (fill.quantity.units <= 0) {
@@ -53,12 +58,15 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     } else if (reducingLong) {
         // This first closing case is deliberately limited to an exactly divisible basis split.
         // Do not silently choose a remainder rule before D2 settles that policy.
-        if ((basis_.units * fill.quantity.units) % position_.units != 0) {
+        // basis x sold can exceed int64 at real magnitudes, so it is formed in 128 bits (rule 11).
+        // The quotient is a fraction of basis (sold <= held), so it always fits back in int64.
+        const Int128 basisTimesSold = static_cast<Int128>(basis_.units) * fill.quantity.units;
+        if (basisTimesSold % position_.units != 0) {
             return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
         }
 
-        const std::int64_t basisLeaving =
-            (basis_.units * fill.quantity.units) / position_.units;
+        const auto basisLeaving =
+            static_cast<std::int64_t>(basisTimesSold / position_.units);
         const std::int64_t netProceeds = fill.notional.units - fill.fee.units;
 
         realizedDelta.units = netProceeds - basisLeaving;

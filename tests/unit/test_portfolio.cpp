@@ -143,6 +143,24 @@ TEST(Portfolio, FullyClosingALongNeedsNoSplitEvenWhenTheBasisDoesNotDivide) {
     expectAccount(portfolio, money(18), 0, money(0), money(18), money(2));
 }
 
+TEST(Portfolio, SplittingABitcoinSizedBasisDoesNotOverflowTheIntermediateProduct) {
+    // Real BTC magnitudes: quantities in satoshis, money at 8 places. basis x sold is about
+    // 1.0e21, past int64's 9.2e18, while the answer (half the basis) fits easily. Rule 11 calls
+    // for a 128-bit intermediate here, not a refusal: only the middle step is too big.
+    constexpr std::int64_t kOneBitcoin = 100'000'000;
+    te::Portfolio portfolio = openedAccount();
+    ASSERT_TRUE(
+        portfolio.applyFill(buy(1, 2 * kOneBitcoin, money(100'000), money(1))).hasValue());
+
+    const auto outcome = portfolio.applyFill(sell(2, kOneBitcoin, money(60'000), money(1)));
+
+    ASSERT_TRUE(outcome.hasValue());
+    // 59,999 received after the fee, less half of the 100,001 basis.
+    EXPECT_EQ(outcome.valueIf()->realizedDelta, money(9'998, 50));
+    expectAccount(portfolio, money(-40'002), kOneBitcoin, money(50'000, 50), money(9'998, 50),
+                  money(2));
+}
+
 // ------------------------------------------------------------------------------------------
 // The short cycle: the same arithmetic with the signs flipped. Cases 4-6 of the sheet.
 // ------------------------------------------------------------------------------------------
