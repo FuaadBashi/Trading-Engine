@@ -9,6 +9,19 @@ namespace te {
 namespace {
 // __int128 is a GCC/Clang extension; __extension__ keeps -Wpedantic -Werror quiet on GCC.
 __extension__ using Int128 = __int128;
+
+// Overflow-checked int64 arithmetic (rule 11). False when the true result does not fit, in either
+// direction; the caller then refuses the fill, so a wrapped value never reaches the account.
+bool addFits(std::int64_t a, std::int64_t b, std::int64_t& out) {
+    return !__builtin_add_overflow(a, b, &out);
+}
+bool subFits(std::int64_t a, std::int64_t b, std::int64_t& out) {
+    return !__builtin_sub_overflow(a, b, &out);
+}
+
+Result<FillOutcome, FillError> refuse(FillError error) {
+    return Result<FillOutcome, FillError>::failure(error);
+}
 }  // namespace
 
 Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
@@ -49,12 +62,20 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     if (openingOrIncreasingLong) {
         // The fee is money that left, and it is also part of what acquiring the position cost, so
         // it appears in both lines on purpose (rule 4). realizedDelta stays zero: nothing closed.
-        const std::int64_t acquisitionCost = fill.notional.units + fill.fee.units;
-
-        candidateCash.units -= acquisitionCost;
-        candidatePosition.units += fill.quantity.units;
-        candidateBasis.units += acquisitionCost;
-        candidateFees.units += fill.fee.units;
+        std::int64_t acquisitionCost{};
+        if (!addFits(fill.notional.units, fill.fee.units, acquisitionCost) ||
+            !subFits(candidateCash.units, acquisitionCost, candidateCash.units)) {
+            return refuse(FillError::cash_overflow);
+        }
+        if (!addFits(candidatePosition.units, fill.quantity.units, candidatePosition.units)) {
+            return refuse(FillError::position_overflow);
+        }
+        if (!addFits(candidateBasis.units, acquisitionCost, candidateBasis.units)) {
+            return refuse(FillError::basis_overflow);
+        }
+        if (!addFits(candidateFees.units, fill.fee.units, candidateFees.units)) {
+            return refuse(FillError::fee_overflow);
+        }
     } else if (reducingLong) {
         // This first closing case is deliberately limited to an exactly divisible basis split.
         // Do not silently choose a remainder rule before D2 settles that policy.
@@ -67,15 +88,21 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
 
         const auto basisLeaving =
             static_cast<std::int64_t>(basisTimesSold / position_.units);
-        const std::int64_t netProceeds = fill.notional.units - fill.fee.units;
-
-        realizedDelta.units = netProceeds - basisLeaving;
-
-        candidateCash.units += netProceeds;
+        std::int64_t netProceeds{};
+        if (!subFits(fill.notional.units, fill.fee.units, netProceeds) ||
+            !addFits(candidateCash.units, netProceeds, candidateCash.units)) {
+            return refuse(FillError::cash_overflow);
+        }
+        if (!subFits(netProceeds, basisLeaving, realizedDelta.units) ||
+            !addFits(candidateRealized.units, realizedDelta.units, candidateRealized.units)) {
+            return refuse(FillError::realized_overflow);
+        }
+        if (!addFits(candidateFees.units, fill.fee.units, candidateFees.units)) {
+            return refuse(FillError::fee_overflow);
+        }
+        // These two only shrink toward zero: 0 < sold <= held, and 0 <= leaving <= basis.
         candidatePosition.units -= fill.quantity.units;
         candidateBasis.units -= basisLeaving;
-        candidateRealized.units += realizedDelta.units;
-        candidateFees.units += fill.fee.units;
     } else {
         return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
     }

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <limits>
 
 #include <te/engine/portfolio.hpp>
 
@@ -312,6 +313,38 @@ TEST(Portfolio, ARejectedFillDoesNotConsumeItsExecutionId) {
     ASSERT_TRUE(outcome.hasValue());
     EXPECT_TRUE(outcome.valueIf()->applied);
     expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
+}
+
+// Rule 11: a result that does not fit refuses the whole fill with a named error. Nothing changes,
+// and the execution ID stays free, so a corrected resend under the same ID still applies.
+TEST(Portfolio, ABuyThatWouldOverflowCashIsRefusedAndChangesNothing) {
+    te::Portfolio portfolio = openedAccount();
+    ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
+
+    // Cash is already -201; paying INT64_MAX more cannot be represented.
+    const te::Money huge{std::numeric_limits<std::int64_t>::max()};
+    const auto outcome = portfolio.applyFill(buy(2, 1, huge, money(0)));
+
+    ASSERT_FALSE(outcome.hasValue());
+    EXPECT_EQ(*outcome.errorIf(), te::FillError::cash_overflow);
+    expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
+
+    // The refused fill did not consume ID 2.
+    const auto corrected = portfolio.applyFill(buy(2, 1, money(100), money(1)));
+    ASSERT_TRUE(corrected.hasValue());
+    EXPECT_TRUE(corrected.valueIf()->applied);
+}
+
+TEST(Portfolio, ABuyThatWouldOverflowThePositionIsRefusedAndChangesNothing) {
+    te::Portfolio portfolio = openedAccount();
+    constexpr std::int64_t kMax = std::numeric_limits<std::int64_t>::max();
+    ASSERT_TRUE(portfolio.applyFill(buy(1, kMax, money(1), money(0))).hasValue());
+
+    const auto outcome = portfolio.applyFill(buy(2, 1, money(1), money(0)));
+
+    ASSERT_FALSE(outcome.hasValue());
+    EXPECT_EQ(*outcome.errorIf(), te::FillError::position_overflow);
+    expectAccount(portfolio, money(-1), kMax, money(1), money(0), money(0));
 }
 
 // ------------------------------------------------------------------------------------------

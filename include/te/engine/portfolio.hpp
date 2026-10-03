@@ -62,6 +62,7 @@ enum class FillError {
     invalid_side,
     notional_overflow,    // price x quantity does not fit after rescaling
     cash_overflow,
+    position_overflow,
     basis_overflow,
     realized_overflow,
     fee_overflow,
