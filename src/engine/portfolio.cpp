@@ -54,6 +54,7 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     Money realizedDelta{};
 
     const bool openingOrIncreasingLong = fill.side == Side::buy && position_.units >= 0;
+    const bool openingOrIncreasingShort = fill.side == Side::sell && position_.units <= 0;
     // Selling exactly the position closes it. Selling more would reverse into a short, which
     // stays unsupported until reversal is written.
     const bool reducingLong = fill.side == Side::sell && position_.units > 0 &&
@@ -103,6 +104,25 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
         // These two only shrink toward zero: 0 < sold <= held, and 0 <= leaving <= basis.
         candidatePosition.units -= fill.quantity.units;
         candidateBasis.units -= basisLeaving;
+    } else if (openingOrIncreasingShort) {
+        // The mirror of opening a long. A short receives money, so the fee makes it receive less:
+        // basis grows by the proceeds after the fee, not before (rule 4). Basis is a size and stays
+        // positive; the short direction lives in the negative position (rule 2). Nothing closed,
+        // so realizedDelta stays zero (rule 8).
+        std::int64_t netProceeds{};
+        if (!subFits(fill.notional.units, fill.fee.units, netProceeds) ||
+            !addFits(candidateCash.units, netProceeds, candidateCash.units)) {
+            return refuse(FillError::cash_overflow);
+        }
+        if (!subFits(candidatePosition.units, fill.quantity.units, candidatePosition.units)) {
+            return refuse(FillError::position_overflow);
+        }
+        if (!addFits(candidateBasis.units, netProceeds, candidateBasis.units)) {
+            return refuse(FillError::basis_overflow);
+        }
+        if (!addFits(candidateFees.units, fill.fee.units, candidateFees.units)) {
+            return refuse(FillError::fee_overflow);
+        }
     } else {
         return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
     }

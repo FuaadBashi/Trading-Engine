@@ -6,8 +6,9 @@ are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 
 ## Start here
 
-**Next: D2, finish Portfolio.** The partial-close and full-close examples now pass. Next, add
-checked arithmetic and settle remainder examples before implementing their dependent cases.
+**Next: D2, finish Portfolio.** Long open/close and checked arithmetic are done. Next: shorts
+(opening and covering need no rounding rule), then agree the rounding and notional/rebate rules,
+then reversals and `unrealizedAt`.
 Fuaad writes the implementation; the assistant writes agreed tests and reviews it.
 See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ranges) for dated
 planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).
@@ -261,9 +262,12 @@ silently choosing policy in a test. Assistant: tests/review. Fuaad: rules and im
 - [x] Close a whole long when the basis divides exactly. The assistant wrote this at Fuaad's request
   (29 September) instead of it being his exercise. The test's `money()` helper made `money(-11, 50)`
   -10.50; it now keeps the sign on the whole amount, which also corrects a disabled short case.
-- [ ] Implement checked candidate arithmetic for cash, position, basis, realized and fees;
-  validate supplied notional under the agreed contract. Use wider multiplication when converting units.
-  **Done when:** boundary/invalid inputs return named errors with no account or execution-ID change.
+- [x] Form the basis split's `basis x sold` in 128 bits (`f05eda9`), so a BTC-sized close fits.
+- [x] Checked candidate arithmetic for cash, position, basis, realized and fees (`8b9a0ef`):
+  overflow refuses the fill with a named error and no account or execution-ID change. Adds
+  `FillError::position_overflow`. Both written by the assistant at Fuaad's request.
+- [ ] Validate supplied notional under an agreed contract (zero or negative), and decide whether
+  negative fees (rebates) are permitted. Needs agreed examples first.
 - [ ] Implement long reductions, flat closure, shorts, covers and both reversal directions;
   enforce duplicate identity, marked valuation and journal replay. Enable specifications as implemented.
   **Done when:** long/flat/short/reversal cases pass; failed and duplicate fills cannot half-change

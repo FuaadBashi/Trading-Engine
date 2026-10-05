@@ -166,7 +166,7 @@ TEST(Portfolio, SplittingABitcoinSizedBasisDoesNotOverflowTheIntermediateProduct
 // The short cycle: the same arithmetic with the signs flipped. Cases 4-6 of the sheet.
 // ------------------------------------------------------------------------------------------
 
-TEST(Portfolio, DISABLED_OpeningAShortSubtractsTheFeeFromProceeds) {
+TEST(Portfolio, OpeningAShortSubtractsTheFeeFromProceeds) {
     te::Portfolio portfolio = openedAccount();
 
     const auto outcome = portfolio.applyFill(sell(1, 2, money(200), money(1)));
