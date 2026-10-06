@@ -179,7 +179,7 @@ TEST(Portfolio, OpeningAShortSubtractsTheFeeFromProceeds) {
     expectAccount(portfolio, money(199), -2, money(199), money(0), money(1));
 }
 
-TEST(Portfolio, DISABLED_CoveringHalfAShortMirrorsTheLongCase) {
+TEST(Portfolio, CoveringHalfAShortMirrorsTheLongCase) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(sell(1, 2, money(200), money(1))).hasValue());
 
@@ -192,7 +192,7 @@ TEST(Portfolio, DISABLED_CoveringHalfAShortMirrorsTheLongCase) {
     expectAccount(portfolio, money(108), -1, money(99, 50), money(8, 50), money(2));
 }
 
-TEST(Portfolio, DISABLED_CoveringTheRestOfAShortClosesItOut) {
+TEST(Portfolio, CoveringTheRestOfAShortClosesItOut) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(sell(1, 2, money(200), money(1))).hasValue());
     ASSERT_TRUE(portfolio.applyFill(buy(2, 1, money(90), money(1))).hasValue());

@@ -5,12 +5,13 @@ what is true now and what to be careful of.
 
 ## Where things are
 
-- **Stage 5, D2 in progress.** `Portfolio::applyFill` opens or adds to a long, and reduces or fully
-  closes one whenever `basis x sold / held` is exact; that product is formed in 128 bits, so
-  BTC-sized fills don't overflow. Every account update is overflow-checked and refused with a named
-  `FillError` (rule 11). 13 spec tests pass, 7 are disabled (5 October). Uneven splits wait on the
-  rounding rule; opening or adding to a short works, covering and reversals are not written. Those return the temporary
-  `FillError::unsupported_transition`. `unrealizedAt` fails loudly until implemented.
+- **Stage 5, D2 in progress.** `Portfolio::applyFill` opens, adds to, reduces and fully closes both
+  longs and shorts whenever the basis split `basis x closed / held` is exact; that product is formed
+  in 128 bits, so BTC-sized fills don't overflow. Every account update is overflow-checked and
+  refused with a named `FillError` (rule 11). 15 spec tests pass, 5 are disabled (6 October).
+  Uneven splits wait on the rounding rule, and reversals (selling or buying through flat) are not
+  written; both return the temporary `FillError::unsupported_transition`. `unrealizedAt` fails
+  loudly until implemented.
 - `scripts/verify.sh` builds Release and reports each replay claim in one command.
 - ADR 0014 D5 records accounting intent; TODO D2 now tracks the review's unresolved arithmetic details.
 - Capture, merge, reconciliation and the reference book are done: joined replay reproduces the

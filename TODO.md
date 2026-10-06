@@ -6,9 +6,8 @@ are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 
 ## Start here
 
-**Next: D2, finish Portfolio.** Long open/close and checked arithmetic are done. Next: shorts
-(opening and covering need no rounding rule), then agree the rounding and notional/rebate rules,
-then reversals and `unrealizedAt`.
+**Next: D2, finish Portfolio.** Long and short open/close and checked arithmetic are done. Next:
+agree the rounding and notional/rebate rules, then reversals and `unrealizedAt`.
 Fuaad writes the implementation; the assistant writes agreed tests and reviews it.
 See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ranges) for dated
 planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).

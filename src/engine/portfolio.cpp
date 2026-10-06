@@ -59,6 +59,10 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     // stays unsupported until reversal is written.
     const bool reducingLong = fill.side == Side::sell && position_.units > 0 &&
                               fill.quantity.units <= position_.units;
+    // Buying back at most what is owed. Written as a sum rather than -position_, which would
+    // overflow at INT64_MIN; position is negative and quantity positive, so the sum cannot.
+    const bool reducingShort = fill.side == Side::buy && position_.units < 0 &&
+                               position_.units + fill.quantity.units <= 0;
 
     if (openingOrIncreasingLong) {
         // The fee is money that left, and it is also part of what acquiring the position cost, so
@@ -123,6 +127,33 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
         if (!addFits(candidateFees.units, fill.fee.units, candidateFees.units)) {
             return refuse(FillError::fee_overflow);
         }
+    } else if (reducingShort) {
+        // The mirror of reducingLong. The short was opened first, so basis is what was RECEIVED;
+        // buying back now is the cost. Realized = basis leaving - cost to buy back (rule 8).
+        // Same split as the long (rule 12), against the units owed. held is formed in 128 bits
+        // because negating INT64_MIN does not fit in int64.
+        const Int128 held = -static_cast<Int128>(position_.units);
+        const Int128 basisTimesBought = static_cast<Int128>(basis_.units) * fill.quantity.units;
+        if (basisTimesBought % held != 0) {
+            return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
+        }
+
+        const auto basisLeaving = static_cast<std::int64_t>(basisTimesBought / held);
+        std::int64_t buyBackCost{};
+        if (!addFits(fill.notional.units, fill.fee.units, buyBackCost) ||
+            !subFits(candidateCash.units, buyBackCost, candidateCash.units)) {
+            return refuse(FillError::cash_overflow);
+        }
+        if (!subFits(basisLeaving, buyBackCost, realizedDelta.units) ||
+            !addFits(candidateRealized.units, realizedDelta.units, candidateRealized.units)) {
+            return refuse(FillError::realized_overflow);
+        }
+        if (!addFits(candidateFees.units, fill.fee.units, candidateFees.units)) {
+            return refuse(FillError::fee_overflow);
+        }
+        // These two only shrink toward zero: 0 < bought <= owed, and 0 <= leaving <= basis.
+        candidatePosition.units += fill.quantity.units;
+        candidateBasis.units -= basisLeaving;
     } else {
         return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
     }
