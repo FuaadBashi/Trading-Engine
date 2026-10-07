@@ -82,17 +82,14 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
             return refuse(FillError::fee_overflow);
         }
     } else if (reducingLong) {
-        // This first closing case is deliberately limited to an exactly divisible basis split.
-        // Do not silently choose a remainder rule before D2 settles that policy.
         // basis x sold can exceed int64 at real magnitudes, so it is formed in 128 bits (rule 11).
         // The quotient is a fraction of basis (sold <= held), so it always fits back in int64.
+        // An uneven split rounds against the trader (rule 12): up on a long, so more cost leaves
+        // and less profit is reported now. Division truncates, so add one if anything was dropped.
         const Int128 basisTimesSold = static_cast<Int128>(basis_.units) * fill.quantity.units;
-        if (basisTimesSold % position_.units != 0) {
-            return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
-        }
-
-        const auto basisLeaving =
-            static_cast<std::int64_t>(basisTimesSold / position_.units);
+        const bool splitWasUneven = basisTimesSold % position_.units != 0;
+        const auto basisLeaving = static_cast<std::int64_t>(basisTimesSold / position_.units +
+                                                            (splitWasUneven ? 1 : 0));
         std::int64_t netProceeds{};
         if (!subFits(fill.notional.units, fill.fee.units, netProceeds) ||
             !addFits(candidateCash.units, netProceeds, candidateCash.units)) {
@@ -131,13 +128,11 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
         // The mirror of reducingLong. The short was opened first, so basis is what was RECEIVED;
         // buying back now is the cost. Realized = basis leaving - cost to buy back (rule 8).
         // Same split as the long (rule 12), against the units owed. held is formed in 128 bits
-        // because negating INT64_MIN does not fit in int64.
+        // because negating INT64_MIN does not fit in int64. Against the trader is DOWN here: less
+        // received basis leaves, so less profit is reported now. Positive division already
+        // truncates downward, so the plain quotient is the rounded answer.
         const Int128 held = -static_cast<Int128>(position_.units);
         const Int128 basisTimesBought = static_cast<Int128>(basis_.units) * fill.quantity.units;
-        if (basisTimesBought % held != 0) {
-            return Result<FillOutcome, FillError>::failure(FillError::unsupported_transition);
-        }
-
         const auto basisLeaving = static_cast<std::int64_t>(basisTimesBought / held);
         std::int64_t buyBackCost{};
         if (!addFits(fill.notional.units, fill.fee.units, buyBackCost) ||
