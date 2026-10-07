@@ -267,7 +267,9 @@ TEST(Portfolio, DISABLED_SellingThroughFlatClosesTheLongAndOpensAShort) {
     // Closing half: 220 received less 0.40 of fee, against the whole basis of 201.
     EXPECT_EQ(outcome.valueIf()->realizedDelta, money(18, 60));
     // Opening half: 330 received less 0.60 of fee becomes the new short's basis.
-    expectAccount(portfolio, money(349), -3, money(329, 40), money(18, 60), money(2));
+    // Cash is -201 + 550 - 1 = 348. Check: equity 348 - 3 x 110 = 18 = realized 18.60 + unrealized
+    // -0.60 (a 3-unit short at basis 329.40, marked at 110).
+    expectAccount(portfolio, money(348), -3, money(329, 40), money(18, 60), money(2));
 }
 
 TEST(Portfolio, DISABLED_BuyingThroughFlatClosesTheShortAndOpensALong) {
@@ -283,7 +285,9 @@ TEST(Portfolio, DISABLED_BuyingThroughFlatClosesTheShortAndOpensALong) {
     // Closing half: got 199 for those two, pays 180 plus 0.40 of fee to buy them back.
     EXPECT_EQ(outcome.valueIf()->realizedDelta, money(18, 60));
     // Opening half: 270 paid plus 0.60 of fee becomes the new long's cost.
-    expectAccount(portfolio, money(-251), 3, money(270, 60), money(18, 60), money(2));
+    // Cash is 199 - 450 - 1 = -252. Check: equity -252 + 3 x 90 = 18 = realized 18.60 + unrealized
+    // -0.60 (a 3-unit long at basis 270.60, marked at 90).
+    expectAccount(portfolio, money(-252), 3, money(270, 60), money(18, 60), money(2));
 }
 
 // ------------------------------------------------------------------------------------------
