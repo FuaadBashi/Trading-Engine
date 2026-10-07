@@ -346,6 +346,13 @@ removed   = basis x (units closed / units held)   rounded to the stored scale
 remaining = basis - removed                       never recomputed
 ```
 
+**Rounding direction (selected 6 October 2026): against the trader**, the same rule as marked
+valuation. A long close rounds `removed` **up**, so less profit is reported now; a short cover
+rounds it **down**, for the same reason. Holding 3 at a basis of 100 and closing 1 removes
+33.33333334 from a long, or 33.33333333 from a short. Because `remaining` absorbs the difference,
+the round trip's total realized is identical either way; only which fill reports the last unit
+changes.
+
 The load-bearing half is the second line. Because `remaining` is *defined* as what did not leave,
 `removed + remaining == basis` holds by construction no matter how the division rounded, so the
 total can never leak. Rebuilding the remainder instead — rounding a per-unit average and

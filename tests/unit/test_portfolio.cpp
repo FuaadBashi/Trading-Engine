@@ -207,6 +207,50 @@ TEST(Portfolio, CoveringTheRestOfAShortClosesItOut) {
 }
 
 // ------------------------------------------------------------------------------------------
+// Uneven splits: rule 12 rounds the leaving basis against the trader. Fees are zero so only the
+// rounding moves the numbers. Amounts below are raw 8-place units: 100 is 10'000'000'000, and a
+// third of it is 3'333'333'333.33..., which must round to a whole unit one way or the other.
+// ------------------------------------------------------------------------------------------
+
+TEST(Portfolio, AnUnevenLongCloseRoundsTheLeavingBasisUpAgainstTheTrader) {
+    te::Portfolio portfolio = openedAccount();
+    ASSERT_TRUE(portfolio.applyFill(buy(1, 3, money(100), money(0))).hasValue());
+
+    // A third of 100 leaves. Rounding up removes more cost, so this sale reports less profit.
+    const auto first = portfolio.applyFill(sell(2, 1, money(40), money(0)));
+    ASSERT_TRUE(first.hasValue());
+    EXPECT_EQ(first.valueIf()->realizedDelta, te::Money{666'666'666});  // 40 - 33.33333334
+    expectAccount(portfolio, money(-60), 2, te::Money{6'666'666'666}, te::Money{666'666'666},
+                  money(0));
+
+    // The rest leaves whole. The unit held back above is returned here, so the round trip
+    // realizes exactly (40 + 80) - 100 = 20, as it would under any rounding direction.
+    const auto rest = portfolio.applyFill(sell(3, 2, money(80), money(0)));
+    ASSERT_TRUE(rest.hasValue());
+    EXPECT_EQ(rest.valueIf()->realizedDelta, te::Money{1'333'333'334});  // 80 - 66.66666666
+    expectAccount(portfolio, money(20), 0, money(0), money(20), money(0));
+}
+
+TEST(Portfolio, AnUnevenShortCoverRoundsTheLeavingBasisDownAgainstTheTrader) {
+    te::Portfolio portfolio = openedAccount();
+    ASSERT_TRUE(portfolio.applyFill(sell(1, 3, money(100), money(0))).hasValue());
+
+    // On a short the basis is money received, so profit is basis leaving minus cost. Against the
+    // trader is therefore the opposite direction to the long: round down, so less leaves.
+    const auto first = portfolio.applyFill(buy(2, 1, money(30), money(0)));
+    ASSERT_TRUE(first.hasValue());
+    EXPECT_EQ(first.valueIf()->realizedDelta, te::Money{333'333'333});  // 33.33333333 - 30
+    expectAccount(portfolio, money(70), -2, te::Money{6'666'666'667}, te::Money{333'333'333},
+                  money(0));
+
+    // Round trip: 100 received - (30 + 60) paid = 10 exactly.
+    const auto rest = portfolio.applyFill(buy(3, 2, money(60), money(0)));
+    ASSERT_TRUE(rest.hasValue());
+    EXPECT_EQ(rest.valueIf()->realizedDelta, te::Money{666'666'667});  // 66.66666667 - 60
+    expectAccount(portfolio, money(10), 0, money(0), money(10), money(0));
+}
+
+// ------------------------------------------------------------------------------------------
 // The reversal: one fill that closes a long and opens a short. Case 7 of the sheet.
 // ------------------------------------------------------------------------------------------
 

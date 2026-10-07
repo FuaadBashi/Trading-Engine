@@ -253,8 +253,10 @@ silently choosing policy in a test. Assistant: tests/review. Fuaad: rules and im
 
 - [x] Correct the two mark-valuation tests to use BTC quantities scaled by 100,000,000.
 - [x] Mark the empty closing-test scaffold skipped so it cannot pass without assertions.
-- [ ] Agree examples for indivisible basis allocation, reversal-fee remainder assignment,
-  zero-basis/nonzero-position cases and permitted rebates. State the rounding operation explicitly.
+- [x] Rounding operation for indivisible basis allocation: **against the trader** (6 October,
+  ADR 0014 D5 rule 12). Long closes round the leaving basis up, short covers round it down.
+- [ ] Agree examples for reversal-fee remainder assignment, zero-basis/nonzero-position cases and
+  permitted rebates.
   **Done when:** every example has exact integer inputs/outputs and a named rule; update C8 wording.
 - [x] Replace the skipped closing scaffold with assertions from the agreed partial-close example.
   Done in `d65a8c3`: one copy of the case, now passing.
