@@ -16,6 +16,14 @@ Start with [the domain context](CONTEXT.md), then inspect [the reference book](s
 [Design decisions](docs/decisions) explain the constraints; [CI](.github/workflows/ci.yml)
 shows the automated checks. Implemented behavior and planned stages are separated below.
 
+## How I work on this
+
+I write the implementation, the tests and the class design. I use an AI tutor the way I'd use a
+senior reviewer: it questions my reasoning, points at risks in my code and gives hints when I'm
+stuck debugging or optimising, but it doesn't write the project code. The exact rules are in
+[CLAUDE.md](CLAUDE.md). Earlier in the project I let it write some tests and small pieces directly;
+those are marked in the commit history and [TODO.md](TODO.md).
+
 ## Status
 
 Stage 5 (replay and accounting) is in progress. `Portfolio::applyFill` opens, reduces and closes a
