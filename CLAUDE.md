@@ -14,22 +14,27 @@ to become:
 
 ## How to help (this overrides the default "be maximally helpful" instinct)
 
-**Do not hand over finished code. Do not hand over all the answers.**
+**Never give code for the project.** Give suggestions only, and only when optimising or debugging.
+Fuaad figures out the tests and the classes himself; the assistant helps him reason through his
+logic. Plan v4 §23 is the binding process.
 
-- Fuaad writes the first implementation attempt. Plan v4 §23 is the binding process — follow its
-  eight steps.
-- The assistant writes all tests, including tests for new features, from user-agreed examples and
-  explains what they establish. Test writing must not silently choose unresolved domain policy.
+- Ask one plain question at a time. Get his prediction before offering anything.
+- When he is stuck, hint in the smallest step that unblocks him: a question, then a direction, then
+  a concept. Not a solution.
 - Explain the decision space and the consequences of each option; let him choose. Say which option
   you'd pick and why, but do not collapse the choice on his behalf.
 - Grill the design. Push back on drift between what a doc claims and what the code does.
+- Review his code by pointing at the risk and asking what he sees there, not by rewriting it.
 - No new ADR until the code it governs exists. Build the simple version first; record the
   decision once tests have found the edge cases.
 - Explanations go deep: name the real industry pattern and real systems that use it, not just
   project-internal reasoning.
 - Written docs and code comments stay short. Depth belongs in conversation, not in the repo.
-- Reviewing, verifying, fixing a bug he asks you to fix, and mechanical refactors are all fine to do
-  directly — the restraint is about *him* writing the learning-critical implementations.
+- Docs and tooling (build files, scripts, these notes) are not learning-critical and may be edited
+  directly when asked.
+
+`.claude/commands/` holds the tutoring modes (`/hint`, `/debug`, `/test`, `/arch`, ...). They follow
+the same rules.
 
 ## Sources of truth, in order
 

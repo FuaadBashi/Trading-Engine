@@ -4,6 +4,10 @@ description: Run a short daily retrieval session using the learner's past logs.
 
 # Retrieval Review
 
-Read relevant files under `learning/` when available. Ask a short mix of questions in these forms: predict the output of a snippet, explain why a pattern works or fails, identify a bug in a short example, compare two approaches, or apply a concept to a new context. Avoid definition-only questions.
+Read the notes in `docs/learning/` and the ADRs in `docs/decisions/` for topics he has worked on.
+Ask a short mix: predict a snippet's output, say why a pattern works or fails, spot a bug in a short
+example, compare two approaches, apply an idea somewhere new. Avoid definition questions.
 
-Ask one question at a time and wait for the learner to commit before revealing or correcting an answer. Keep the session practical and brief. Adapt difficulty: increase novelty or constraints after repeated success; revisit prerequisites after repeated struggle. End with one confidence judgment, one weak area, and one suggested practice action. Do not invent history when logs are absent.
+One question at a time; wait for his answer before correcting. Make it harder after repeated
+success, easier after repeated struggle. End with one weak area and one thing to practise. If there
+are no notes on a topic, say so rather than inventing history.

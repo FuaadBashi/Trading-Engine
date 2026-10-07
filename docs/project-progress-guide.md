@@ -80,7 +80,7 @@ subtracting what leaves; conservation alone does not specify a rounding rule.
 2. **Arithmetic safety:** trace every intermediate and accumulation, then make boundary tests reject
    overflow without state changes. Candidate variables alone cannot prevent signed overflow.
 3. **Remainders:** hand-work an indivisible stored-money basis and reversal fee; choose the rule,
-   let the assistant encode it in tests, then implement it. Short/reversal/valuation cases follow.
+   encode it in tests, then implement it. Short/reversal/valuation cases follow.
 
 The full close is exactly divisible, so it did not silently select the later remainder policy.
 A passing example is progress, not completion of D2.
@@ -109,8 +109,8 @@ The earlier gross-PnL teaching example and D5's fee-adjusted example are differe
 reporting conventions. Both can reconcile to the same equity if applied consistently.
 Do not subtract fees twice or mix assertions from the two conventions.
 
-**Learning agreement:** you choose the rules and attempt the implementation. The assistant
-writes all tests from the agreed examples, including new-feature tests, and explains them.
+**Learning agreement:** you choose the rules and write the tests and the implementation. The
+assistant helps you reason through your logic and gives no project code.
 
 ## 3. What needs hardening and why
 
@@ -235,7 +235,7 @@ That measures repository history, not study hours, authorship or personal master
 
 **Assessment:** the earlier 380-680 hours is a reasonable broad planning envelope, not a calibrated
 forecast. The current changes do not justify claiming a faster completion rate. These remaining
-ranges include reading, implementation, assistant-supported tests, debugging and explanation.
+ranges include reading, implementation, tests, debugging and explanation.
 
 | Remaining work | Focused hours | Output |
 |---|---:|---|
@@ -322,8 +322,8 @@ Next add systematic debugger practice, complexity explanations and independent i
 from a blank file. These are more valuable now than collecting language features.
 
 For every milestone: explain the invariant, draw ownership, predict a failure, implement a first
-attempt, inspect it in a debugger, run tests and explain the result. The assistant writes tests
-from your examples; you must still understand why each assertion would fail on incorrect code.
+attempt, inspect it in a debugger, run tests and explain the result. Write the tests yourself, and
+be able to say why each assertion would fail on incorrect code.
 
 Separate interview practice remains useful: algorithms/data structures, probability/statistics,
 OS/network fundamentals and explaining unfamiliar code. This repository is evidence of practice,

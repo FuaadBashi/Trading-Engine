@@ -746,16 +746,16 @@ This project exists to teach C++, finance and quantitative engineering. For lear
 
 1. State the behavior in plain English.
 2. Draw ownership, state or event ordering when it is not obvious.
-3. The assistant writes the smallest failing test from Fuaad's agreed rules/examples and explains it;
+3. Fuaad writes the smallest failing test from his rules/examples; the assistant questions its gaps.
 4. Fuaad writes the first implementation attempt.
 5. Review correctness, lifetime, failure atomicity and complexity.
 6. Run focused tests, then the full suite and relevant sanitizer.
 7. Explain the compiler/runtime result in Fuaad's own words.
 8. Record the decision or lesson in the relevant ADR/learning note.
 
-The assistant owns all test writing, including new-feature tests. Fuaad owns domain choices and
-the first learning-critical implementation attempt. An assertion must not settle an open policy
-without saying so.
+Fuaad writes the tests, the classes and the implementation, and owns domain choices. The assistant
+gives no project code: it helps him reason through his logic, and offers suggestions only when
+optimising or debugging. An assertion must not settle an open policy without saying so.
 
 ### C++ learning map
 

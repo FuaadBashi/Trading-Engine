@@ -8,7 +8,7 @@ are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 
 **Next: D2, finish Portfolio.** Long and short open/close, rounding and checked arithmetic are
 done. Next: reversals and `unrealizedAt`, then agree the notional/rebate rules.
-Fuaad writes the implementation; the assistant writes agreed tests and reviews it.
+Fuaad writes the tests and implementation; the assistant helps him reason and reviews.
 See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ranges) for dated
 planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).
 
@@ -49,8 +49,8 @@ Review numbers refer to the September 2026 ranked list; order follows dependenci
 | 30 | Advanced infrastructure | E9, optional specialization |
 
 C2 gates trusted capture-to-engine results; C3 gates tape use. In-memory Portfolio work does not
-wait on either. Fuaad writes learning-critical code; the assistant writes tests from agreed
-examples and must not silently choose open policy.
+wait on either. Fuaad writes the tests and code; the assistant helps him reason and must not
+silently choose open policy.
 
 **No new ADR until the code it governs exists.** Write the simple version, find the edge cases
 through tests, then record the decision.
@@ -249,7 +249,7 @@ links and `git diff --check` passed. This does not complete Portfolio or the ope
 ### D2. Implement Portfolio and its fill journal
 
 Review items 1-4 and 8. Keep the existing representation; clarify its edge cases rather than
-silently choosing policy in a test. Assistant: tests/review. Fuaad: rules and implementation.
+silently choosing policy in a test. Fuaad: rules, tests and implementation. Assistant: reasoning/review.
 
 - [x] Correct the two mark-valuation tests to use BTC quantities scaled by 100,000,000.
 - [x] Mark the empty closing-test scaffold skipped so it cannot pass without assertions.

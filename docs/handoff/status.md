@@ -34,8 +34,9 @@ what is true now and what to be careful of.
 
 ## Working agreement
 
-Fuaad writes learning-critical code. The assistant writes all tests from agreed examples, plus
-docs, reviews, bug fixes and mechanical changes. No commit, push or discard without being asked.
+Fuaad writes the tests, classes and implementation. The assistant gives no project code: it helps
+him reason through his logic and suggests only when optimising or debugging. It may edit docs and
+tooling when asked. No commit, push or discard without being asked.
 
 ## Build
 
