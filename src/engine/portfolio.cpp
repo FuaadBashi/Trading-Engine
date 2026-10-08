@@ -53,18 +53,18 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     Money candidateFees = feesPaid_;
     Money realizedDelta{};
 
-    const bool openingOrIncreasingLong = fill.side == Side::buy && position_.units >= 0;
-    const bool openingOrIncreasingShort = fill.side == Side::sell && position_.units <= 0;
+    const bool buyToOpenOrAddLong = fill.side == Side::buy && position_.units >= 0;
+    const bool sellToOpenOrAddShort = fill.side == Side::sell && position_.units <= 0;
     // Selling exactly the position closes it. Selling more would reverse into a short, which
     // stays unsupported until reversal is written.
-    const bool reducingLong = fill.side == Side::sell && position_.units > 0 &&
-                              fill.quantity.units <= position_.units;
+    const bool sellToReduceOrCloseLong = fill.side == Side::sell && position_.units > 0 &&
+                                       fill.quantity.units <= position_.units;
     // Buying back at most what is owed. Written as a sum rather than -position_, which would
     // overflow at INT64_MIN; position is negative and quantity positive, so the sum cannot.
-    const bool reducingShort = fill.side == Side::buy && position_.units < 0 &&
-                               position_.units + fill.quantity.units <= 0;
+    const bool buyToReduceOrCloseShort = fill.side == Side::buy && position_.units < 0 &&
+                                       position_.units + fill.quantity.units <= 0;
 
-    if (openingOrIncreasingLong) {
+    if (buyToOpenOrAddLong) {
         // The fee is money that left, and it is also part of what acquiring the position cost, so
         // it appears in both lines on purpose (rule 4). realizedDelta stays zero: nothing closed.
         std::int64_t acquisitionCost{};
@@ -81,7 +81,7 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
         if (!addFits(candidateFees.units, fill.fee.units, candidateFees.units)) {
             return refuse(FillError::fee_overflow);
         }
-    } else if (reducingLong) {
+    } else if (sellToReduceOrCloseLong) {
         // basis x sold can exceed int64 at real magnitudes, so it is formed in 128 bits (rule 11).
         // The quotient is a fraction of basis (sold <= held), so it always fits back in int64.
         // An uneven split rounds against the trader (rule 12): up on a long, so more cost leaves
@@ -105,7 +105,7 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
         // These two only shrink toward zero: 0 < sold <= held, and 0 <= leaving <= basis.
         candidatePosition.units -= fill.quantity.units;
         candidateBasis.units -= basisLeaving;
-    } else if (openingOrIncreasingShort) {
+    } else if (sellToOpenOrAddShort) {
         // The mirror of opening a long. A short receives money, so the fee makes it receive less:
         // basis grows by the proceeds after the fee, not before (rule 4). Basis is a size and stays
         // positive; the short direction lives in the negative position (rule 2). Nothing closed,
@@ -124,8 +124,8 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
         if (!addFits(candidateFees.units, fill.fee.units, candidateFees.units)) {
             return refuse(FillError::fee_overflow);
         }
-    } else if (reducingShort) {
-        // The mirror of reducingLong. The short was opened first, so basis is what was RECEIVED;
+    } else if (buyToReduceOrCloseShort) {
+        // The mirror of closing a long. The short was opened first, so basis is what was RECEIVED;
         // buying back now is the cost. Realized = basis leaving - cost to buy back (rule 8).
         // Same split as the long (rule 12), against the units owed. held is formed in 128 bits
         // because negating INT64_MIN does not fit in int64. Against the trader is DOWN here: less
@@ -154,12 +154,15 @@ Result<FillOutcome, FillError> Portfolio::applyFill(const Fill& fill) {
     }
 
     // --- 4. Commit everything at once ---------------------------------------------------------
+    // Record the ID first: it is the only step that can throw (it may allocate), so a failure
+    // leaves the account untouched. Recorded last, a caught throw would leave the fill applied
+    // but unrecorded, and a retry would apply it twice. The assignments below cannot fail.
+    appliedExecutions_.insert(fill.execution_id);
     cash_ = candidateCash;
     position_ = candidatePosition;
     basis_ = candidateBasis;
     realized_ = candidateRealized;
     feesPaid_ = candidateFees;
-    appliedExecutions_.insert(fill.execution_id);
 
     return Result<FillOutcome, FillError>::success(
         FillOutcome{.applied = true, .realizedDelta = realizedDelta, .reversed = false});
