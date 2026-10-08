@@ -7,7 +7,8 @@ are in [docs/archive](docs/archive/README.md). No deadlines are agreed.
 ## Start here
 
 **Next: D2, finish Portfolio.** Long and short open/close, rounding and checked arithmetic are
-done. Next: reversals and `unrealizedAt`, then agree the notional/rebate rules.
+done. Next: conflicting-resend and fill-validation specs (rules agreed 9 October), then
+reversals and `unrealizedAt`.
 Fuaad writes the tests and implementation; the assistant helps him reason and reviews.
 See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ranges) for dated
 planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).
@@ -267,8 +268,10 @@ silently choosing policy in a test. Fuaad: rules, tests and implementation. Assi
 - [x] Checked candidate arithmetic for cash, position, basis, realized and fees (`8b9a0ef`):
   overflow refuses the fill with a named error and no account or execution-ID change. Adds
   `FillError::position_overflow`. Both written by the assistant at Fuaad's request.
-- [ ] Validate supplied notional under an agreed contract (zero or negative), and decide whether
-  negative fees (rebates) are permitted. Needs agreed examples first.
+- [x] Agree fill validation and conflicting resends (9 October, ADR 0014 D5): notional must be
+  positive; negative fees (rebates) refused until a venue pays them; a reused execution ID with a
+  different body is refused, not ignored. Specs added.
+- [ ] Implement them so the specs pass.
 - [ ] Implement long reductions, flat closure, shorts, covers and both reversal directions;
   enforce duplicate identity, marked valuation and journal replay. Enable specifications as implemented.
   **Done when:** long/flat/short/reversal cases pass; failed and duplicate fills cannot half-change

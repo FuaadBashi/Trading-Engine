@@ -327,6 +327,12 @@ which is Stage 9's problem. Counting ignored duplicates is deliberately deferred
 behaviour and no contract, so it can be added the day someone wants the visibility. The cost of
 deferring is that a flood of duplicates would be silent.
 
+**Conflicting resends (selected 9 October 2026).** Only an *identical* resend is a duplicate. A fill
+reusing an applied ID with a different body (side, price, quantity, notional or fee) is
+**refused with a named error and no state change**. FIX gives a correction its own `ExecID`
+(`ExecType=Correct`, `ExecRefID` naming the original), so a reused ID with new contents means the
+feed contradicts itself; ignoring it hides a broken feed, and applying it double-counts.
+
 **11. Overflow.** `price x quantity` is computed in a **128-bit intermediate** before rescaling,
 per ADR 0004; at an 8-place money scale an ordinary large trade (a $100,000 price against 1000
 BTC) exceeds a 64-bit product by orders of magnitude, so this is a routine path, not an edge case.
@@ -372,6 +378,11 @@ reproduce on replay), but the deeper point is that subtracting rather than rebui
 conserves the total exactly, so no residual field is needed.
 
 ### Still open
+
+**Fill validation (selected 9 October 2026).** Notional must be strictly positive, as FIX's
+`GrossTradeAmt` is; direction comes from side. A negative fee (a maker rebate) is refused for now:
+Bitstamp pays none, and revisit when a venue that does is added. Both are refused with a named
+error and no state change.
 
 Fee *schedule* (flat, basis-point, maker/taker) stays out of scope: rule 4 fixes where a fee
 lands, not how it is computed. Whether `Portfolio` receives a fee or calculates one is an

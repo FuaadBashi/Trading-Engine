@@ -308,17 +308,41 @@ TEST(Portfolio, ARepeatedExecutionIdIsIgnoredWithoutChangingTheAccount) {
     expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
 }
 
-TEST(Portfolio, ADuplicateIsRecognisedByIdAloneEvenIfOtherFieldsDiffer) {
+TEST(Portfolio, ASameIdWithADifferentBodyIsRefusedAndChangesNothing) {
     te::Portfolio portfolio = openedAccount();
     ASSERT_TRUE(portfolio.applyFill(buy(1, 2, money(200), money(1))).hasValue());
 
-    // Same execution id, different everything else. The id is the venue's statement of identity;
-    // trusting the other fields instead would let a corrupted redelivery through.
-    const auto outcome = portfolio.applyFill(sell(1, 7, money(999), money(5)));
-
-    ASSERT_TRUE(outcome.hasValue());
-    EXPECT_FALSE(outcome.valueIf()->applied);
+    // A real correction would carry a new execution ID (rule 10). The same ID with new contents
+    // means the feed contradicts itself: refuse it rather than ignore or apply it.
+    EXPECT_FALSE(portfolio.applyFill(sell(1, 7, money(999), money(5))).hasValue());
     expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
+
+    // The original is still on record: an identical resend remains a harmless duplicate.
+    const auto resend = portfolio.applyFill(buy(1, 2, money(200), money(1)));
+    ASSERT_TRUE(resend.hasValue());
+    EXPECT_FALSE(resend.valueIf()->applied);
+    expectAccount(portfolio, money(-201), 2, money(201), money(0), money(1));
+}
+
+// Fill validation (ADR 0014 D5): notional must be positive, and rebates are refused for now.
+// These check only the outcome -- refused, account untouched -- not which error is returned.
+
+TEST(Portfolio, AFillWithZeroNotionalIsRefusedAndChangesNothing) {
+    te::Portfolio portfolio = openedAccount();
+    EXPECT_FALSE(portfolio.applyFill(buy(1, 2, money(0), money(1))).hasValue());
+    expectAccount(portfolio, money(0), 0, money(0), money(0), money(0));
+}
+
+TEST(Portfolio, AFillWithNegativeNotionalIsRefusedAndChangesNothing) {
+    te::Portfolio portfolio = openedAccount();
+    EXPECT_FALSE(portfolio.applyFill(sell(1, 2, money(-100), money(1))).hasValue());
+    expectAccount(portfolio, money(0), 0, money(0), money(0), money(0));
+}
+
+TEST(Portfolio, ANegativeFeeIsRefusedForNowAndChangesNothing) {
+    te::Portfolio portfolio = openedAccount();
+    EXPECT_FALSE(portfolio.applyFill(buy(1, 2, money(200), money(-1))).hasValue());
+    expectAccount(portfolio, money(0), 0, money(0), money(0), money(0));
 }
 
 // ------------------------------------------------------------------------------------------
