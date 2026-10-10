@@ -13,7 +13,7 @@ Fuaad writes the tests and implementation; the assistant helps him reason and re
 See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ranges) for dated
 planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).
 
-Work order: **D2 → C2/C3 before capture/tape use → D3-D7 → E1 → research/performance extensions.**
+Work order: **D2 → C2/C3 before capture/tape use → D3-D7 → D8 benchmark → E1 → research/performance extensions.**
 C4-C6 are supporting work with the gates below. SPSC is optional as an isolated learning exercise;
 it is not a prerequisite for Portfolio and is not integrated before Stage 8.
 
@@ -326,6 +326,17 @@ silently choosing policy in a test. Fuaad: rules, tests and implementation. Assi
   Record input hashes, commit/build and dirty state, scales, policies, configuration,
   exclusions and result hashes. Detailed traces are optional.
   Refresh this checklist and handoff with actual build/test evidence.
+
+### D8. First replay benchmark
+
+Depends on D7: there is nothing end-to-end to time until the replay executable exists.
+
+- [ ] Time a full replay of the mandatory fixture and the 29k-event joined capture in a Release
+  build. Report throughput (events/second) and mean time per event, over repeated runs with their
+  spread, plus hardware, compiler, build type and commit.
+  **Done when:** one command reproduces it, and the README can quote a measured throughput instead
+  of "no latency number is claimed". A whole-run average is not a per-event percentile; p50/p99
+  and profiling stay in S8.1-S8.3, which this baseline feeds.
 
 ## E. After Stage 5: learning and research gates
 
