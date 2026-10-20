@@ -14,6 +14,12 @@ See the [guide](docs/project-progress-guide.md#6-remaining-work-and-planning-ran
 planning ranges and the [reading map](docs/project-progress-guide.md#read-one-source-for-the-task-in-front-of-you).
 
 Work order: **D2 → C2/C3 before capture/tape use → D3-D7 → D8 benchmark → E1 → research/performance extensions.**
+
+After D2, in this order: D7 replay plus a larger public synthetic sample (its expected book must
+come from an independent source such as the oracle, not the generator) → D8 benchmark → a README
+depth chart from replay output → scale up the book oracle test, then E3 fuzzing → a second venue
+only if chosen as the plan v4 §22 specialization. Scaling the oracle test is self-contained and
+may be done earlier. Property tests must not assert "never crossed": real feeds can cross.
 C4-C6 are supporting work with the gates below. SPSC is optional as an isolated learning exercise;
 it is not a prerequisite for Portfolio and is not integrated before Stage 8.
 
